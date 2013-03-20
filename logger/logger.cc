@@ -269,7 +269,7 @@ addOutput(std::shared_ptr<LogOutput> output,
 
 void
 Logger::
-addCallback(boost::function<void (std::string, std::string)> callback,
+addCallback(std::function<void (std::string, std::string)> callback,
             const boost::regex & allowChannels,
             const boost::regex & denyChannels,
             double logProbability)
@@ -297,7 +297,7 @@ clearOutputs()
 
 void
 Logger::
-start(boost::function<void ()> onStop)
+start(std::function<void ()> onStop)
 {
     messagesSent = messagesDone = 0;
     doShutdown = false;

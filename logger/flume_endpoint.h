@@ -37,7 +37,7 @@ struct FlumeRpcEndpoint {
     void shutdown();
 
     /** Function called when we get a Flume message. */
-    boost::function<void (int64_t timestamp,
+    std::function<void (int64_t timestamp,
                           int priority,
                           const std::string & body,
                           int64_t nanos,
@@ -46,7 +46,7 @@ struct FlumeRpcEndpoint {
     onFlumeMessage;
 
     /** Function to be called when we get a close message. */
-    boost::function<void ()> onClose;
+    std::function<void ()> onClose;
 
     /** Function to record that something has happened. */
     void recordEvent(const std::string & event,

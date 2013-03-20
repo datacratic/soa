@@ -193,7 +193,7 @@ struct JsonContext {
 
     void writeOutput(Filter::OnOutput onOutput,
                      FlushLevel level,
-                     boost::function<void ()> onMessageDone)
+                     std::function<void ()> onMessageDone)
     {
         if (overflow.empty()) {
             onOutput(start, current - start, level, onMessageDone);
@@ -446,7 +446,7 @@ void
 JsonCompressor::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        boost::function<void ()> onMessageDone)
+        std::function<void ()> onMessageDone)
 {
     itl->state.process(src_begin, src_end);
     if (level != FLUSH_NONE)
@@ -773,7 +773,7 @@ struct JsonDecompressor::Itl {
     
     void writeOutput(Filter::OnOutput onOutput,
                      FlushLevel level,
-                     boost::function<void ()> onMessageDone)
+                     std::function<void ()> onMessageDone)
     {
         string s = current.str();
         if (!s.empty())
@@ -815,7 +815,7 @@ void
 JsonDecompressor::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        boost::function<void ()> onMessageDone)
+        std::function<void ()> onMessageDone)
 {
     itl->process(src_begin, src_end);
     itl->writeOutput(onOutput, level, onMessageDone);

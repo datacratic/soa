@@ -52,27 +52,27 @@ struct Filter {
 
     virtual ~Filter();
 
-    typedef void (OnOutputFn) (const char *, size_t, FlushLevel, boost::function<void ()>);
-    typedef boost::function<OnOutputFn> OnOutput;
+    typedef void (OnOutputFn) (const char *, size_t, FlushLevel, std::function<void ()>);
+    typedef std::function<OnOutputFn> OnOutput;
     OnOutput onOutput;
 
     typedef void (OnErrorFn) (const std::string &);
-    typedef boost::function<OnErrorFn> OnError;
+    typedef std::function<OnErrorFn> OnError;
     OnError onError;
 
     virtual void flush(FlushLevel level,
-                       boost::function<void ()> onFlushDone
-                           = boost::function<void ()>());
+                       std::function<void ()> onFlushDone
+                           = std::function<void ()>());
 
     virtual void process(const std::string & buf,
                          FlushLevel level = FLUSH_NONE,
-                         boost::function<void ()> onFilterDone
-                             = boost::function<void ()>());
+                         std::function<void ()> onFilterDone
+                             = std::function<void ()>());
 
     virtual void process(const char * first, const char * last,
                          FlushLevel level = FLUSH_NONE,
-                         boost::function<void ()> onFilterDone
-                             = boost::function<void ()>()) = 0;
+                         std::function<void ()> onFilterDone
+                             = std::function<void ()>()) = 0;
 
     static Filter * create(const std::string & extension,
                            Direction direction);
@@ -89,7 +89,7 @@ struct IdentityFilter : public Filter {
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 };
 
 
@@ -103,7 +103,7 @@ struct FilterStack : public Filter {
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
     void push(std::shared_ptr<Filter> filter);
     std::shared_ptr<Filter> pop();
@@ -133,7 +133,7 @@ struct ZlibCompressor
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
 protected:
     ZlibCompressor(const boost::iostreams::zlib_params& p,
@@ -177,7 +177,7 @@ struct GzipCompressorFilter: public Filter {
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
 private:
     struct Itl;
@@ -198,7 +198,7 @@ struct GzipDecompressor : public Filter {
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
 private:
     struct Itl;
@@ -224,7 +224,7 @@ struct Bzip2Compressor
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
 protected:
     Bzip2Compressor(const boost::iostreams::bzip2_params& p,
@@ -267,7 +267,7 @@ struct LzmaCompressor
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
 protected:
     LzmaCompressor(Direction direction);
