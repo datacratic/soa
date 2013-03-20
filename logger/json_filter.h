@@ -27,7 +27,7 @@ struct JsonCompressor: public Filter {
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
 private:
     struct Itl;
@@ -51,7 +51,7 @@ struct JsonDecompressor: public Filter {
 
     virtual void process(const char * src_begin, const char * src_end,
                          FlushLevel level,
-                         boost::function<void ()> onMessageDone);
+                         std::function<void ()> onMessageDone);
 
 private:
     struct Itl;
