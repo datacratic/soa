@@ -28,8 +28,8 @@ struct PendingPersistence {
 
     virtual void erase(const std::string & key) = 0;
 
-    typedef boost::function<void (std::string, std::string) > OnEntry;
-    typedef boost::function<void (std::string, std::string) > OnError;
+    typedef std::function<void (std::string, std::string) > OnEntry;
+    typedef std::function<void (std::string, std::string) > OnError;
 
     virtual void scan(const OnEntry & fn,
                       const OnError & onError = OnError()) const = 0;
@@ -180,10 +180,10 @@ struct LeveldbPendingPersistence : public PendingPersistence {
 
 template<typename Key, typename Value>
 struct PendingPersistenceT {
-    typedef boost::function<std::string(const Key &)> StringifyKey;
-    typedef boost::function<Key (const std::string &)> UnstringifyKey;
-    typedef boost::function<std::string(const Value &)> StringifyValue;
-    typedef boost::function<Value (const std::string &)> UnstringifyValue;
+    typedef std::function<std::string(const Key &)> StringifyKey;
+    typedef std::function<Key (const std::string &)> UnstringifyKey;
+    typedef std::function<std::string(const Value &)> StringifyValue;
+    typedef std::function<Value (const std::string &)> UnstringifyValue;
 
     StringifyKey stringifyKey;
     StringifyValue stringifyValue;
@@ -192,7 +192,7 @@ struct PendingPersistenceT {
 
     std::shared_ptr<PendingPersistence> store;
 
-    typedef boost::function<void (Key &, Value &) > OnEntry;
+    typedef std::function<void (Key &, Value &) > OnEntry;
     typedef PendingPersistence::OnError OnError;
 
     PendingPersistenceT()
@@ -246,7 +246,7 @@ struct PendingList {
 
     typedef PendingPersistenceT<Key, Value> Persistence;
     std::shared_ptr<Persistence> persistence;
-    typedef boost::function<bool (Key & key, Value & value, Date & timeout)>
+    typedef std::function<bool (Key & key, Value & value, Date & timeout)>
         AcceptEntry;
 
     void initFromStore(std::shared_ptr<Persistence> persistence,

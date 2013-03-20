@@ -31,7 +31,7 @@ namespace Datacratic {
 struct ConnectionHandler;
 struct EndpointBase;
 
-extern boost::function<void (const char *, float)> onLatencyEvent;
+extern std::function<void (const char *, float)> onLatencyEvent;
 
 /*****************************************************************************/
 /* TRANSPORT BASE                                                            */
@@ -55,7 +55,7 @@ struct TransportBase : public std::enable_shared_from_this<TransportBase> {
     virtual int handlePeerShutdown();
     virtual int handleTimeout();
     virtual int handleError(const std::string & error);
-    virtual int handleAsync(const boost::function<void ()> & callback,
+    virtual int handleAsync(const std::function<void ()> & callback,
                             const char * name, Date dateSet);
 
     virtual ssize_t send(const char * buf, size_t len, int flags) = 0;
@@ -126,7 +126,7 @@ struct TransportBase : public std::enable_shared_from_this<TransportBase> {
     /** Run the given function from a worker thread in the context of this
         handler.
     */
-    void doAsync(const boost::function<void ()> & callback,
+    void doAsync(const std::function<void ()> & callback,
                  const std::string & name);
 
 
@@ -349,20 +349,20 @@ public:
         {
         }
 
-        AsyncEntry(const boost::function<void ()> & callback,
+        AsyncEntry(const std::function<void ()> & callback,
                    const std::string & name)
             : callback(callback), name(name), date(Date::now())
         {
         }
 
-        boost::function<void ()> callback;
+        std::function<void ()> callback;
         std::string name;
         Date date;
     };
 
     /** A node in the list of things to do asynchronously. */
     struct AsyncNode : public AsyncEntry {
-        AsyncNode(const boost::function<void ()> & callback,
+        AsyncNode(const std::function<void ()> & callback,
                   const std::string & name)
             : AsyncEntry(callback, name), next(0)
         {
@@ -382,7 +382,7 @@ public:
     /** Push an asynchronous entry onto the list.  Thread safe and lock
         free.
     */
-    void pushAsync(const boost::function<void ()> & fn,
+    void pushAsync(const std::function<void ()> & fn,
                    const std::string & name);
 
     /** Return the current async list in order and reset it to empty.

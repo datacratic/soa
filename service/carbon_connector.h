@@ -38,16 +38,14 @@ struct MultiAggregator {
     MultiAggregator(const std::string & path,
                     const OutputFn & output = OutputFn(),
                     double dumpInterval = 1.0,
-                    std::function<void ()> onStop
-                        = std::function<void ()>());
+                    std::function<void ()> onStop = 0);
     
     ~MultiAggregator();
 
     void open(const std::string & path,
               const OutputFn & output = OutputFn(),
               double dumpInterval = 1.0,
-              std::function<void ()> onStop
-                  = std::function<void ()>());
+              std::function<void ()> onStop = 0);
 
     OutputFn outputFn;
 
@@ -166,25 +164,21 @@ struct CarbonConnector : public MultiAggregator {
 
     CarbonConnector(const std::string & carbonAddr,
                     const std::string & path,
-                    std::function<void ()> onStop
-                        = std::function<void ()>());
+                    std::function<void ()> onStop = 0);
 
     CarbonConnector(const std::vector<std::string> & carbonAddrs,
                     const std::string & path,
-                    std::function<void ()> onStop
-                        = std::function<void ()>());
+                    std::function<void ()> onStop = 0);
 
     ~CarbonConnector();
 
     void open(const std::string & carbonAddr,
               const std::string & path,
-              std::function<void ()> onStop
-                  = std::function<void ()>());
+              std::function<void ()> onStop = 0);
 
     void open(const std::vector<std::string> & carbonAddrs,
               const std::string & path,
-              std::function<void ()> onStop
-                  = std::function<void ()>());
+              std::function<void ()> onStop = 0);
 
     /** Override for doStat to send it over to Carbon. */
     virtual void doStat(const std::vector<StatReading> & value) const;

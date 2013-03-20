@@ -63,9 +63,9 @@ struct ChunkedHttpHandler
 struct ChunkedHttpEndpoint: public HttpEndpoint {
 
     /** Function that will be called to notify of a new auction. */
-    typedef boost::function<void (const HttpHeader & header,
-                                  const std::string & chunkHeader,
-                                  const std::string & chunkData)>
+    typedef std::function<void (const HttpHeader & header,
+                                const std::string & chunkHeader,
+                                const std::string & chunkData)>
         OnChunk;
     OnChunk onChunk;
     
@@ -78,10 +78,10 @@ struct ChunkedHttpEndpoint: public HttpEndpoint {
         3.  The value of the event if it's a measurement;
         4.  The units of the event (currently unused)
     */
-    typedef boost::function<void (std::string,
-                                  EventType,
-                                  float,
-                                  const char *)> OnEvent;
+    typedef std::function<void (std::string,
+                                EventType,
+                                float,
+                                const char *)> OnEvent;
     OnEvent onEvent;
     
 protected:

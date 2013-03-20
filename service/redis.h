@@ -387,8 +387,8 @@ struct AsyncConnection {
         Date expiry;
     };
 
-    typedef boost::function<void (const Result &)> OnResult;
-    typedef boost::function<void (const Results &)> OnResults;
+    typedef std::function<void (const Result &)> OnResult;
+    typedef std::function<void (const Results &)> OnResults;
 
     /** Queue an asynchronous command with a timeout.  Returns a handle that
         can be used to cancel the command (which means ignore the result).
