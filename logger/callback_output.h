@@ -21,7 +21,7 @@ namespace Datacratic {
 
 struct CallbackOutput : public LogOutput {
 
-    typedef std::function<void (std::string, std::string)> Callback;
+    typedef boost::function<void (std::string, std::string)> Callback;
 
     /** Create a logger with its own zeromq context. */
     CallbackOutput(const Callback & callback);

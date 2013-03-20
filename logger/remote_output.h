@@ -67,12 +67,12 @@ struct RemoteOutput
     /** Thing to be called back on a connection error.  Used to hook in to
         allow notification of problems.
     */
-    std::function<void (const std::string)> onConnectionError;
+    boost::function<void (const std::string)> onConnectionError;
 
 private:
     /** Internal helper function used to reconnect to the remote server. */
-    void reconnect(std::function<void ()> onFinished,
-                   std::function<void (const std::string &)> onError,
+    void reconnect(boost::function<void ()> onFinished,
+                   boost::function<void (const std::string &)> onError,
                    double timeout);
 
     /** Internal helper function used as a callback from the reconnect.  It
@@ -80,8 +80,8 @@ private:
         there is an error, it will call onError.
     */
     void setupConnection(std::shared_ptr<TransportBase> transport,
-                         std::function<void ()> onFinished,
-                         std::function<void (const std::string &)> onError);
+                         boost::function<void ()> onFinished,
+                         boost::function<void (const std::string &)> onError);
 
     int port;
     std::string hostname;

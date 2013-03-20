@@ -65,7 +65,7 @@ Filter::
 
 void
 Filter::
-flush(FlushLevel level, std::function<void ()> onFlushDone)
+flush(FlushLevel level, boost::function<void ()> onFlushDone)
 {
     process(0, 0, level, onFlushDone);
 }
@@ -74,7 +74,7 @@ void
 Filter::
 process(const std::string & buf,
         FlushLevel level,
-        std::function<void ()> onFilterDone)
+        boost::function<void ()> onFilterDone)
 {
     process(buf.c_str(),
             buf.c_str() + buf.length(),
@@ -111,7 +111,7 @@ void
 IdentityFilter::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        std::function<void ()> onMessageDone)
+        boost::function<void ()> onMessageDone)
 {
     onOutput(src_begin, src_end - src_begin, level, onMessageDone);
 }
@@ -125,7 +125,7 @@ void
 FilterStack::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        std::function<void ()> onMessageDone)
+        boost::function<void ()> onMessageDone)
 {
     if (filters.empty())
         throw Exception("empty filter stack cannot process anything");
@@ -141,14 +141,14 @@ push(std::shared_ptr<Filter> filter)
 {
     if (!filters.empty()) {
         filters.back()->onOutput = [=] (const char * p, size_t n, FlushLevel f,
-                                        std::function<void ()> cb)
+                                        boost::function<void ()> cb)
             {
                 filter->process(p, p + n, f, cb);
             };
     }
     
     filter->onOutput = [=] (const char * p, size_t n, FlushLevel f,
-                            std::function<void ()> cb)
+                            boost::function<void ()> cb)
         {
             this->onOutput(p, n, f, cb);
         };
@@ -269,7 +269,7 @@ void
 ZlibCompressor::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        std::function<void ()> onMessageDone)
+        boost::function<void ()> onMessageDone)
 {
     size_t buffer_size = 65536;
         
@@ -293,7 +293,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : 0);
+                 done ? onMessageDone : boost::function<void ()>());
             
     } while (src_begin != src_end);
 }
@@ -416,7 +416,7 @@ void
 GzipCompressorFilter::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        std::function<void ()> onMessageDone)
+        boost::function<void ()> onMessageDone)
 {
     size_t buffer_size = 65536;
     
@@ -440,7 +440,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : 0);
+                 done ? onMessageDone : boost::function<void ()>());
         
     } while (src_begin != src_end);
 }
@@ -524,7 +524,7 @@ void
 GzipDecompressor::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        std::function<void ()> onMessageDone)
+        boost::function<void ()> onMessageDone)
 {
     size_t buffer_size = 65536;
         
@@ -548,7 +548,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : 0);
+                 done ? onMessageDone : boost::function<void ()>());
             
     } while (src_begin != src_end);
 }
@@ -676,7 +676,7 @@ void
 Bzip2Compressor::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        std::function<void ()> onMessageDone)
+        boost::function<void ()> onMessageDone)
 {
     size_t buffer_size = 65536;
         
@@ -700,7 +700,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : 0);
+                 done ? onMessageDone : boost::function<void ()>());
             
     } while (src_begin != src_end);
 }
@@ -861,7 +861,7 @@ void
 LzmaCompressor::
 process(const char * src_begin, const char * src_end,
         FlushLevel level,
-        std::function<void ()> onMessageDone)
+        boost::function<void ()> onMessageDone)
 {
     size_t buffer_size = 65536;
         
@@ -885,7 +885,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : 0);
+                 done ? onMessageDone : boost::function<void ()>());
             
     } while (src_begin != src_end);
 }

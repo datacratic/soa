@@ -128,7 +128,7 @@ struct CompressingOutput : public WorkerThreadOutput {
 
     void closeCompressor();
 
-    std::function<void (std::string, std::size_t)> onFileWrite;
+    boost::function<void (std::string, std::size_t)> onFileWrite;
 
 protected:
     Compressor::FlushLevel compressorFlushLevel;

@@ -50,10 +50,10 @@ struct NamedOutput : public CompressingOutput {
 
     virtual void close();
 
-    std::function<void (std::string)> onPreFileOpen;
-    std::function<void (std::string)> onPostFileOpen;
-    std::function<void (std::string)> onPreFileClose;
-    std::function<void (std::string)> onPostFileClose;
+    boost::function<void (std::string)> onPreFileOpen;
+    boost::function<void (std::string)> onPostFileOpen;
+    boost::function<void (std::string)> onPreFileClose;
+    boost::function<void (std::string)> onPostFileClose;
 
 protected:
 

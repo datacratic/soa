@@ -108,15 +108,15 @@ struct RotatingOutputAdaptor : public RotatingOutput {
 
     virtual void close();
 
-    std::function<void (std::string)> onPreFileOpen;
-    std::function<void (std::string)> onPostFileOpen;
-    std::function<void (std::string)> onPreFileClose;
-    std::function<void (std::string)> onPostFileClose;
-    std::function<void (std::string, std::size_t)> onFileWrite;
+    boost::function<void (std::string)> onPreFileOpen;
+    boost::function<void (std::string)> onPostFileOpen;
+    boost::function<void (std::string)> onPreFileClose;
+    boost::function<void (std::string)> onPostFileClose;
+    boost::function<void (std::string, std::size_t)> onFileWrite;
 
     /** Function to be called before and after a log rotation occurs. */
-    std::function<void (std::string, std::string)> onBeforeLogRotation;
-    std::function<void (std::string, std::string)> onAfterLogRotation;
+    boost::function<void (std::string, std::string)> onBeforeLogRotation;
+    boost::function<void (std::string, std::string)> onAfterLogRotation;
 
 private:
     /** Factory function */

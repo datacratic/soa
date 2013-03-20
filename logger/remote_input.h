@@ -22,7 +22,7 @@ struct RemoteInput {
     /** Listen on the given port. */
     void listen(int port,
                 const std::string & address,
-                std::function<void ()> onShutdown = 0);
+                boost::function<void ()> onShutdown = boost::function<void ()>());
 
     /** Shutdown and stop listening. */
     void shutdown();
@@ -34,11 +34,11 @@ struct RemoteInput {
     }
 
     /** Function used to respond to having data. */
-    std::function<void (const std::string &)> onData;
+    boost::function<void (const std::string &)> onData;
 
 private:
     PassiveEndpointT<SocketTransport> endpoint;
-    std::function<void ()> onShutdown;
+    boost::function<void ()> onShutdown;
 };
 
 } // namespace Datacratic

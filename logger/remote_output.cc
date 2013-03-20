@@ -74,19 +74,21 @@ struct RemoteOutputConnection
 
     void logMessage(const std::string & channel,
                     const std::string & message,
-                    std::function<void ()> onMessageDone)
+                    boost::function<void ()> onMessageDone)
     {
         string buf = format("%s\t%s\n\r", channel.c_str(), message.c_str());
         filter->process(buf, FLUSH_SYNC, onMessageDone);
     }
 
     void flush(FlushLevel level = FLUSH_FULL,
-               std::function<void ()> onFlushDone = 0)
+               boost::function<void ()> onFlushDone
+                   = boost::function<void ()>())
     {
         filter->flush(level, onFlushDone);
     }
 
-    void close(std::function<void ()> onCloseDone = 0)
+    void close(boost::function<void ()> onCloseDone
+                   = boost::function<void ()>())
     {
         cerr << "closing" << endl;
         filter->flush(FLUSH_FINISH, onCloseDone);
@@ -99,7 +101,7 @@ struct RemoteOutputConnection
 
     // TODO: how to deal with dropped messages?
     std::streamsize write(const char * s, size_t n,
-                          std::function<void ()> onWriteFinished)
+                          boost::function<void ()> onWriteFinished)
     {
         size_t serial JML_UNUSED = ++messageSerial;
         //cerr << "sending " << n << " bytes" << endl;
@@ -181,8 +183,8 @@ connect(int port, const std::string & hostname, double timeout)
 
 void
 RemoteOutput::
-reconnect(std::function<void ()> onFinished,
-          std::function<void (const std::string &)> onError,
+reconnect(boost::function<void ()> onFinished,
+          boost::function<void (const std::string &)> onError,
           double timeout)
 {
     newConnection(boost::bind<void>(&RemoteOutput::setupConnection,
@@ -193,8 +195,8 @@ reconnect(std::function<void ()> onFinished,
 void
 RemoteOutput::
 setupConnection(std::shared_ptr<TransportBase> transport,
-                std::function<void ()> onFinished,
-                std::function<void (const std::string &)> onError)
+                boost::function<void ()> onFinished,
+                boost::function<void (const std::string &)> onError)
 {
     cerr << "got new connection" << endl;
     
