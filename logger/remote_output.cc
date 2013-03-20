@@ -81,14 +81,12 @@ struct RemoteOutputConnection
     }
 
     void flush(FlushLevel level = FLUSH_FULL,
-               std::function<void ()> onFlushDone
-                   = std::function<void ()>())
+               std::function<void ()> onFlushDone = 0)
     {
         filter->flush(level, onFlushDone);
     }
 
-    void close(std::function<void ()> onCloseDone
-                   = std::function<void ()>())
+    void close(std::function<void ()> onCloseDone = 0)
     {
         cerr << "closing" << endl;
         filter->flush(FLUSH_FINISH, onCloseDone);

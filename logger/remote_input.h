@@ -22,7 +22,7 @@ struct RemoteInput {
     /** Listen on the given port. */
     void listen(int port,
                 const std::string & address,
-                std::function<void ()> onShutdown = std::function<void ()>());
+                std::function<void ()> onShutdown = 0);
 
     /** Shutdown and stop listening. */
     void shutdown();

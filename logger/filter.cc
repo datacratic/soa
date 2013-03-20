@@ -293,7 +293,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : std::function<void ()>());
+                 done ? onMessageDone : 0);
             
     } while (src_begin != src_end);
 }
@@ -440,7 +440,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : std::function<void ()>());
+                 done ? onMessageDone : 0);
         
     } while (src_begin != src_end);
 }
@@ -548,7 +548,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : std::function<void ()>());
+                 done ? onMessageDone : 0);
             
     } while (src_begin != src_end);
 }
@@ -700,7 +700,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : std::function<void ()>());
+                 done ? onMessageDone : 0);
             
     } while (src_begin != src_end);
 }
@@ -885,7 +885,7 @@ process(const char * src_begin, const char * src_end,
         //     << " done = " << done << endl;
         //ML::hex_dump(dest, bytes_written);
         onOutput(dest, bytes_written, done ? level : FLUSH_NONE,
-                 done ? onMessageDone : std::function<void ()>());
+                 done ? onMessageDone : 0);
             
     } while (src_begin != src_end);
 }

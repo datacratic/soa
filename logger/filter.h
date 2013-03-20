@@ -61,18 +61,16 @@ struct Filter {
     OnError onError;
 
     virtual void flush(FlushLevel level,
-                       std::function<void ()> onFlushDone
-                           = std::function<void ()>());
+                       std::function<void ()> onFlushDone = 0);
 
     virtual void process(const std::string & buf,
                          FlushLevel level = FLUSH_NONE,
-                         std::function<void ()> onFilterDone
-                             = std::function<void ()>());
+                         std::function<void ()> onFilterDone = 0);
 
     virtual void process(const char * first, const char * last,
                          FlushLevel level = FLUSH_NONE,
-                         std::function<void ()> onFilterDone
-                             = std::function<void ()>()) = 0;
+                         std::function<void ()> onFilterDone = 0)
+                             = 0;
 
     static Filter * create(const std::string & extension,
                            Direction direction);
