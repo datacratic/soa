@@ -28,7 +28,7 @@ struct TimeoutMap {
 
     double defaultTimeout;
 
-    boost::function<void (const std::string & reason)> throwException;
+    std::function<void (const std::string & reason)> throwException;
 
     void doThrowException(const std::string & reason) const
     {

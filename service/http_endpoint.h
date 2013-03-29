@@ -151,8 +151,7 @@ struct HttpConnectionHandler : public PassiveConnectionHandler {
         Calls the given callback once done.
     */
     virtual void putResponseOnWire(HttpResponse response,
-                                   std::function<void ()> onSendFinished
-                                       = std::function<void ()>());
+                                   std::function<void ()> onSendFinished = 0);
 
 };
 
