@@ -131,7 +131,7 @@ struct Logger {
     /** Set up a callback that will call the given function when a message
         matching the filter is obtained.
     */
-    void addCallback(boost::function<void (std::string, std::string)> callback,
+    void addCallback(std::function<void (std::string, std::string)> callback,
                      const boost::regex & allowChannels = boost::regex(),
                      const boost::regex & denyChannels = boost::regex(),
                      double logProbability = 1.0);
@@ -193,7 +193,7 @@ struct Logger {
         messages.push(message);
     }
 
-    void start(boost::function<void ()> onStop = boost::function<void ()>());
+    void start(std::function<void ()> onStop = 0);
 
     void waitUntilFinished();
 

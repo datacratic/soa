@@ -145,7 +145,7 @@ void
 RemoteInput::
 listen(int port,
        const std::string & hostname,
-       boost::function<void ()> onShutdown)
+       std::function<void ()> onShutdown)
 {
     shutdown();
 
@@ -178,7 +178,7 @@ shutdown()
 {
     if (onShutdown) {
         onShutdown();
-        onShutdown.clear();
+        onShutdown = 0;
     }
     endpoint.shutdown();
 }
