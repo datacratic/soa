@@ -178,6 +178,7 @@ struct HttpEndpoint: public PassiveEndpointT<SocketTransport> {
 
     virtual std::shared_ptr<ConnectionHandler>
     makeNewHandler()
+        const
     {
         if (handlerFactory)
             return handlerFactory();
