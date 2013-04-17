@@ -136,6 +136,7 @@ protected:
 
     virtual std::shared_ptr<ConnectionHandler>
     makeNewHandler()
+        const
     {
         return onMakeNewHandler();
     }

@@ -48,7 +48,7 @@ struct ChunkedHttpHandler
                  float value = 1.0,
                  const char * units = "");
 
-    std::shared_ptr<ChunkedHttpHandler> makeNewHandlerShared();
+    std::shared_ptr<ChunkedHttpHandler> makeNewHandlerShared() const;
     
     static long created;
     static long destroyed;
@@ -94,8 +94,8 @@ protected:
         onEvent(eventName, type, value, units);
     }
     
-    virtual std::shared_ptr<ConnectionHandler> makeNewHandler();
-    virtual std::shared_ptr<ChunkedHttpHandler> makeNewHandlerShared();
+    virtual std::shared_ptr<ConnectionHandler> makeNewHandler() const;
+    virtual std::shared_ptr<ChunkedHttpHandler> makeNewHandlerShared() const;
 
 private:
     friend class ChunkedHttpHandler;

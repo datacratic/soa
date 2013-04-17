@@ -102,6 +102,7 @@ doEvent(const char * eventName,
 std::shared_ptr<ChunkedHttpHandler>
 ChunkedHttpHandler::
 makeNewHandlerShared()
+    const
 {
     return endpoint->makeNewHandlerShared();
 }
@@ -136,6 +137,7 @@ ChunkedHttpEndpoint::
 std::shared_ptr<ConnectionHandler>
 ChunkedHttpEndpoint::
 makeNewHandler()
+    const
 {
     return makeNewHandlerShared();
 }
@@ -143,6 +145,7 @@ makeNewHandler()
 std::shared_ptr<ChunkedHttpHandler>
 ChunkedHttpEndpoint::
 makeNewHandlerShared()
+    const
 {
     return std::make_shared<ChunkedHttpHandler>();
 }

@@ -144,12 +144,12 @@ struct HttpNamedEndpoint : public NamedEndpoint, public HttpEndpoint {
     }
 
     struct RestConnectionHandler: public HttpConnectionHandler {
-        RestConnectionHandler(HttpNamedEndpoint * endpoint)
+        RestConnectionHandler(const HttpNamedEndpoint * endpoint)
             : endpoint(endpoint)
         {
         }
 
-        HttpNamedEndpoint * endpoint;
+        const HttpNamedEndpoint * endpoint;
 
         virtual void
         handleHttpPayload(const HttpHeader & header,
@@ -244,6 +244,7 @@ struct HttpNamedEndpoint : public NamedEndpoint, public HttpEndpoint {
 
     virtual std::shared_ptr<ConnectionHandler>
     makeNewHandler()
+        const
     {
         return std::make_shared<RestConnectionHandler>(this);
     }
