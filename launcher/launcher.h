@@ -479,9 +479,9 @@ struct Launcher
         static void sigchld(int pid) {
             for(;;) {
                 int status = 0;
-                int pid = waitpid(-1, &status, WNOHANG);
+                pid_t pid = waitpid(-1, &status, WNOHANG);
                 if(pid == 0) {
-                    continue;
+	            break;
                 }
                 if (pid == -1) {
                     if (errno == ECHILD)
