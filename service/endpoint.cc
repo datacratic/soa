@@ -440,7 +440,6 @@ handleTimerEvent(const EpollData & event)
         else if (res != 8)
             throw ML::Exception("timerfd read: wrong number of bytes: %d",
                                 res);
-        cerr << "*** handling timer event\n";
         event.onTimer(numWakeups);
         break;
     }
