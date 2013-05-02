@@ -91,7 +91,7 @@ addPeriodic(double timePeriodSeconds, OnTimer toRun)
     EpollData timerData(EpollData::EpollDataType::TIMER, timerFd);
     timerData.onTimer = toRun;
     epollDataByFd.insert({timerFd, timerData});
-    Epoller::addFdOneShot(timerFd, &epollDataByFd.at(timerFd));
+    Epoller::addFd(timerFd, &epollDataByFd.at(timerFd));
 }
 
 void
@@ -440,10 +440,10 @@ handleTimerEvent(const EpollData & event)
         else if (res != 8)
             throw ML::Exception("timerfd read: wrong number of bytes: %d",
                                 res);
+        cerr << "*** handling timer event\n";
         event.onTimer(numWakeups);
         break;
     }
-    addFdOneShot(event.fd, &epollDataByFd.at(event.fd));
 }
 
 void
