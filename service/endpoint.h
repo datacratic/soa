@@ -8,6 +8,7 @@
 #ifndef __rtb__endpoint_h__
 #define __rtb__endpoint_h__
 
+#include <unordered_map>
 #include <ace/Synch.h>
 #include <ace/Guard_T.h>
 #include <set>
@@ -57,6 +58,13 @@ struct EndpointBase : public Epoller {
         exit before returning.
     */
     void shutdown();
+
+    /** Add a periodic job to be performed by the loop.  The number passed
+        to the toRun function is the number of timeouts that have elapsed
+        since the last call; this is useful to know if something has
+        got behind.  It will normally be 1. */
+    typedef std::function<void (uint64_t)> OnTimer;
+    void addTimer(double timePeriodSeconds, OnTimer onTimer);
 
     /** What host are we connected to? */
     virtual std::string hostname() const = 0;
@@ -201,8 +209,32 @@ private:
     /** Run a thread to handle events. */
     void runEventThread(int threadNum, int numThreads);
 
+    struct EpollData {
+        enum EpollDataType {
+            INVALID,
+            FD,
+            TIMER
+        };
+
+        EpollData(EpollData::EpollDataType fdType, int fd)
+            : fdType(fdType), fd(fd)
+        {
+        }
+
+        EpollDataType fdType;
+        int fd;
+
+        TransportBase *transport; /* FD */
+        OnTimer onTimer;          /* TIMER */
+    };
+    
+    typedef std::unordered_map<int, EpollData> EpollDataByFd;
+    EpollDataByFd epollDataByFd;
+
     /** Handle a single ePoll event */
     bool handleEpollEvent(epoll_event & event);
+    void handleFdEvent(const EpollData & eventData);
+    void handleTimerEvent(const EpollData & eventData);
 };
 
 } // namespace Datacratic

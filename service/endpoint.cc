@@ -4,6 +4,8 @@
 
 */
 
+#include <sys/timerfd.h>
+
 #include "soa/service//endpoint.h"
 
 #include "soa/service//http_endpoint.h"
@@ -44,7 +46,11 @@ EndpointBase(const std::string & name)
       numTransports(0), shutdown_(false)
 {
     Epoller::init(16384);
-    Epoller::addFd(wakeup.fd());
+    int fd = wakeup.fd();
+    EpollData wakeupData(EpollData::EpollDataType::FD, fd);
+    epollDataByFd.insert({fd, wakeupData});
+
+    Epoller::addFd(fd, &epollDataByFd.at(fd));
     Epoller::handleEvent = std::bind(&EndpointBase::handleEpollEvent,
                                      this,
                                      std::placeholders::_1);
@@ -53,6 +59,39 @@ EndpointBase(const std::string & name)
 EndpointBase::
 ~EndpointBase()
 {
+}
+
+void
+EndpointBase::
+addTimer(double timePeriodSeconds, OnTimer onTimer)
+{
+    if (!onTimer)
+        throw ML::Exception("'onTimer' cannot be nil");
+
+    int timerFd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+    if (timerFd == -1)
+        throw ML::Exception(errno, "timerfd_create");
+
+    itimerspec spec;
+    
+    int res = clock_gettime(CLOCK_MONOTONIC, &spec.it_value);
+    if (res == -1)
+        throw ML::Exception(errno, "clock_gettime");
+    uint64_t seconds, nanoseconds;
+    seconds = timePeriodSeconds;
+    nanoseconds = (timePeriodSeconds - seconds) * 1000000000;
+
+    spec.it_interval.tv_sec = spec.it_value.tv_sec = seconds;
+    spec.it_interval.tv_nsec = spec.it_value.tv_nsec = nanoseconds;
+
+    res = timerfd_settime(timerFd, 0, &spec, 0);
+    if (res == -1)
+        throw ML::Exception(errno, "timerfd_settime");
+
+    EpollData timerData(EpollData::EpollDataType::TIMER, timerFd);
+    timerData.onTimer = onTimer;
+    epollDataByFd.insert({timerFd, timerData});
+    Epoller::addFdOneShot(timerFd, &epollDataByFd.at(timerFd));
 }
 
 void
@@ -200,7 +239,10 @@ void
 EndpointBase::
 startPolling(TransportBase * transport)
 {
-    addFdOneShot(transport->epollFd_, transport);
+    EpollData epollData(EpollData::EpollDataType::FD, transport->epollFd_);
+    epollData.transport = transport;
+    epollDataByFd.insert({transport->epollFd_, epollData});
+    addFdOneShot(transport->epollFd_, &epollDataByFd.at(transport->epollFd_));
 }
 
 void
@@ -208,6 +250,7 @@ EndpointBase::
 stopPolling(TransportBase * transport)
 {
     removeFd(transport->epollFd_);
+    epollDataByFd.erase(transport->epollFd_);
 }
 
 void
@@ -340,14 +383,34 @@ handleEpollEvent(epoll_event & event)
              << (mask & EPOLLHUP ? "H" : "")
              << (mask & EPOLLRDHUP ? "R" : "")
              << endl;
-    }            
+    }
             
-    TransportBase * transport_
-        = reinterpret_cast<TransportBase *>(event.data.ptr);
+    EpollData * epollData = reinterpret_cast<EpollData *>(event.data.ptr);
+    
+    switch (epollData->fdType) {
+    case EpollData::EpollDataType::FD:
+        if (epollData->transport == 0) return true;  // wakeup for shutdown
+        handleFdEvent(*epollData);
+        break;
+    case EpollData::EpollDataType::TIMER:
+        handleTimerEvent(*epollData);
+        break;
+    default:
+        throw ML::Exception("unrecognized fd type");
+    }
+
+    return false;
+}
+
+void
+EndpointBase::
+handleFdEvent(const EpollData & epollData)
+{
+    bool debug(false);
+
+    TransportBase * transport_ = epollData.transport;
     
     //cerr << "transport_ = " << transport_ << endl; 
-
-    if (transport_ == 0) return true;  // wakeup for shutdown
 
     if (debug)
         cerr << "transport status = " << transport_->status() << endl;
@@ -360,8 +423,27 @@ handleEpollEvent(epoll_event & event)
 
     if (!transport->isZombie())
         this->restartPolling(transport.get());
+}
 
-    return false;
+void
+EndpointBase::
+handleTimerEvent(const EpollData & event)
+{
+    uint64_t numWakeups = 0;
+    for (;;) {
+        int res = read(event.fd, &numWakeups, 8);
+        if (res == -1 && errno == EINTR) continue;
+        if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            break;
+        if (res == -1)
+            throw ML::Exception(errno, "timerfd read");
+        else if (res != 8)
+            throw ML::Exception("timerfd read: wrong number of bytes: %d",
+                                res);
+        event.onTimer(numWakeups);
+        break;
+    }
+    addFdOneShot(event.fd, &epollDataByFd.at(event.fd));
 }
 
 void
