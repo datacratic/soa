@@ -59,10 +59,9 @@ struct EndpointBase : public Epoller {
     */
     void shutdown();
 
-    /** Add a periodic job to be performed by the loop.  The number passed
-        to the toRun function is the number of timeouts that have elapsed
-        since the last call; this is useful to know if something has
-        got behind.  It will normally be 1. */
+    /** Add a timer to the loop. The number passed to the onTimer function is
+        the number of timeouts that have elapsed since the last call; this is
+        useful to know if something has got behind. It will normally be 1. */
     typedef std::function<void (uint64_t)> OnTimer;
     void addTimer(double timePeriodSeconds, OnTimer onTimer);
 
