@@ -63,10 +63,10 @@ EndpointBase::
 
 void
 EndpointBase::
-addTimer(double timePeriodSeconds, OnTimer onTimer)
+addPeriodic(double timePeriodSeconds, OnTimer toRun)
 {
-    if (!onTimer)
-        throw ML::Exception("'onTimer' cannot be nil");
+    if (!toRun)
+        throw ML::Exception("'toRun' cannot be nil");
 
     int timerFd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (timerFd == -1)
@@ -89,7 +89,7 @@ addTimer(double timePeriodSeconds, OnTimer onTimer)
         throw ML::Exception(errno, "timerfd_settime");
 
     EpollData timerData(EpollData::EpollDataType::TIMER, timerFd);
-    timerData.onTimer = onTimer;
+    timerData.onTimer = toRun;
     epollDataByFd.insert({timerFd, timerData});
     Epoller::addFdOneShot(timerFd, &epollDataByFd.at(timerFd));
 }
@@ -431,7 +431,7 @@ handleTimerEvent(const EpollData & event)
 {
     uint64_t numWakeups = 0;
     for (;;) {
-        int res = read(event.fd, &numWakeups, 8);
+        int res = ::read(event.fd, &numWakeups, 8);
         if (res == -1 && errno == EINTR) continue;
         if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             break;
