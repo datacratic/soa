@@ -373,6 +373,7 @@ EndpointBase::
 handleEpollEvent(epoll_event & event)
 {
     bool debug = false;
+    bool rc(false);
 
     if (debug) {
         cerr << "handleEvent" << endl;
@@ -392,24 +393,25 @@ handleEpollEvent(epoll_event & event)
     
     switch (epollData->fdType) {
     case EpollData::EpollDataType::FD:
-        if (epollData->transport == 0) return true;  // wakeup for shutdown
-        handleFdEvent(*epollData);
+        rc = handleFdEvent(*epollData);
         break;
     case EpollData::EpollDataType::TIMER:
-        handleTimerEvent(*epollData);
+        rc = handleTimerEvent(*epollData);
         break;
     default:
         throw ML::Exception("unrecognized fd type");
     }
 
-    return false;
+    return rc;
 }
 
-void
+bool
 EndpointBase::
 handleFdEvent(const EpollData & epollData)
 {
     bool debug(false);
+
+    if (epollData.transport == 0) return true;  // wakeup for shutdown
 
     TransportBase * transport_ = epollData.transport;
     
@@ -426,9 +428,11 @@ handleFdEvent(const EpollData & epollData)
 
     if (!transport->isZombie())
         this->restartPolling(transport.get());
+
+    return false;
 }
 
-void
+bool
 EndpointBase::
 handleTimerEvent(const EpollData & event)
 {
@@ -446,6 +450,8 @@ handleTimerEvent(const EpollData & event)
         event.onTimer(numWakeups);
         break;
     }
+
+    return false;
 }
 
 void
