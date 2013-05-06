@@ -257,6 +257,9 @@ void
 EndpointBase::
 restartPolling(TransportBase * transport)
 {
+    EpollData epollData(EpollData::EpollDataType::FD, transport->epollFd_);
+    epollData.transport = transport;
+    epollDataByFd.insert({transport->epollFd_, epollData});
     restartFdOneShot(transport->epollFd_, &epollDataByFd.at(transport->epollFd_));
 }
 
