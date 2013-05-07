@@ -114,8 +114,12 @@ struct EndpointBase : public Epoller {
         };
 
         EpollData(EpollData::EpollDataType fdType, int fd)
-            : fdType(fdType), fd(fd), threadId(0)
+            : fdType(fdType), fd(fd),
+              transport(nullptr), threadId(0)
         {
+            if (fdType != FD && fdType != TIMER) {
+                throw ML::Exception("no such datatype");
+            }
         }
 
         EpollDataType fdType;
@@ -126,7 +130,7 @@ struct EndpointBase : public Epoller {
         pid_t threadId;
     };
     
-    typedef std::unordered_map<int, EpollData> EpollDataByFd;
+    typedef std::unordered_map<int, std::shared_ptr<EpollData>> EpollDataByFd;
     EpollDataByFd epollDataByFd;
 
     /** Handle a single ePoll event */

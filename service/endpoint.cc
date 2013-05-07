@@ -47,10 +47,12 @@ EndpointBase(const std::string & name)
 {
     Epoller::init(16384);
     int fd = wakeup.fd();
-    EpollData wakeupData(EpollData::EpollDataType::FD, fd);
+
+    shared_ptr<EpollData> wakeupData
+        = make_shared<EpollData>(EpollData::EpollDataType::FD, fd);
     epollDataByFd.insert({fd, wakeupData});
 
-    Epoller::addFd(fd, &epollDataByFd.at(fd));
+    Epoller::addFd(fd, wakeupData.get());
     Epoller::handleEvent = std::bind(&EndpointBase::handleEpollEvent,
                                      this,
                                      std::placeholders::_1);
@@ -88,10 +90,12 @@ addPeriodic(double timePeriodSeconds, OnTimer toRun)
     if (res == -1)
         throw ML::Exception(errno, "timerfd_settime");
 
-    EpollData timerData(EpollData::EpollDataType::TIMER, timerFd);
-    timerData.onTimer = toRun;
+    shared_ptr<EpollData> timerData =
+        make_shared<EpollData>(EpollData::EpollDataType::TIMER,
+                               timerFd);
+    timerData->onTimer = toRun;
     epollDataByFd.insert({timerFd, timerData});
-    Epoller::addFd(timerFd, &epollDataByFd.at(timerFd));
+    Epoller::addFd(timerFd, timerData.get());
 }
 
 void
@@ -239,10 +243,12 @@ void
 EndpointBase::
 startPolling(TransportBase * transport)
 {
-    EpollData epollData(EpollData::EpollDataType::FD, transport->epollFd_);
-    epollData.transport = transport;
+    shared_ptr<EpollData> epollData =
+        make_shared<EpollData>(EpollData::EpollDataType::FD,
+                               transport->epollFd_);
+    epollData->transport = transport;
     epollDataByFd.insert({transport->epollFd_, epollData});
-    addFdOneShot(transport->epollFd_, &epollDataByFd.at(transport->epollFd_));
+    addFdOneShot(transport->epollFd_, epollData.get());
 }
 
 void
@@ -257,10 +263,8 @@ void
 EndpointBase::
 restartPolling(TransportBase * transport)
 {
-    EpollData epollData(EpollData::EpollDataType::FD, transport->epollFd_);
-    epollData.transport = transport;
-    epollDataByFd.insert({transport->epollFd_, epollData});
-    restartFdOneShot(transport->epollFd_, &epollDataByFd.at(transport->epollFd_));
+    shared_ptr<EpollData> epollData = epollDataByFd.at(transport->epollFd_);
+    restartFdOneShot(transport->epollFd_, epollData.get());
 }
 
 void
