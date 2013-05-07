@@ -434,24 +434,39 @@ handleFdEvent(const EpollData & epollData)
 
 bool
 EndpointBase::
-handleTimerEvent(const EpollData & event)
+handleTimerEvent(EpollData & event)
 {
-    uint64_t numWakeups = 0;
-    for (;;) {
-        int res = ::read(event.fd, &numWakeups, 8);
-        if (res == -1 && errno == EINTR) continue;
-        if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            break;
-        if (res == -1)
-            throw ML::Exception(errno, "timerfd read");
-        else if (res != 8)
-            throw ML::Exception("timerfd read: wrong number of bytes: %d",
-                                res);
-        event.onTimer(numWakeups);
-        break;
-    }
+    bool rc(false);
 
-    return false;
+    pid_t threadId = (pid_t) syscall(SYS_gettid);
+    if (event.threadId == 0) {
+        pid_t oldVal = event.threadId;
+        ML::cmp_xchg(event.threadId, oldVal, threadId);
+    }
+    if (event.threadId == threadId) {
+        uint64_t numWakeups = 0;
+        for (;;) {
+            int res = ::read(event.fd, &numWakeups, 8);
+            cerr << "res: " << res << "; errno: " << errno << endl;
+            if (res == -1 && errno == EINTR) continue;
+            if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                break;
+            if (res == -1) {
+                cerr << "COUCOU\n";
+                perror("timerfd");
+                throw ML::Exception(errno, "timerfd read");
+            }
+            else if (res != 8)
+                throw ML::Exception("timerfd read: wrong number of bytes: %d",
+                                    res);
+            event.onTimer(numWakeups);
+            break;
+        }
+    }
+    else
+        rc = true;
+
+    return rc;
 }
 
 void

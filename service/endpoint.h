@@ -106,6 +106,34 @@ struct EndpointBase : public Epoller {
     */
     virtual void spinup(int num_threads, bool synchronous);
 
+    struct EpollData {
+        enum EpollDataType {
+            INVALID,
+            FD,
+            TIMER
+        };
+
+        EpollData(EpollData::EpollDataType fdType, int fd)
+            : fdType(fdType), fd(fd), threadId(0)
+        {
+        }
+
+        EpollDataType fdType;
+        int fd;
+
+        TransportBase *transport; /* FD */
+        OnTimer onTimer;          /* TIMER */
+        pid_t threadId;
+    };
+    
+    typedef std::unordered_map<int, EpollData> EpollDataByFd;
+    EpollDataByFd epollDataByFd;
+
+    /** Handle a single ePoll event */
+    bool handleEpollEvent(epoll_event & event);
+    bool handleFdEvent(const EpollData & eventData);
+    bool handleTimerEvent(EpollData & eventData);
+
 protected:
 
     /** Callback to check in the loop if we're finished or not */
@@ -185,6 +213,7 @@ protected:
     /** Should the endpoint class manipulate the idle count? */
     mutable bool modifyIdle;
 
+
 private:
     std::string name_;
     std::unique_ptr<boost::thread_group> eventThreads;
@@ -208,33 +237,6 @@ private:
 
     /** Run a thread to handle events. */
     void runEventThread(int threadNum, int numThreads);
-
-    struct EpollData {
-        enum EpollDataType {
-            INVALID,
-            FD,
-            TIMER
-        };
-
-        EpollData(EpollData::EpollDataType fdType, int fd)
-            : fdType(fdType), fd(fd)
-        {
-        }
-
-        EpollDataType fdType;
-        int fd;
-
-        TransportBase *transport; /* FD */
-        OnTimer onTimer;          /* TIMER */
-    };
-    
-    typedef std::unordered_map<int, EpollData> EpollDataByFd;
-    EpollDataByFd epollDataByFd;
-
-    /** Handle a single ePoll event */
-    bool handleEpollEvent(epoll_event & event);
-    void handleFdEvent(const EpollData & eventData);
-    void handleTimerEvent(const EpollData & eventData);
 };
 
 } // namespace Datacratic
