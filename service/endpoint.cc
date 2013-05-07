@@ -447,13 +447,10 @@ handleTimerEvent(EpollData & event)
         uint64_t numWakeups = 0;
         for (;;) {
             int res = ::read(event.fd, &numWakeups, 8);
-            cerr << "res: " << res << "; errno: " << errno << endl;
             if (res == -1 && errno == EINTR) continue;
             if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
                 break;
             if (res == -1) {
-                cerr << "COUCOU\n";
-                perror("timerfd");
                 throw ML::Exception(errno, "timerfd read");
             }
             else if (res != 8)
