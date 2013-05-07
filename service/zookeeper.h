@@ -64,8 +64,7 @@ struct ZookeeperConnection {
         }
 
         void call(int type) {
-            if (callback)
-                callback(type, path, user);
+            callback(type, path, user);
             delete this;
         }
     };
