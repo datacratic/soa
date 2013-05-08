@@ -8,10 +8,8 @@
 #ifndef __rtb__endpoint_h__
 #define __rtb__endpoint_h__
 
-#include <unordered_map>
 #include <ace/Synch.h>
 #include <ace/Guard_T.h>
-#include <set>
 #include <boost/function.hpp>
 #include <boost/thread/thread.hpp>
 #include <iostream>
@@ -106,10 +104,11 @@ struct EndpointBase : public Epoller {
     */
     virtual void spinup(int num_threads, bool synchronous);
 
+    /* internal storage */
     struct EpollData {
         enum EpollDataType {
             INVALID,
-            FD,
+            TRANSPORT,
             TIMER
         };
 
@@ -117,7 +116,7 @@ struct EndpointBase : public Epoller {
             : fdType(fdType), fd(fd),
               transport(nullptr), threadId(0)
         {
-            if (fdType != FD && fdType != TIMER) {
+            if (fdType != TRANSPORT && fdType != TIMER) {
                 throw ML::Exception("no such datatype");
             }
         }
@@ -125,18 +124,15 @@ struct EndpointBase : public Epoller {
         EpollDataType fdType;
         int fd;
 
-        TransportBase *transport; /* FD */
-        OnTimer onTimer;          /* TIMER */
+        std::shared_ptr<TransportBase> transport; /* TRANSPORT */
+        OnTimer onTimer;                          /* TIMER */
         pid_t threadId;
     };
-    
-    typedef std::unordered_map<int, std::shared_ptr<EpollData>> EpollDataByFd;
-    EpollDataByFd epollDataByFd;
 
     /** Handle a single ePoll event */
     bool handleEpollEvent(epoll_event & event);
-    bool handleFdEvent(const EpollData & eventData);
-    bool handleTimerEvent(EpollData & eventData);
+    bool handleTransportEvent(EpollData * eventData);
+    bool handleTimerEvent(EpollData * eventData);
 
 protected:
 
@@ -168,11 +164,15 @@ protected:
 
     typedef std::set<std::shared_ptr<TransportBase>, SPLess> Connections;
 
-    /** Set of alive connections.  Used to know what connections are
-        outstanding and to keep them alive while they are owned by the
-        endpoint system.
+    typedef std::map<std::shared_ptr<TransportBase>,
+                     std::shared_ptr<EpollData>,
+                     SPLess> TransportMapping;
+
+    /** Mapping of alive connections to their EpollData wrapper. Used to know
+        what connections are outstanding, to keep them alive while they are
+        owned by the endpoint system and to enable translation of operation.
     */
-    Connections alive;
+    TransportMapping transportMapping;
 
     /** Tell the endpoint that a connection has been opened. */
     virtual void
@@ -188,16 +188,19 @@ protected:
     virtual void
     notifyRecycleTransport(const std::shared_ptr<TransportBase> & transport);
 
+    typedef std::set<std::shared_ptr<EpollData>, SPLess> EpollDataSet;
+    EpollDataSet epollDataSet;
+
     /** Re-enable polling after a transport has had it's one-shot event
         handler fire.
     */
-    virtual void restartPolling(TransportBase * transport);
+    virtual void restartPolling(EpollData * epollDataPtr);
 
     /** Add the transport to the set of events to be polled. */
-    virtual void startPolling(TransportBase * transport);
+    virtual void startPolling(const std::shared_ptr<EpollData> & epollData);
 
     /** Remove the transport from the set of events to be polled. */
-    virtual void stopPolling(TransportBase * transport);
+    virtual void stopPolling(const std::shared_ptr<EpollData> & epollData);
 
     /** Perform the given callback asynchronously (in a worker thread) in the
         context of the given transport.

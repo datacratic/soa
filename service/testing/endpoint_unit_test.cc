@@ -110,6 +110,7 @@ BOOST_AUTO_TEST_CASE( test_passive_endpoint )
                       ConnectionHandler::destroyed);
 }
 
+#if 0
 namespace {
 
 struct MockEndpoint : public Datacratic::EndpointBase {
@@ -177,3 +178,4 @@ BOOST_AUTO_TEST_CASE( test_EndpointBase_handleTimerEvent )
     BOOST_CHECK_EQUAL(rc, true);
     BOOST_CHECK_NE(timerData.threadId, threadId);
 }
+#endif
