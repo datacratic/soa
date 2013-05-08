@@ -21,6 +21,7 @@
 #include "connection_handler.h"
 #include "soa/service/epoller.h"
 #include <map>
+#include <set>
 
 
 namespace Datacratic {

@@ -152,8 +152,9 @@ shutdown()
         //cerr << "sending shutdown to " << transportMapping.size()
         //<< " transports" << endl;
 
-        for (auto & it: transportMapping) {
-            auto transport = it.first;
+        for (auto it = transportMapping.begin();
+             it != transportMapping.end();) {
+            auto transport = it->first;
             //cerr << "shutting down transport " << transport->status() << endl;
             transport->doAsync([=] ()
                                {
@@ -162,8 +163,23 @@ shutdown()
                                    transport->closeWhenHandlerFinished();
                                },
                                "killtransport");
-            auto epollData = it.second;
-            epollDataSet.erase(epollData);
+            epollDataSet.erase(it->second);
+            it = transportMapping.erase(it);
+        }
+
+        for (auto it = epollDataSet.begin(); it != epollDataSet.end();) {
+            auto next = it;
+            next++;
+            if ((*it)->fdType == EpollData::EpollDataType::TIMER) {
+                removeFd((*it)->fd);
+                ::close((*it)->fd);
+                epollDataSet.erase(it);
+            }
+            else if ((*it)->transport) {
+                throw ML::Exception("unexpected non-timer fd: "
+                                    + to_string((*it)->fdType));
+            }
+            it = next;
         }
     }
 
