@@ -92,7 +92,6 @@ addPeriodic(double timePeriodSeconds, OnTimer toRun)
     auto timerData = make_shared<EpollData>(EpollData::EpollDataType::TIMER,
                                             timerFd);
     timerData->onTimer = toRun;
-    Guard guard(lock);
     startPolling(timerData);
 }
 
@@ -167,13 +166,14 @@ shutdown()
             it = transportMapping.erase(it);
         }
 
+        /* we remove timer infos separately, as transport infos will be
+           removed via notifyCloseTransport */
         for (auto it = epollDataSet.begin(); it != epollDataSet.end();) {
             auto next = it;
             next++;
             if ((*it)->fdType == EpollData::EpollDataType::TIMER) {
-                removeFd((*it)->fd);
+                stopPolling(*it);
                 ::close((*it)->fd);
-                epollDataSet.erase(it);
             }
             else if ((*it)->transport) {
                 throw ML::Exception("unexpected non-timer fd: "
@@ -190,11 +190,11 @@ shutdown()
 
     sleepUntilIdle();
 
-    //cerr << "idle" << endl;
+    cerr << "idle" << endl;
 
     while (numTransports != 0) {
-        //cerr << "shutdown " << this << ": numTransports = "
-        //     << numTransports << endl;
+        cerr << "shutdown " << this << ": numTransports = "
+             << numTransports << endl;
         ML::sleep(0.1);
     }
 
@@ -263,6 +263,7 @@ void
 EndpointBase::
 startPolling(const shared_ptr<EpollData> & epollData)
 {
+    Guard guard(lock);
     epollDataSet.insert(epollData);
     addFdOneShot(epollData->fd, epollData.get());
 }
@@ -270,7 +271,8 @@ startPolling(const shared_ptr<EpollData> & epollData)
 void
 EndpointBase::
 stopPolling(const shared_ptr<EpollData> & epollData)
-{
+{ 
+    Guard guard(lock);
     removeFd(epollData->fd);
     epollDataSet.erase(epollData);
 }
@@ -286,7 +288,7 @@ void
 EndpointBase::
 notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
 {
-#if 0
+#if 1
     cerr << "closed transport " << transport << " with fd "
          << transport->getHandle() << " with " << transport.use_count()
          << " references" << " and " << transport->hasAsync() << " async"
@@ -299,6 +301,7 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
     transport->zombie_ = true;
     transport->closePeer();
 
+    Guard guard(lock);
     if (!transportMapping.count(transport)) {
         cerr << "closed transport " << transport << " with fd "
              << transport->getHandle() << " with " << transport.use_count()
@@ -308,9 +311,8 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
         transport->activities.dump();
         cerr << endl << endl;
 
-        throw ML::Exception("active set didn't contain connection");
-    } 
-    Guard guard(lock);
+        throw ML::Exception("transportMapping didn't contain connection");
+    }
     auto epollData = transportMapping.at(transport);
     stopPolling(epollData);
     transportMapping.erase(transport);
@@ -453,9 +455,6 @@ void
 EndpointBase::
 handleTimerEvent(EpollData * epollData)
 {
-    if (shutdown_)
-        return;
-
     uint64_t numWakeups = 0;
     for (;;) {
         int res = ::read(epollData->fd, &numWakeups, 8);
@@ -471,8 +470,7 @@ handleTimerEvent(EpollData * epollData)
         epollData->onTimer(numWakeups);
         break;
     }
-    if (!shutdown_)
-        this->restartPolling(epollData);
+    this->restartPolling(epollData);
 }
 
 void
