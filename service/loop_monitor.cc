@@ -52,29 +52,37 @@ doLoops(uint64_t numTimeouts)
     maxLoad.sequence = curLoad.sequence + 1;
 
     for (auto& loop : loops) {
-        double load = loop.second();
-        ExcAssertGreaterEqual(load, 0.0);
-        ExcAssertLessEqual(load, 1.0);
+        double load = loop.second(updatePeriod * numTimeouts);
+        if (load < 0.0 || load > 1.0) {
+            stringstream ss;
+            ss << "WARNING: LoopMonitor." << loop.first << ": "  << load
+                << " - ignoring the value"
+                << endl;
+            cerr << ss.str();
+            continue;
+        }
 
         if (load > maxLoad.load) maxLoad.load = load;
         recordLevel(load, loop.first);
     }
 
     curLoad.packed = maxLoad.packed;
+    if (onLoadChange) onLoadChange(maxLoad.load);
 }
 
 void
 LoopMonitor::
 addMessageLoop(const string& name, const MessageLoop* loop)
 {
-    double lastTimeSlept = 0.0; // acts as a private member variable for sampleFn
+    // acts as a private member variable for sampleFn.
+    double lastTimeSlept = 0.0;
 
-    auto sampleFn = [=] () mutable {
+    auto sampleFn = [=] (double elapsedTime) mutable {
         double timeSlept = loop->totalSleepSeconds();
         double delta = timeSlept - lastTimeSlept;
         lastTimeSlept = timeSlept;
 
-        return 1.0 - (delta / updatePeriod);
+        return 1.0 - (delta / elapsedTime);
     };
 
     addCallback(name, sampleFn);
@@ -102,18 +110,18 @@ remove(const string& name)
 
 
 /******************************************************************************/
-/* SIMPLE LOAD SHEDDING                                                       */
+/* LOAD STABILIZER                                                            */
 /******************************************************************************/
 
-SimpleLoadShedding::
-SimpleLoadShedding(const LoopMonitor& loopMonitor) :
+LoadStabilizer::
+LoadStabilizer(const LoopMonitor& loopMonitor) :
     loopMonitor(loopMonitor),
     loadThreshold(0.9),
     shedProb(0.0)
 {}
 
 void
-SimpleLoadShedding::
+LoadStabilizer::
 updateProb(LoopMonitor::LoadSample sample)
 {
     lastSample = sample;
