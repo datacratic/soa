@@ -43,7 +43,7 @@ EndpointBase(const std::string & name)
     : idle(1), modifyIdle(true),
       name_(name),
       threadsActive_(0),
-      numTransports(0), shutdown_(false), handlingEvents(0)
+      numTransports(0), shutdown_(false)
 {
     Epoller::init(16384);
     int fd = wakeup.fd();
@@ -92,6 +92,7 @@ addPeriodic(double timePeriodSeconds, OnTimer toRun)
     auto timerData = make_shared<EpollData>(EpollData::EpollDataType::TIMER,
                                             timerFd);
     timerData->onTimer = toRun;
+    Guard guard(lock);
     startPolling(timerData);
 }
 
@@ -141,23 +142,19 @@ void
 EndpointBase::
 shutdown()
 {
-    shutdown_ = true;
     //cerr << "Endpoint shutdown" << endl;
     //cerr << "numTransports = " << numTransports << endl;
 
     closePeer();
-
-    while (handlingEvents) {
-        ML::sleep(0.1);
-    }
 
     {
         Guard guard(lock);
         //cerr << "sending shutdown to " << transportMapping.size()
         //<< " transports" << endl;
 
-        for (const auto & it: transportMapping) {
-            auto transport = it.first;
+        for (auto it = transportMapping.begin();
+             it != transportMapping.end();) {
+            auto transport = it->first;
             //cerr << "shutting down transport " << transport->status() << endl;
             transport->doAsync([=] ()
                                {
@@ -166,10 +163,10 @@ shutdown()
                                    transport->closeWhenHandlerFinished();
                                },
                                "killtransport");
+            epollDataSet.erase(it->second);
+            it = transportMapping.erase(it);
         }
 
-        /* Remove timer elements only as the transport elements will be removed
-         * on notifyClosedTransport */
         for (auto it = epollDataSet.begin(); it != epollDataSet.end();) {
             auto next = it;
             next++;
@@ -177,6 +174,10 @@ shutdown()
                 removeFd((*it)->fd);
                 ::close((*it)->fd);
                 epollDataSet.erase(it);
+            }
+            else if ((*it)->transport) {
+                throw ML::Exception("unexpected non-timer fd: "
+                                    + to_string((*it)->fdType));
             }
             it = next;
         }
@@ -199,6 +200,7 @@ shutdown()
 
     //cerr << "numTransports = " << numTransports << endl;
 
+    shutdown_ = true;
     ML::memory_barrier();
     wakeup.signal();
 
@@ -261,7 +263,6 @@ void
 EndpointBase::
 startPolling(const shared_ptr<EpollData> & epollData)
 {
-    Guard guard(lock);
     epollDataSet.insert(epollData);
     addFdOneShot(epollData->fd, epollData.get());
 }
@@ -270,7 +271,6 @@ void
 EndpointBase::
 stopPolling(const shared_ptr<EpollData> & epollData)
 {
-    Guard guard(lock);
     removeFd(epollData->fd);
     epollDataSet.erase(epollData);
 }
@@ -299,8 +299,6 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
     transport->zombie_ = true;
     transport->closePeer();
 
-    Guard guard(lock);
-
     if (!transportMapping.count(transport)) {
         cerr << "closed transport " << transport << " with fd "
              << transport->getHandle() << " with " << transport.use_count()
@@ -310,15 +308,12 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
         transport->activities.dump();
         cerr << endl << endl;
 
-        throw ML::Exception("transportMapping didn't contain connection");
-    }
+        throw ML::Exception("active set didn't contain connection");
+    } 
+    Guard guard(lock);
     auto epollData = transportMapping.at(transport);
     stopPolling(epollData);
     transportMapping.erase(transport);
-
-    if (transportMapping.count(transport)) {
-        throw ML::Exception("this should not occur");
-    }
 
     int & ntr = numTransportsByHost[transport->getPeerName()];
     --numTransports;
@@ -396,8 +391,6 @@ bool
 EndpointBase::
 handleEpollEvent(epoll_event & event)
 {
-    ML::atomic_inc(handlingEvents);
-
     bool debug = false;
     bool rc(false);
 
@@ -428,8 +421,6 @@ handleEpollEvent(epoll_event & event)
     default:
         throw ML::Exception("unrecognized fd type");
     }
-
-    ML::atomic_dec(handlingEvents);
 
     return rc;
 }

@@ -163,16 +163,16 @@ protected:
         }
     };
 
-    /** Type used by subclasses */
     typedef std::set<std::shared_ptr<TransportBase>, SPLess> Connections;
+
+    typedef std::map<std::shared_ptr<TransportBase>,
+                     std::shared_ptr<EpollData>,
+                     SPLess> TransportMapping;
 
     /** Mapping of alive connections to their EpollData wrapper. Used to know
         what connections are outstanding, to keep them alive while they are
         owned by the endpoint system and to enable translation of operation.
     */
-    typedef std::map<std::shared_ptr<TransportBase>,
-                     std::shared_ptr<EpollData>,
-                     SPLess> TransportMapping;
     TransportMapping transportMapping;
 
     /** Tell the endpoint that a connection has been opened. */
@@ -240,9 +240,6 @@ private:
 
     /* Are we shutting down? */
     bool shutdown_;
-
-    /* How many events are we handling right now? */
-    int handlingEvents;
 
     std::map<std::string, int> numTransportsByHost;
 
