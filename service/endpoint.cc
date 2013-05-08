@@ -92,6 +92,7 @@ addPeriodic(double timePeriodSeconds, OnTimer toRun)
     auto timerData = make_shared<EpollData>(EpollData::EpollDataType::TIMER,
                                             timerFd);
     timerData->onTimer = toRun;
+    Guard guard(lock);
     startPolling(timerData);
 }
 
