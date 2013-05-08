@@ -133,7 +133,7 @@ struct EndpointBase : public Epoller {
     /** Handle a single ePoll event */
     bool handleEpollEvent(epoll_event & event);
     bool handleTransportEvent(EpollData * eventData);
-    bool handleTimerEvent(EpollData * eventData);
+    void handleTimerEvent(EpollData * eventData);
 
 protected:
 

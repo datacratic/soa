@@ -415,7 +415,8 @@ handleEpollEvent(epoll_event & event)
         rc = handleTransportEvent(epollData);
         break;
     case EpollData::EpollDataType::TIMER:
-        rc = handleTimerEvent(epollData);
+        handleTimerEvent(epollData);
+        rc = false;
         break;
     default:
         throw ML::Exception("unrecognized fd type");
@@ -448,11 +449,12 @@ handleTransportEvent(EpollData * epollData)
     return false;
 }
 
-bool
+void
 EndpointBase::
 handleTimerEvent(EpollData * epollData)
 {
-    bool rc(false);
+    if (shutdown_)
+        return;
 
     uint64_t numWakeups = 0;
     for (;;) {
@@ -469,9 +471,8 @@ handleTimerEvent(EpollData * epollData)
         epollData->onTimer(numWakeups);
         break;
     }
-    this->restartPolling(epollData);
-
-    return rc;
+    if (!shutdown_)
+        this->restartPolling(epollData);
 }
 
 void
