@@ -110,15 +110,15 @@ struct EndpointBase : public Epoller {
         enum EpollDataType {
             INVALID,
             TRANSPORT,
-            TIMER
+            TIMER,
+            WAKEUP
         };
 
         EpollData(EpollData::EpollDataType fdType, int fd)
-            : fdType(fdType), fd(fd),
-              transport(nullptr), threadId(0)
+            : fdType(fdType), fd(fd), transport(nullptr), closing(false)
         {
-            if (fdType != TRANSPORT && fdType != TIMER) {
-                throw ML::Exception("no such datatype");
+            if (fdType != TRANSPORT && fdType != TIMER && fdType != WAKEUP) {
+                throw ML::Exception("no such fd type");
             }
         }
 
@@ -127,15 +127,17 @@ struct EndpointBase : public Epoller {
 
         std::shared_ptr<TransportBase> transport; /* TRANSPORT */
         OnTimer onTimer;                          /* TIMER */
-        pid_t threadId;
+        bool closing;
     };
 
     /** Handle a single ePoll event */
     bool handleEpollEvent(epoll_event & event);
-    bool handleTransportEvent(EpollData * eventData);
-    void handleTimerEvent(EpollData * eventData);
+    void handleTransportEvent(const EpollData * eventData);
+    void handleTimerEvent(const EpollData * eventData);
 
 protected:
+    typedef ACE_Recursive_Thread_Mutex Lock;
+    typedef ACE_Guard<Lock> Guard;
 
     /** Callback to check in the loop if we're finished or not */
     bool checkFinished() const
@@ -191,6 +193,7 @@ protected:
 
     typedef std::set<std::shared_ptr<EpollData>, SPLess> EpollDataSet;
     EpollDataSet epollDataSet;
+    mutable Lock dataSetLock;
 
     /** Re-enable polling after a transport has had it's one-shot event
         handler fire.
@@ -210,9 +213,6 @@ protected:
                  const boost::function<void ()> & callback,
                  const char * nameOfCallback);
 
-    typedef ACE_Recursive_Thread_Mutex Lock;
-    typedef ACE_Guard<Lock> Guard;
-    
     mutable Lock lock;
 
     /** released when there are no active connections */
@@ -240,6 +240,7 @@ private:
 
     /* Are we shutting down? */
     bool shutdown_;
+    int activeEvents_;
 
     std::map<std::string, int> numTransportsByHost;
 
