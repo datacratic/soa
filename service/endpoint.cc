@@ -62,15 +62,13 @@ EndpointBase(const std::string & name)
     : idle(1), modifyIdle(true),
       name_(name),
       threadsActive_(0),
-      numTransports(0), shutdown_(false), activeEvents_(0)
+      numTransports(0), shutdown_(false)
 {
     Epoller::init(16384);
-    int fd = wakeup.fd();
-
     auto wakeupData = make_shared<EpollData>(EpollData::EpollDataType::WAKEUP,
-                                             fd);
+                                             wakeup.fd());
     epollDataSet.insert(wakeupData);
-    Epoller::addFd(fd, wakeupData.get());
+    Epoller::addFd(wakeupData->fd, wakeupData.get());
     Epoller::handleEvent = std::bind(&EndpointBase::handleEpollEvent,
                                      this,
                                      std::placeholders::_1);
@@ -179,8 +177,8 @@ shutdown()
             //cerr << "shutting down transport " << transport->status() << endl;
             transport->doAsync([=] ()
                                {
-                                   cerr << "killing transport " << transport
-                                        << endl;
+                                   //cerr << "killing transport " << transport
+                                   //     << endl;
                                    transport->closeWhenHandlerFinished();
                                },
                                "killtransport");
@@ -211,12 +209,12 @@ shutdown()
 
     sleepUntilIdle();
 
-    // cerr << "idle" << endl;
+    //cerr << "idle" << endl;
 
     while (numTransports != 0) {
-        cerr << "shutdown " << this << ": numTransports = "
-             << numTransports << endl;
-        ML::sleep(0.2);
+        //cerr << "shutdown " << this << ": numTransports = "
+        //     << numTransports << endl;
+        ML::sleep(0.1);
     }
 
     //cerr << "numTransports = " << numTransports << endl;
@@ -233,13 +231,6 @@ shutdown()
 
     // Now undo the signal
     wakeup.read();
-
-    cerr << "  active pollers: " << epollDataSet.size() << endl;
-    cerr << "  active transports: " << transportMapping.size() << endl;
-    while (activeEvents_ > 0) {
-        cerr << "  active events: " << activeEvents_ << endl;
-        ML::sleep(0.5);
-    }
 }
 
 void
@@ -255,19 +246,16 @@ notifyNewTransport(const std::shared_ptr<TransportBase> & transport)
 {
     TaskLog log("notifyNewTransport");
 
-    // cerr << "new transport " << transport << endl;
+    //cerr << "new transport " << transport << endl;
 
+    Guard guard(lock);
+    if (transportMapping.count(transport))
+        throw ML::Exception("active set already contains connection");
     auto epollData
         = make_shared<EpollData>(EpollData::EpollDataType::TRANSPORT,
                                  transport->epollFd_);
     epollData->transport = transport;
-
-    {
-        Guard guard(lock);
-        if (transportMapping.count(transport))
-            throw ML::Exception("active set already contains connection");
-        transportMapping.insert({transport, epollData});
-    }
+    transportMapping.insert({transport, epollData});
 
     int fd = transport->getHandle();
     if (fd < 0)
@@ -284,6 +272,7 @@ notifyNewTransport(const std::shared_ptr<TransportBase> & transport)
 
     //cerr << "host " << transport->getPeerName() << " has "
     //     << ntr << " connections" << endl;
+
 
     if (onTransportOpen)
         onTransportOpen(transport.get());
@@ -338,9 +327,6 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
     if (onTransportClose)
         onTransportClose(transport.get());
 
-    transport->zombie_ = true;
-    transport->closePeer();
-
     Guard guard(lock);
     if (!transportMapping.count(transport)) {
 #if 0
@@ -356,9 +342,13 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
         throw ML::Exception("transportMapping didn't contain connection");
     }
     auto epollData = transportMapping.at(transport);
+    transportMapping.erase(transport);
+
     epollData->closing = true;
     stopPolling(epollData);
-    transportMapping.erase(transport);
+
+    transport->zombie_ = true;
+    transport->closePeer();
 
     int & ntr = numTransportsByHost[transport->getPeerName()];
     --numTransports;
@@ -438,7 +428,6 @@ bool
 EndpointBase::
 handleEpollEvent(epoll_event & event)
 {
-    ML::atomic_inc(activeEvents_);
     bool rc(false);
     bool debug(false);
 
@@ -460,7 +449,6 @@ handleEpollEvent(epoll_event & event)
     TaskLog log(ML::format("handleEpollEvent: %p (%d)",
                            epollDataPtr, epollDataPtr->fdType));
     if (epollDataPtr->closing) {
-        ML::atomic_dec(activeEvents_);
         return false;
     }
     // EpollData epollData = *epollDataPtr;
@@ -473,7 +461,6 @@ handleEpollEvent(epoll_event & event)
         break;
     case EpollData::EpollDataType::WAKEUP:
         // wakeup for shutdown
-        ML::atomic_dec(activeEvents_);
         return true;
     default:
         throw ML::Exception("unrecognized fd type");
@@ -481,7 +468,6 @@ handleEpollEvent(epoll_event & event)
     if (!epollDataPtr->closing)
         this->restartPolling(epollDataPtr);
 
-    ML::atomic_dec(activeEvents_);
 
     return rc;
 }

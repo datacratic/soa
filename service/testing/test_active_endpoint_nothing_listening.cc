@@ -28,11 +28,11 @@ BOOST_AUTO_TEST_CASE( test_active_endpoint_nothing_listening )
 {
     Watchdog watchdog(60.0);  // give it a reasonable amount of time
 
-    for (unsigned i = 0;  i < 50;  ++i) {
+    for (unsigned i = 0;  i < 5000;  ++i) {
         BOOST_REQUIRE_EQUAL(TransportBase::created, TransportBase::destroyed);
         BOOST_REQUIRE_EQUAL(ConnectionHandler::created,
                             ConnectionHandler::destroyed);
-        Watchdog watchdog;
+        // Watchdog watchdog;
 
         cerr << endl << "iter " << i << endl;
         ActiveEndpointT<SocketTransport> connector("connector");
@@ -50,6 +50,7 @@ BOOST_AUTO_TEST_CASE( test_active_endpoint_nothing_listening )
         BOOST_CHECK_EQUAL(TransportBase::created, TransportBase::destroyed);
         BOOST_CHECK_EQUAL(ConnectionHandler::created,
                           ConnectionHandler::destroyed);
+        cerr << "=============================================\n";
     }
 }
 

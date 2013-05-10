@@ -240,7 +240,6 @@ private:
 
     /* Are we shutting down? */
     bool shutdown_;
-    int activeEvents_;
 
     std::map<std::string, int> numTransportsByHost;
 
