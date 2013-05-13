@@ -10,6 +10,7 @@
 
 #include <ace/Synch.h>
 #include <ace/Guard_T.h>
+#include <set>
 #include <boost/function.hpp>
 #include <boost/thread/thread.hpp>
 #include <iostream>
@@ -21,7 +22,7 @@
 #include "connection_handler.h"
 #include "soa/service/epoller.h"
 #include <map>
-#include <set>
+#include <mutex>
 
 
 namespace Datacratic {
@@ -115,7 +116,7 @@ struct EndpointBase : public Epoller {
         };
 
         EpollData(EpollData::EpollDataType fdType, int fd)
-            : fdType(fdType), fd(fd), transport(nullptr), closing(false)
+            : fdType(fdType), fd(fd), transport(nullptr)
         {
             if (fdType != TRANSPORT && fdType != TIMER && fdType != WAKEUP) {
                 throw ML::Exception("no such fd type");
@@ -127,17 +128,9 @@ struct EndpointBase : public Epoller {
 
         std::shared_ptr<TransportBase> transport; /* TRANSPORT */
         OnTimer onTimer;                          /* TIMER */
-        bool closing;
     };
 
-    /** Handle a single ePoll event */
-    bool handleEpollEvent(epoll_event & event);
-    void handleTransportEvent(const EpollData * eventData);
-    void handleTimerEvent(const EpollData * eventData);
-
 protected:
-    typedef ACE_Recursive_Thread_Mutex Lock;
-    typedef ACE_Guard<Lock> Guard;
 
     /** Callback to check in the loop if we're finished or not */
     bool checkFinished() const
@@ -170,12 +163,15 @@ protected:
 
     /** Mapping of alive connections to their EpollData wrapper. Used to know
         what connections are outstanding, to keep them alive while they are
-        owned by the endpoint system and to enable translation of operation.
+        owned by the endpoint system and to enable translation of operations.
     */
     typedef std::map<std::shared_ptr<TransportBase>,
                      std::shared_ptr<EpollData>,
                      SPLess> TransportMapping;
     TransportMapping transportMapping;
+
+    typedef std::set<std::shared_ptr<EpollData>, SPLess> EpollDataSet;
+    EpollDataSet epollDataSet;
 
     /** Tell the endpoint that a connection has been opened. */
     virtual void
@@ -190,10 +186,6 @@ protected:
     */
     virtual void
     notifyRecycleTransport(const std::shared_ptr<TransportBase> & transport);
-
-    typedef std::set<std::shared_ptr<EpollData>, SPLess> EpollDataSet;
-    EpollDataSet epollDataSet;
-    mutable Lock dataSetLock;
 
     /** Re-enable polling after a transport has had it's one-shot event
         handler fire.
@@ -213,14 +205,18 @@ protected:
                  const boost::function<void ()> & callback,
                  const char * nameOfCallback);
 
-    mutable Lock lock;
+    typedef ACE_Recursive_Thread_Mutex Lock;
+    typedef ACE_Guard<Lock> Guard;
+    mutable Lock lock; /* transportMapping */
+
+    typedef std::unique_lock<std::mutex> MutexGuard;
+    mutable std::mutex dataSetLock; /* epollDataSet */
 
     /** released when there are no active connections */
     mutable ACE_Semaphore idle;
     
     /** Should the endpoint class manipulate the idle count? */
     mutable bool modifyIdle;
-
 
 private:
     std::string name_;
@@ -240,11 +236,18 @@ private:
 
     /* Are we shutting down? */
     bool shutdown_;
+    bool disallowTimers_;
 
     std::map<std::string, int> numTransportsByHost;
 
     /** Run a thread to handle events. */
     void runEventThread(int threadNum, int numThreads);
+
+    /** Handle a single ePoll event */
+    bool handleEpollEvent(epoll_event & event);
+    void handleTransportEvent(const std::shared_ptr<TransportBase>
+                              & transport);
+    void handleTimerEvent(int fd, OnTimer toRun);
 };
 
 } // namespace Datacratic

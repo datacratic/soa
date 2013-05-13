@@ -55,7 +55,6 @@ TransportBase(EndpointBase * endpoint)
       recycle_(0), close_(0), flags_(0),
       hasConnection_(false), zombie_(false)
 {
-    cerr << "TransportBase: " << this << endl;
     atomic_add(created, 1);
 
     if (!endpoint)
@@ -95,7 +94,6 @@ TransportBase(EndpointBase * endpoint)
 TransportBase::
 ~TransportBase()
 {
-    cerr << "~TransportBase: " << this << endl;
     int res = close(epollFd_);
     if (res == -1)
         cerr << "closing epoll fd: " << strerror(errno) << endl;

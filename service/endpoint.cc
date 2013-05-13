@@ -32,25 +32,6 @@ using namespace std;
 using namespace ML;
 
 
-namespace {
-struct TaskLog
-{
-    TaskLog(const string & label)
-        : label_(label)
-    {
-        cerr << "starting " << label << endl;
-    }
-
-    ~TaskLog()
-    {
-        cerr << "ended " << label_ << endl;
-    }
-
-    string label_;
-};
-
-};
-
 namespace Datacratic {
 
 /*****************************************************************************/
@@ -62,16 +43,16 @@ EndpointBase(const std::string & name)
     : idle(1), modifyIdle(true),
       name_(name),
       threadsActive_(0),
-      numTransports(0), shutdown_(false)
+      numTransports(0), shutdown_(false), disallowTimers_(false)
 {
     Epoller::init(16384);
     auto wakeupData = make_shared<EpollData>(EpollData::EpollDataType::WAKEUP,
                                              wakeup.fd());
     epollDataSet.insert(wakeupData);
     Epoller::addFd(wakeupData->fd, wakeupData.get());
-    Epoller::handleEvent = std::bind(&EndpointBase::handleEpollEvent,
-                                     this,
-                                     std::placeholders::_1);
+    Epoller::handleEvent = [&] (epoll_event & event) {
+        return this->handleEpollEvent(event);
+    };
 }
 
 EndpointBase::
@@ -158,14 +139,14 @@ void
 EndpointBase::
 shutdown()
 {
-    TaskLog log("shutdown");
     //cerr << "Endpoint shutdown" << endl;
     //cerr << "numTransports = " << numTransports << endl;
 
+    disallowTimers_ = true;
+    ML::memory_barrier();
     closePeer();
 
     {
-        TaskLog log("shutdown: killing transports");
         Guard guard(lock);
         //cerr << "sending shutdown to " << transportMapping.size()
         //<< " transports" << endl;
@@ -173,7 +154,7 @@ shutdown()
         for (auto it = transportMapping.begin();
              it != transportMapping.end();
              it++) {
-            auto transport = it->first;
+            auto transport = it->first.get();
             //cerr << "shutting down transport " << transport->status() << endl;
             transport->doAsync([=] ()
                                {
@@ -186,15 +167,13 @@ shutdown()
     }
 
     {
-        TaskLog log("shutdown: killing timers");
         /* we remove timer infos separately, as transport infos will be
            removed via notifyCloseTransport */
-        Guard guard(dataSetLock);
+        MutexGuard guard(dataSetLock);
         for (auto it = epollDataSet.begin(); it != epollDataSet.end();) {
             auto next = it;
             next++;
             if ((*it)->fdType == EpollData::EpollDataType::TIMER) {
-                (*it)->closing = true;
                 stopPolling(*it);
                 ::close((*it)->fd);
             }
@@ -229,6 +208,9 @@ shutdown()
     }
     eventThreadList.clear();
 
+    transportMapping.clear();
+    epollDataSet.clear();
+
     // Now undo the signal
     wakeup.read();
 }
@@ -244,11 +226,10 @@ void
 EndpointBase::
 notifyNewTransport(const std::shared_ptr<TransportBase> & transport)
 {
-    TaskLog log("notifyNewTransport");
+    Guard guard(lock);
 
     //cerr << "new transport " << transport << endl;
 
-    Guard guard(lock);
     if (transportMapping.count(transport))
         throw ML::Exception("active set already contains connection");
     auto epollData
@@ -282,12 +263,10 @@ void
 EndpointBase::
 startPolling(const shared_ptr<EpollData> & epollData)
 {
-    TaskLog log("startPolling");
-    Guard guard(dataSetLock);
+    MutexGuard guard(dataSetLock);
     auto inserted = epollDataSet.insert(epollData);
     if (!inserted.second)
         throw ML::Exception("epollData already present");
-    cerr << ML::format("  polling ptr: %p\n", epollData.get());
     addFdOneShot(epollData->fd, epollData.get());
 }
 
@@ -295,10 +274,8 @@ void
 EndpointBase::
 stopPolling(const shared_ptr<EpollData> & epollData)
 { 
-    TaskLog log("stopPolling");
-    Guard guard(dataSetLock);
     removeFd(epollData->fd);
-    cerr << ML::format("  polling ptr: %p\n", epollData.get());
+    MutexGuard guard(dataSetLock);
     epollDataSet.erase(epollData);
 }
 
@@ -306,8 +283,6 @@ void
 EndpointBase::
 restartPolling(EpollData * epollDataPtr)
 {
-    if (epollDataPtr->closing)
-        throw ML::Exception("attempt to restart polling on a closing fd");
     restartFdOneShot(epollDataPtr->fd, epollDataPtr);
 }
 
@@ -315,8 +290,6 @@ void
 EndpointBase::
 notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
 {
-    TaskLog log("notifyCloseTransport");
-
 #if 0
     cerr << "closed transport " << transport << " with fd "
          << transport->getHandle() << " with " << transport.use_count()
@@ -342,10 +315,9 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
         throw ML::Exception("transportMapping didn't contain connection");
     }
     auto epollData = transportMapping.at(transport);
-    transportMapping.erase(transport);
-
-    epollData->closing = true;
     stopPolling(epollData);
+    transportMapping.erase(transport);
+    epollData.reset();
 
     transport->zombie_ = true;
     transport->closePeer();
@@ -371,8 +343,6 @@ void
 EndpointBase::
 sleepUntilIdle() const
 {
-    TaskLog log("sleepUntilIdle");
-
     for (;;) {
         //cerr << "sleepUntilIdle " << this << ": numTransports = "
         //     << numTransports << endl;
@@ -428,8 +398,7 @@ bool
 EndpointBase::
 handleEpollEvent(epoll_event & event)
 {
-    bool rc(false);
-    bool debug(false);
+    bool debug = false;
 
     if (debug) {
         cerr << "handleEvent" << endl;
@@ -446,18 +415,24 @@ handleEpollEvent(epoll_event & event)
     }
 
     EpollData * epollDataPtr = reinterpret_cast<EpollData *>(event.data.ptr);
-    TaskLog log(ML::format("handleEpollEvent: %p (%d)",
-                           epollDataPtr, epollDataPtr->fdType));
-    if (epollDataPtr->closing) {
-        return false;
-    }
-    // EpollData epollData = *epollDataPtr;
-    switch (epollDataPtr->fdType) {
+
+    /* pin the EpollData so that it can't be destroyed whilst handling
+       messages */
+    EpollData epollData = *epollDataPtr;
+    switch (epollData.fdType) {
     case EpollData::EpollDataType::TRANSPORT:
-        handleTransportEvent(epollDataPtr);
+        handleTransportEvent(epollData.transport);
+        if (!epollData.transport->isZombie()) {
+            this->restartPolling(epollDataPtr);
+        }
         break;
     case EpollData::EpollDataType::TIMER:
-        handleTimerEvent(epollDataPtr);
+        if (!disallowTimers_) {
+            handleTimerEvent(epollData.fd, epollData.onTimer);
+        }
+        if (!disallowTimers_) {
+            this->restartPolling(epollDataPtr);
+        }
         break;
     case EpollData::EpollDataType::WAKEUP:
         // wakeup for shutdown
@@ -465,39 +440,31 @@ handleEpollEvent(epoll_event & event)
     default:
         throw ML::Exception("unrecognized fd type");
     }
-    if (!epollDataPtr->closing)
-        this->restartPolling(epollDataPtr);
 
-
-    return rc;
+    return false;
 }
 
 void
 EndpointBase::
-handleTransportEvent(const EpollData * epollData)
+handleTransportEvent(const shared_ptr<TransportBase> & transport)
 {
-    TaskLog log(ML::format("handleTransportEvent: %p", epollData));
-    bool debug(false);
+    bool debug = false;
 
-    // Pin it so that it can't be destroyed whilst handling messages
-    shared_ptr<TransportBase> transport_ = epollData->transport;
-    
     //cerr << "transport_ = " << transport_.get() << endl; 
 
     if (debug)
-        cerr << "transport status = " << transport_->status() << endl;
+        cerr << "transport status = " << transport->status() << endl;
 
-    transport_->handleEvents();
+    transport->handleEvents();
 }
 
 void
 EndpointBase::
-handleTimerEvent(const EpollData * epollData)
+handleTimerEvent(int fd, OnTimer toRun)
 {
-    TaskLog log("handleTimerEvent");
     uint64_t numWakeups = 0;
     for (;;) {
-        int res = ::read(epollData->fd, &numWakeups, 8);
+        int res = ::read(fd, &numWakeups, 8);
         if (res == -1 && errno == EINTR) continue;
         if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             break;
@@ -507,7 +474,7 @@ handleTimerEvent(const EpollData * epollData)
         else if (res != 8)
             throw ML::Exception("timerfd read: wrong number of bytes: %d",
                                 res);
-        epollData->onTimer(numWakeups);
+        toRun(numWakeups);
         break;
     }
 }
@@ -516,8 +483,6 @@ void
 EndpointBase::
 runEventThread(int threadNum, int numThreads)
 {
-    //cerr << "runEventThread" << endl;
-
     prctl(PR_SET_NAME,"EptCtrl",0,0,0);
 
     bool debug = false;
