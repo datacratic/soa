@@ -142,21 +142,21 @@ shutdown()
     //cerr << "Endpoint shutdown" << endl;
     //cerr << "numTransports = " << numTransports << endl;
 
-    disallowTimers_ = true;
-    ML::memory_barrier();
     closePeer();
+
+    /* we pin all EpollDataSet instances to avoid freeing them whilst handling
+       messages */
+    EpollDataSet dataSetCopy = epollDataSet;
 
     {
         Guard guard(lock);
         //cerr << "sending shutdown to " << transportMapping.size()
         //<< " transports" << endl;
 
-        for (auto it = transportMapping.begin();
-             it != transportMapping.end();
-             it++) {
-            auto transport = it->first.get();
-            //cerr << "shutting down transport " << transport->status() << endl;
-            transport->doAsync([=] ()
+        for (const auto & it: transportMapping) {
+            auto transport = it.first;
+            cerr << "shutting down transport " << transport->status() << endl;
+            transport->doAsync([&] ()
                                {
                                    //cerr << "killing transport " << transport
                                    //     << endl;
@@ -166,18 +166,15 @@ shutdown()
         }
     }
 
+    disallowTimers_ = true;
+    ML::memory_barrier();
     {
         /* we remove timer infos separately, as transport infos will be
            removed via notifyCloseTransport */
-        MutexGuard guard(dataSetLock);
-        for (auto it = epollDataSet.begin(); it != epollDataSet.end();) {
-            auto next = it;
-            next++;
-            if ((*it)->fdType == EpollData::EpollDataType::TIMER) {
-                stopPolling(*it);
-                ::close((*it)->fd);
+        for (const auto & it: dataSetCopy) {
+            if (it->fdType == EpollData::EpollDataType::TIMER) {
+                stopPolling(it);
             }
-            it = next;
         }
     }
 
@@ -190,26 +187,31 @@ shutdown()
 
     //cerr << "idle" << endl;
 
-    while (numTransports != 0) {
-        //cerr << "shutdown " << this << ": numTransports = "
-        //     << numTransports << endl;
-        ML::sleep(0.1);
-    }
-
-    //cerr << "numTransports = " << numTransports << endl;
-
     shutdown_ = true;
     ML::memory_barrier();
     wakeup.signal();
+
+    while (threadsActive_ > 0) {
+        int oldValue = threadsActive_;
+        ML::futex_wait(threadsActive_, oldValue);
+    }
+
+    {
+        /* we can now close the timer fds as we now that they will no longer
+           being listened to */
+        MutexGuard guard(dataSetLock);
+        for (const auto & it: epollDataSet) {
+            if (it->fdType == EpollData::EpollDataType::TIMER) {
+                ::close(it->fd);
+            }
+        }
+    }
 
     if (eventThreads) {
         eventThreads->join_all();
         eventThreads.reset();
     }
     eventThreadList.clear();
-
-    transportMapping.clear();
-    epollDataSet.clear();
 
     // Now undo the signal
     wakeup.read();
@@ -415,31 +417,29 @@ handleEpollEvent(epoll_event & event)
     }
 
     EpollData * epollDataPtr = reinterpret_cast<EpollData *>(event.data.ptr);
-
-    /* pin the EpollData so that it can't be destroyed whilst handling
-       messages */
-    EpollData epollData = *epollDataPtr;
-    switch (epollData.fdType) {
-    case EpollData::EpollDataType::TRANSPORT:
-        handleTransportEvent(epollData.transport);
-        if (!epollData.transport->isZombie()) {
+    switch (epollDataPtr->fdType) {
+    case EpollData::EpollDataType::TRANSPORT: {
+        const shared_ptr<TransportBase> & transport = epollDataPtr->transport;
+        handleTransportEvent(transport);
+        if (!transport->isZombie()) {
             this->restartPolling(epollDataPtr);
         }
         break;
-    case EpollData::EpollDataType::TIMER:
-        if (!disallowTimers_) {
-            handleTimerEvent(epollData.fd, epollData.onTimer);
-        }
+    }
+    case EpollData::EpollDataType::TIMER: {
+        handleTimerEvent(epollDataPtr->fd, epollDataPtr->onTimer);
         if (!disallowTimers_) {
             this->restartPolling(epollDataPtr);
         }
         break;
+    }
     case EpollData::EpollDataType::WAKEUP:
         // wakeup for shutdown
         return true;
     default:
         throw ML::Exception("unrecognized fd type");
     }
+
 
     return false;
 }

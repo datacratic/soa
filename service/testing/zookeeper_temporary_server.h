@@ -113,7 +113,7 @@ private:
 
         std::cerr << "zookeeper is using port " << port << std::endl;
 
-        file << "tickTime=2000" << std::endl;
+        file << "tickTime=5000" << std::endl;
         file << "dataDir=" << uniquePath << "/data" << std::endl;
         file << "clientPort=" << port << std::endl;
         file << "dataLogDir=" << uniquePath << std::endl;

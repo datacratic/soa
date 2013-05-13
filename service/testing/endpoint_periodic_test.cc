@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include "jml/utils/testing/watchdog.h"
 #include "jml/arch/timers.h"
+#include "jml/arch/futex.h"
 
 
 using namespace std;
@@ -59,12 +60,17 @@ BOOST_AUTO_TEST_CASE( test_periodic )
     int invocations(0);
     uint64_t lastNumWakeUps(0);
     double cbSleep(0.0);
+    int processing(0);
     auto timerCallback = [&] (uint64_t numWakeUps) {
+        processing++;
+        futex_wake(processing);
         if (cbSleep) {
             ML::sleep(cbSleep);
         }
         invocations++;
         lastNumWakeUps = numWakeUps;
+        processing--;
+        futex_wake(processing);
     };
 
     anEndpoint.init(10);
@@ -72,12 +78,20 @@ BOOST_AUTO_TEST_CASE( test_periodic )
 
     anEndpoint.addPeriodic(1.0, timerCallback);
 
-    ML::sleep(1);
+    ML::sleep(2);
 
     /* ensure the timer has been triggered */
     BOOST_CHECK_NE(invocations, 0);
 
     /* ensure that shutdown is properly handled */
+    while (processing) {
+        int oldValue = processing;
+        futex_wait(processing, oldValue);
+    }
     cbSleep = 5.0;
-    ML::sleep(1);
+    while (!processing) {
+        int oldValue = processing;
+        futex_wait(processing, oldValue);
+    }
+    anEndpoint.shutdown();
 }
