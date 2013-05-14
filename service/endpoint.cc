@@ -140,7 +140,7 @@ void
 EndpointBase::
 shutdown()
 {
-    //cerr << "Endpoint shutdown " << this << endl;
+    //cerr << "Endpoint shutdown" << endl;
     //cerr << "numTransports = " << numTransports << endl;
 
     closePeer();
@@ -213,8 +213,6 @@ shutdown()
         }
     }
 
-    cerr << "killing all threads\n";
-
     if (eventThreads) {
         eventThreads->join_all();
         eventThreads.reset();
@@ -223,6 +221,7 @@ shutdown()
 
     // Now undo the signal
     wakeup.read();
+
 }
 
 void
