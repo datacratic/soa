@@ -8,8 +8,6 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
-#include <sys/eventfd.h>
-
 #include <boost/test/unit_test.hpp>
 #include "soa/service/endpoint.h"
 #include "soa/service/http_endpoint.h"
@@ -87,6 +85,7 @@ BOOST_AUTO_TEST_CASE( test_active_endpoint_no_threads )
     doTestConnectionError(connector, "not connected");
 }
 #endif
+
 
 BOOST_AUTO_TEST_CASE( test_passive_endpoint )
 {

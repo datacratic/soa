@@ -55,7 +55,6 @@ TransportBase(EndpointBase * endpoint)
       recycle_(0), close_(0), flags_(0),
       hasConnection_(false), zombie_(false)
 {
-    cerr << "TransportBase: new" << this << "\n";
     atomic_add(created, 1);
 
     if (!endpoint)
@@ -95,7 +94,6 @@ TransportBase(EndpointBase * endpoint)
 TransportBase::
 ~TransportBase()
 {
-    cerr << "~TransportBase: delete" << this << "\n";
     int res = close(epollFd_);
     if (res == -1)
         cerr << "closing epoll fd: " << strerror(errno) << endl;
@@ -858,7 +856,6 @@ void
 TransportBase::
 pushAsync(const boost::function<void ()> & fn, const std::string & name)
 {
-    cerr << "pushAsync\n";
     std::auto_ptr<AsyncNode> node(new AsyncNode(fn, name));
     
     AsyncNode * current = asyncHead_;
@@ -866,8 +863,6 @@ pushAsync(const boost::function<void ()> & fn, const std::string & name)
     for (;;) {
         node->next = current;
         if (ML::cmp_xchg(asyncHead_, current, node.get())) break;
-        cerr << "rcu problem_ 1\n";
-        current = asyncHead_;
     }
 
     node.release();
@@ -882,13 +877,10 @@ std::vector<TransportBase::AsyncEntry>
 TransportBase::
 popAsync()
 {
-    cerr << "popAsync\n";
     AsyncNode * current = asyncHead_;
     
     for (;;) {
         if (ML::cmp_xchg(asyncHead_, current, (AsyncNode *)0)) break;
-        cerr << "rcu problem 2\n";
-        current = asyncHead_;
     }
     
     std::vector<AsyncEntry> result;
