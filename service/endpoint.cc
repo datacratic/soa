@@ -140,31 +140,15 @@ void
 EndpointBase::
 shutdown()
 {
-    cerr << "Endpoint shutdown " << this << endl;
-    cerr << "numTransports = " << numTransports << endl;
+    //cerr << "Endpoint shutdown " << this << endl;
+    //cerr << "numTransports = " << numTransports << endl;
 
     closePeer();
 
     /* we pin all EpollDataSet instances to avoid freeing them whilst handling
        messages */
-    cerr << "before:\n";
-    for (const auto & it: epollDataSet) {
-        cerr << "  use count (" << it << ": " << it.use_count()
-             << "; transport (" << it->transport << ") : "
-             << it->transport.use_count() << endl;
-    }
     EpollDataSet dataSetCopy = epollDataSet;
-    // for (const auto & it: epollDataSet) {
-    //     dataSetCopy.insert(it);
-    // }
     
-    cerr << "after:\n";
-    for (const auto & it: epollDataSet) {
-        cerr << "  use count (" << it << ": " << it.use_count()
-             << "; transport (" << it->transport << ") : "
-             << it->transport.use_count() << endl;
-    }
-
     {
         Guard guard(lock);
         //cerr << "sending shutdown to " << transportMapping.size()
@@ -172,11 +156,11 @@ shutdown()
 
         for (const auto & it: transportMapping) {
             auto transport = it.first.get();
-            cerr << "shutting down transport " << transport->status() << endl;
+            //cerr << "shutting down transport " << transport->status() << endl;
             transport->doAsync([=] ()
                                {
-                                   cerr << "killing transport " << transport
-                                        << endl;
+                                   //cerr << "killing transport " << transport
+                                   //     << endl;
                                    transport->closeWhenHandlerFinished();
                                },
                                "killtransport");
@@ -208,7 +192,6 @@ shutdown()
         int oldValue = numTransports;
         ML::futex_wait(numTransports, oldValue);
     }
-    cerr << "transports freed\n";
 
     shutdown_ = true;
     ML::memory_barrier();
@@ -240,8 +223,6 @@ shutdown()
 
     // Now undo the signal
     wakeup.read();
-
-    cerr << "end shutdown\n";
 }
 
 void
@@ -320,7 +301,7 @@ void
 EndpointBase::
 notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
 {
-#if 1
+#if 0
     cerr << "closed transport " << transport << " with fd "
          << transport->getHandle() << " with " << transport.use_count()
          << " references" << " and " << transport->hasAsync() << " async"
@@ -332,7 +313,6 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
 
     Guard guard(lock);
     if (!transportMapping.count(transport)) {
-#if 0
         cerr << "closed transport " << transport << " with fd "
              << transport->getHandle() << " with " << transport.use_count()
              << " references" << " and " << transport->hasAsync() << " async"
@@ -340,22 +320,13 @@ notifyCloseTransport(const std::shared_ptr<TransportBase> & transport)
         cerr << "activities: " << endl;
         transport->activities.dump();
         cerr << endl << endl;
-#endif
 
         throw ML::Exception("transportMapping didn't contain connection");
     }
 
     auto epollData = transportMapping.at(transport);
-    cerr << "use count epollData " << epollData
-         << " before: " << epollData.use_count() << endl;
     stopPolling(epollData);
-    cerr << "use count epollData " << epollData
-         << " after stop polling: " << epollData.use_count() << endl;
     transportMapping.erase(transport); 
-    cerr << "use count epollData " << epollData
-         << " after erase transport: " << epollData.use_count() << endl;
-
-    cerr << "use count transport after: " << transport.use_count() << endl;
     
     transport->zombie_ = true;
     transport->closePeer();
