@@ -9,6 +9,7 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
+#include "soa/service/endpoint.h"
 #include "soa/service/http_endpoint.h"
 #include "soa/service/active_endpoint.h"
 #include "soa/service/passive_endpoint.h"

@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE( test_active_endpoint_nothing_listening )
         BOOST_REQUIRE_EQUAL(TransportBase::created, TransportBase::destroyed);
         BOOST_REQUIRE_EQUAL(ConnectionHandler::created,
                             ConnectionHandler::destroyed);
-        Watchdog watchdog;
+        // Watchdog watchdog;
 
         cerr << endl << "iter " << i << endl;
         ActiveEndpointT<SocketTransport> connector("connector");
