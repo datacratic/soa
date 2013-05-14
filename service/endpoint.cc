@@ -455,7 +455,7 @@ handleEpollEvent(epoll_event & event)
     EpollData * epollDataPtr = reinterpret_cast<EpollData *>(event.data.ptr);
     switch (epollDataPtr->fdType) {
     case EpollData::EpollDataType::TRANSPORT: {
-        const shared_ptr<TransportBase> & transport = epollDataPtr->transport;
+        shared_ptr<TransportBase> transport = epollDataPtr->transport;
         handleTransportEvent(transport);
         if (!transport->isZombie()) {
             this->restartPolling(epollDataPtr);
