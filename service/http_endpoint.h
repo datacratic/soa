@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "soa/service//passive_endpoint.h"
+#include "soa/service/passive_endpoint.h"
 #include "soa/types/date.h"
 #include "http_header.h"
 #include <boost/make_shared.hpp>
@@ -114,7 +114,6 @@ struct HttpConnectionHandler : public PassiveConnectionHandler {
 
     //virtual void handleNewConnection();
     virtual void handleData(const std::string & data);
-    virtual void handleSendFinished();
     virtual void handleError(const std::string & message);
     virtual void onCleanup();
 
@@ -154,7 +153,8 @@ struct HttpConnectionHandler : public PassiveConnectionHandler {
     */
     virtual void putResponseOnWire(HttpResponse response,
                                    std::function<void ()> onSendFinished
-                                       = std::function<void ()>());
+                                   = std::function<void ()>(),
+                                   NextAction next = NEXT_CONTINUE);
 
 };
 

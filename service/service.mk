@@ -35,6 +35,7 @@ LIBSERVICES_SOURCES := \
 	port_range_service.cc \
 	service_base.cc \
 	message_loop.cc \
+	loop_monitor.cc \
 	named_endpoint.cc \
 	zookeeper_configuration_service.cc \
 	zmq_endpoint.cc \
@@ -64,6 +65,7 @@ $(eval $(call library,endpoint,$(LIBENDPOINT_SOURCES),$(LIBENDPOINT_LINK)))
 LIBCLOUD_SOURCES := \
 	sftp.cc \
 	s3.cc \
+	sns.cc
 
 LIBCLOUD_LINK := crypto++ curlpp utils arch types tinyxml2 services ssh2 boost_filesystem
 

@@ -25,7 +25,7 @@ namespace Datacratic {
 struct ZmqNamedPublisher: public MessageLoop {
 
     ZmqNamedPublisher(std::shared_ptr<zmq::context_t> context,
-                      int messageBufferSize = 10000)
+                      int messageBufferSize = 65536)
         : publishEndpoint(context),
           publishQueue(messageBufferSize)
     {
@@ -977,6 +977,7 @@ struct ZmqNamedMultipleSubscriber: public MessageLoop {
     ZmqNamedMultipleSubscriber(std::shared_ptr<zmq::context_t> context)
         : context(context)
     {
+        needsPoll = true;
     }
 
     ~ZmqNamedMultipleSubscriber()
@@ -990,7 +991,7 @@ struct ZmqNamedMultipleSubscriber: public MessageLoop {
 
         serviceWatcher.init(config);
 
-        addSource("ZmqNamedMultipleSubscriber", serviceWatcher);
+        addSource("ZmqNamedMultipleSubscriber::serviceWatcher", serviceWatcher);
 
         //debug(true);
     }
@@ -1007,7 +1008,9 @@ struct ZmqNamedMultipleSubscriber: public MessageLoop {
     void connectAllServiceProviders(const std::string & serviceClass,
                                     const std::string & endpointName,
                                     const std::vector<std::string> & prefixes
-                                        = std::vector<std::string>())
+                                    = std::vector<std::string>(),
+                                    std::function<bool (std::string)> filter
+                                    = nullptr)
     {
         auto onServiceChange = [=] (const std::string & service,
                                     bool created)
@@ -1015,6 +1018,9 @@ struct ZmqNamedMultipleSubscriber: public MessageLoop {
                 using namespace std;
                 //cerr << "onServiceChange " << serviceClass << " " << endpointName
                 //<< " " << service << " created " << created << endl;
+
+                if (filter && !filter(service))
+                    return;
 
                 if (created)
                     connectService(serviceClass, service, endpointName);

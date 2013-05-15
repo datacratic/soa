@@ -8,7 +8,13 @@
 
 #include "soa/service/http_endpoint.h"
 #include "jml/utils/vector_utils.h"
+#include "jml/utils/exc_assert.h"
+#include "jml/utils/string_functions.h"
 #include <boost/make_shared.hpp>
+
+namespace curlpp {
+struct Easy;
+} // namespace curlpp
 
 
 namespace Datacratic {
@@ -25,9 +31,16 @@ namespace Datacratic {
 struct HttpRestProxy {
 
     HttpRestProxy(const std::string & serviceUri = "")
-        : serviceUri(serviceUri)
+        : serviceUri(serviceUri), debug(false)
     {
     }
+
+    void init(const std::string & serviceUri)
+    {
+        this->serviceUri = serviceUri;
+    }
+
+    ~HttpRestProxy();
 
     /** The response of a request.  Has a return code and a body. */
     struct Response {
@@ -53,6 +66,8 @@ struct HttpRestProxy {
         std::string getHeader(const std::string & name) const
         {
             auto it = header_.headers.find(name);
+            if (it == header_.headers.end())
+                it = header_.headers.find(ML::lowercase(name));
             if (it == header_.headers.end())
                 throw ML::Exception("required header " + name + " not found");
             return it->second;
@@ -134,12 +149,65 @@ struct HttpRestProxy {
                      const RestParams & queryParams = RestParams(),
                      const RestParams & headers = RestParams(),
                      int timeout = -1) const;
-    
+
     /** URI that will be automatically prepended to resources passed in to
         the perform() methods
     */
     std::string serviceUri;
+
+    /** Are we debugging? */
+    bool debug;
+
+private:    
+    /** Lock for connection pool. */
+    mutable std::mutex lock;
+
+    /** List of inactive handles.  These can be selected from when a new
+        connection needs to be made.
+    */
+    mutable std::vector<curlpp::Easy *> inactive;
+
+public:
+    /** Get a connection. */
+    struct Connection {
+        Connection(curlpp::Easy * conn,
+                   HttpRestProxy * proxy)
+            : conn(conn), proxy(proxy)
+        {
+        }
+
+        ~Connection();
+
+        Connection(Connection && other)
+            : conn(other.conn), proxy(other.proxy)
+        {
+            other.conn = 0;
+        }
+
+        Connection & operator = (Connection && other)
+        {
+            this->conn = other.conn;
+            this->proxy = other.proxy;
+            other.conn = 0;
+            return *this;
+        }
+
+        curlpp::Easy & operator * () { ExcAssert(conn);  return *conn; }
+
+    private:
+        curlpp::Easy * conn;
+        HttpRestProxy * proxy;
+    };
+
+    Connection getConnection() const;
+    void doneConnection(curlpp::Easy * conn);
 };
+
+inline std::ostream &
+operator << (std::ostream & stream, HttpRestProxy::Response & response)
+{
+    return stream << response.header_ << "\n" << response.body_ << "\n";
+}
 
 } // namespace Datacratic
 

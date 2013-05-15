@@ -437,7 +437,7 @@ struct EventRecorder {
     template<typename... Args>
     void recordHit(const std::string & event, Args... args) const
     {
-        return recordEventFmt(ET_COUNT, 1.0, event.c_str(),
+        return recordEventFmt(ET_HIT, 1.0, event.c_str(),
                               ML::forwardForPrintf(args)...);
     }
 
@@ -445,18 +445,18 @@ struct EventRecorder {
     JML_ALWAYS_INLINE
     void recordHit(const char * event, Args... args) const
     {
-        return recordEventFmt(ET_COUNT, 1.0, event,
+        return recordEventFmt(ET_HIT, 1.0, event,
                               ML::forwardForPrintf(args)...);
     }
 
     void recordHit(const char * event) const
     {
-        recordEvent(event, ET_COUNT, 1.0);
+        recordEvent(event, ET_HIT);
     }
 
     void recordHit(const std::string & event) const
     {
-        recordEvent(event.c_str(), ET_COUNT, 1.0);
+        recordEvent(event.c_str(), ET_HIT);
     }
 
     template<typename... Args>
@@ -532,6 +532,30 @@ struct EventRecorder {
         recordEvent(event.c_str(), ET_LEVEL, level);
     }
 
+    template<typename... Args>
+    void recordStableLevel(float level, const std::string & event, Args... args) const
+    {
+        return recordEventmt(ET_STABLE_LEVEL, level, event.c_str(),
+                             ML::forwardForPrintf(args)...);
+    }
+
+    template<typename... Args>
+    void recordStableLevel(float level, const char * event, Args... args) const
+    {
+        return recordEventFmt(ET_STABLE_LEVEL, level, event,
+                              ML::forwardForPrintf(args)...);
+    }
+
+    void recordStableLevel(float level, const char * event) const
+    {
+        recordEvent(event, ET_STABLE_LEVEL, level);
+    }
+
+    void recordStableLevel(float level, const std::string & event) const
+    {
+        recordEvent(event.c_str(), ET_STABLE_LEVEL, level);
+    }
+
 protected:
     std::string eventPrefix_;
     std::shared_ptr<EventService> events_;
@@ -597,6 +621,15 @@ struct ServiceBase: public EventRecorder {
     std::shared_ptr<zmq::context_t> getZmqContext() const
     {
         return services_->zmqContext;
+    }
+
+    /*************************************************************************/
+    /* CONFIGURATION SERVICE                                                 */
+    /*************************************************************************/
+
+    std::shared_ptr<ConfigurationService> getConfigurationService() const
+    {
+        return services_->config;
     }
 
     /*************************************************************************/

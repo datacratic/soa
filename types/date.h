@@ -84,6 +84,7 @@ struct Date {
 
     std::string print(unsigned seconds_digits = 0) const;
     std::string print(const std::string & format) const;
+    std::string printIso8601() const;
     std::string printRfc2616() const;
     std::string printClassic() const;
 
@@ -244,6 +245,13 @@ struct Date {
         double day = secondsSinceEpoch_ / secPerDay;
         double startOfDay = floor(day);
         return fromSecondsSinceEpoch(startOfDay * secPerDay);
+    }
+    Date hourStart() const
+    {
+        static const double secPerHour = 3600.0;
+        double hour = secondsSinceEpoch_ / secPerHour;
+        double startOfHour = floor(hour);
+        return fromSecondsSinceEpoch(startOfHour * secPerHour);
     }
 
     int hour() const;

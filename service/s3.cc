@@ -18,6 +18,8 @@
 #include "jml/utils/ring_buffer.h"
 #include "jml/utils/hash.h"
 #include "jml/utils/file_functions.h"
+#include "jml/utils/info.h"
+#include "xml_helpers.h"
 
 #define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
 #include "crypto++/sha.h"
@@ -240,7 +242,8 @@ performSync() const
             responseHeaders.clear();
             body.clear();
 
-            curlpp::Easy myRequest;
+            auto connection = owner->proxy.getConnection();
+            curlpp::Easy & myRequest = *connection;
 
             using namespace curlpp::options;
             using namespace curlpp::infos;
@@ -413,9 +416,46 @@ signature(const RequestParams & request) const
     return S3Api::sign(digest, accessKey);
 }
 
-inline std::string uriEncode(const std::string & str)
+std::string
+S3Api::
+uriEncode(const std::string & str)
 {
-    return str;
+    std::string result;
+    for (auto c: str) {
+        if (c <= ' ' || c >= 127) {
+            result += ML::format("%%%02X", c);
+            continue;
+        }
+
+        switch (c) {
+        case '!':
+        case '#':
+        case '$':
+        case '&':
+        case '\'':
+        case '(':
+        case ')':
+        case '*':
+        case '+':
+        case ',':
+        case '/':
+        case ':':
+        case ';':
+        case '=':
+        case '?':
+        case '@':
+        case '[':
+        case ']':
+        case '%':
+            result += ML::format("%%%02X", c);
+            break;
+
+        default:
+            result += c;
+        }
+    }
+
+    return result;
 }
 
 S3Api::SignedRequest
@@ -432,6 +472,7 @@ prepare(const RequestParams & request) const
     SignedRequest result;
     result.params = request;
     result.bandwidthToServiceMbps = bandwidthToServiceMbps;
+    result.owner = const_cast<S3Api *>(this);
 
     if (request.resource.find("//") != string::npos)
         throw ML::Exception("attempt to perform s3 request with double slash: "
@@ -553,72 +594,6 @@ erase(const std::string & bucket,
     return prepare(request).performSync();
 }
 
-template<typename T>
-T extract(tinyxml2::XMLNode * element, const std::string & path)
-{
-    if (!element)
-        throw ML::Exception("can't extract from missing element");
-    //tinyxml2::XMLHandle handle(element);
-
-    vector<string> splitPath = ML::split(path, '/');
-    auto p = element;
-    for (unsigned i = 0;  i < splitPath.size();  ++i) {
-        p = p->FirstChildElement(splitPath[i].c_str());
-        if (!p) {
-            element->GetDocument()->Print();
-            throw ML::Exception("required key " + splitPath[i]
-                                + " not found on path " + path);
-        }
-    }
-
-    auto text = tinyxml2::XMLHandle(p).FirstChild().ToText();
-
-    if (!text) {
-        element->GetDocument()->Print();
-        throw ML::Exception("no text at node "  + path);
-    }
-    return boost::lexical_cast<T>(text->Value());
-}
-
-template<typename T>
-T extractDef(tinyxml2::XMLNode * element, const std::string & path,
-             const T & ifMissing)
-{
-    if (!element) return ifMissing;
-
-    vector<string> splitPath = ML::split(path, '/');
-    auto p = element;
-    for (unsigned i = 0;  i < splitPath.size();  ++i) {
-        p = p->FirstChildElement(splitPath[i].c_str());
-        if (!p)
-            return ifMissing;
-    }
-
-    auto text = tinyxml2::XMLHandle(p).FirstChild().ToText();
-
-    if (!text) return ifMissing;
-
-    return boost::lexical_cast<T>(text->Value());
-}
-
-template<typename T>
-T extract(const std::unique_ptr<tinyxml2::XMLDocument> & doc,
-          const std::string & path)
-{
-    return extract<T>(doc.get(), path);
-}
-
-template<typename T>
-T extractDef(const std::unique_ptr<tinyxml2::XMLDocument> & doc,
-             const std::string & path, const T & def)
-{
-    return extractDef<T>(doc.get(), path, def);
-}
-
-namespace {
-
-} // file scope
-
 std::vector<std::pair<std::string, std::string> >
 S3Api::ObjectMetadata::
 getRequestHeaders() const
@@ -650,9 +625,12 @@ obtainMultiPartUpload(const std::string & bucket,
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgress = get(bucket, "/", 8192, "uploads", {},
-                          { { "prefix", outputPrefix } })
-        .bodyXml();
+    auto inProgressReq = get(bucket, "/", 8192, "uploads", {},
+                          { { "prefix", outputPrefix } });
+
+    //cerr << inProgressReq.bodyXmlStr() << endl;
+
+    auto inProgress = inProgressReq.bodyXml();
 
     using namespace tinyxml2;
 
@@ -673,25 +651,28 @@ obtainMultiPartUpload(const std::string & bucket,
     for (; upload; upload = upload->NextSiblingElement("Upload")) {
         XMLHandle uploadHandle(upload);
 
-        auto foundNode
-            = uploadHandle
-            .FirstChildElement("UploadId")
-            .FirstChild()
-            .ToText();
+        auto key = extract<string>(upload, "Key");
 
-        if (!foundNode)
-            throw ML::Exception("found node has no ID");
+        if (key != outputPrefix)
+            continue;
+        
+        // Already an upload in progress
+        string uploadId = extract<string>(upload, "UploadId");
+
+        // From here onwards is only useful if we want to continue a half-finished
+        // upload.  Instead, we will delete it to avoid problems with creating
+        // half-finished files when we don't know what we're doing.
+
+        auto deletedInfo = erase(bucket, resource, "uploadId=" + uploadId);
+
+        continue;
 
         // TODO: check metadata, etc
-
-        // Already an upload in progress
-        uploadId = foundNode->Value();
-
         auto inProgressInfo = get(bucket, resource, 8192,
                                   "uploadId=" + uploadId)
             .bodyXml();
 
-        //inProgressInfo->Print();
+        inProgressInfo->Print();
 
         XMLHandle handle(*inProgressInfo);
 
@@ -756,6 +737,8 @@ finishMultiPartUpload(const std::string & bucket,
 {
     using namespace tinyxml2;
     // Finally, send back a response to join the parts together
+    ExcAssert(etags.size());
+
     XMLDocument joinRequest;
     auto r = joinRequest.InsertFirstChild(joinRequest.NewElement("CompleteMultipartUpload"));
     for (unsigned i = 0;  i < etags.size();  ++i) {
@@ -765,6 +748,9 @@ finishMultiPartUpload(const std::string & bucket,
         n->InsertEndChild(joinRequest.NewElement("ETag"))
             ->InsertEndChild(joinRequest.NewText(etags[i].c_str()));
     }
+
+    //joinRequest.Print();
+
     auto joinResponse
         = post(bucket, resource, "uploadId=" + uploadId,
                   {}, {}, joinRequest);
@@ -1380,6 +1366,13 @@ downloadToFile(const std::string & uri, const std::string & outfile,
     download(uri, onChunk, 0, endOffset);
 }
 
+size_t getTotalSystemMemory()
+{
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGE_SIZE);
+    return pages * page_size;
+}
+
 struct StreamingDownloadSource {
 
     StreamingDownloadSource(const S3Api * owner,
@@ -1526,10 +1519,17 @@ struct StreamingDownloadSource {
 
         void runThread()
         {
-            // Maximum chunk size is what we can do in 30 seconds
+            // Maximum chunk size is what we can do in 3 seconds
             size_t maxChunkSize
                 = owner->bandwidthToServiceMbps
-                * 15.0 * 1000000;
+                * 3.0 * 1000000;
+
+            size_t sysMemory = getTotalSystemMemory();
+
+            //cerr << "sysMemory = " << sysMemory << endl;
+            // Limit each chunk to 1% of system memory
+            maxChunkSize = std::min(maxChunkSize, sysMemory / 100);
+            //cerr << "maxChunkSize = " << maxChunkSize << endl;
 
             while (!shutdown) {
                 // Go in the lottery to see which part I need to download
@@ -1554,6 +1554,9 @@ struct StreamingDownloadSource {
 
                 if (partToDo && partToDo % 2 == 0 && chunkSize < maxChunkSize)
                     chunkSize *= 2;
+
+                //cerr << "chunkSize = " << chunkSize << " maxChunkSize = "
+                //     << maxChunkSize << endl;
 
                 size_t start = writeOffset;
                 size_t end = std::min<size_t>(writeOffset + chunkSize,
@@ -1608,7 +1611,9 @@ struct StreamingDownloadSource {
                 ML::futex_wake(readPartReady);
 
 #if 0
-                cerr << "done " << bytesDone << " at "
+                double elapsed = Date::now().secondsSince(startDate);
+                cerr << "done " << bytesDone << " of "
+                     << info.size << " at "
                      << bytesDone / elapsed / 1024 / 1024
                      << "MB/second" << endl;
 #endif
@@ -1707,6 +1712,7 @@ struct StreamingUploadSource {
             }
 
             Chunk(Chunk && other)
+                noexcept
             {
                 this->offset = other.offset;
                 this->size = other.size;
@@ -1717,21 +1723,22 @@ struct StreamingUploadSource {
                 other.data = nullptr;
             }
 
-            Chunk & operator = (Chunk && other) {
-                if (this != &other) {
-                    this->offset = other.offset;
-                    this->size = other.size;
-                    this->capacity = other.capacity;
-                    this->index = other.index;
-                    this->data = other.data;
-
-                    other.data = nullptr;
-                }
+            Chunk & operator = (Chunk && other)
+                noexcept
+            {
+                this->offset = other.offset;
+                this->size = other.size;
+                this->capacity = other.capacity;
+                this->index = other.index;
+                this->data = other.data;
+                other.data = nullptr;
 
                 return *this;
             }
 
-            ~Chunk() {
+            ~Chunk()
+                noexcept
+            {
                 if (this->data) {
                     delete[] this->data;
                 }
@@ -1769,7 +1776,7 @@ struct StreamingUploadSource {
 
         RingBufferSWMR<Chunk> chunks;
 
-        boost::mutex etagsLock;
+        std::mutex etagsLock;
         std::vector<std::string> etags;
         std::exception_ptr exc;
 
@@ -1832,6 +1839,12 @@ struct StreamingUploadSource {
                 std::rethrow_exception(exc);
             //cerr << "pushing last chunk " << chunkIndex << endl;
             flush();
+
+            if (!chunkIndex) {
+                chunks.push(std::move(current));
+                ++chunkIndex;
+            }
+
             //cerr << "waiting for everything to stop" << endl;
             chunks.waitUntilEmpty();
             //cerr << "empty" << endl;
@@ -1884,7 +1897,7 @@ struct StreamingUploadSource {
                         //cerr << "successfully uploaded part " << chunk.index
                         //     << " with etag " << etag << endl;
 
-                        boost::unique_lock<boost::mutex> guard(etagsLock);
+                        std::unique_lock<std::mutex> guard(etagsLock);
                         while (etags.size() <= chunk.index)
                             etags.push_back("");
                         etags[chunk.index] = etag;
@@ -1983,6 +1996,37 @@ initS3(const std::string & accessKeyId,
 size_t
 S3Handle::
 getS3Buffer(const std::string & filename, char** outBuffer){
+
+    if (this->s3UriPrefix == "") {
+        // not initialized; use defaults
+        string bucket = S3Api::parseUri(filename).first;
+        auto api = getS3ApiForBucket(bucket);
+        size_t size = api->getObjectInfo(filename).size;
+
+        cerr << "size = " << size << endl;
+
+        // TODO: outBuffer exception safety
+        *outBuffer = new char[size];
+
+        uint64_t done = 0;
+
+        auto onChunk = [&] (const char * data,
+                            size_t chunkSize,
+                            int chunkIndex,
+                            uint64_t offset,
+                            uint64_t totalSize)
+            {
+                ExcAssertEqual(size, totalSize);
+                ExcAssertLessEqual(offset + chunkSize, totalSize);
+                std::copy(data, data + chunkSize, *outBuffer + offset);
+                ML::atomic_add(done, chunkSize);
+            };
+
+        api->download(filename, onChunk);
+
+        return size;
+    }
+
     auto stats = s3.getObjectInfo(filename);
     if (!stats)
         throw ML::Exception("unknown s3 object");
@@ -2073,6 +2117,8 @@ void S3Api::setDefaultBandwidthToServiceMbps(double mbps){
     S3Api::defaultBandwidthToServiceMbps = mbps;
 }
 
+HttpRestProxy S3Api::proxy;
+
 namespace {
 
 struct S3BucketInfo {
@@ -2080,7 +2126,7 @@ struct S3BucketInfo {
     std::shared_ptr<S3Api> api;  //< Used to access this uri
 };
 
-std::mutex s3BucketsLock;
+std::recursive_mutex s3BucketsLock;
 std::unordered_map<std::string, S3BucketInfo> s3Buckets;
 
 } // file scope
@@ -2096,7 +2142,7 @@ void registerS3Bucket(const std::string & bucketName,
                       const std::string & protocol,
                       const std::string & serviceUri)
 {
-    std::unique_lock<std::mutex> guard(s3BucketsLock);
+    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
 
     auto it = s3Buckets.find(bucketName);
     if(it != s3Buckets.end()){
@@ -2135,16 +2181,7 @@ struct RegisterS3Handler {
                                 + resource);
         string bucket(resource, 0, pos);
 
-        std::shared_ptr<S3Api> api;
-
-        {
-            std::unique_lock<std::mutex> guard(s3BucketsLock);
-            auto it = s3Buckets.find(bucket);
-            if (it == s3Buckets.end())
-                throw ML::Exception("unregistered s3 bucket " + bucket);
-            api = it->second.api;
-        }
-
+        std::shared_ptr<S3Api> api = getS3ApiForBucket(bucket);
         ExcAssert(api);
 
         if (mode == ios::in) {
@@ -2160,6 +2197,10 @@ struct RegisterS3Handler {
         else throw ML::Exception("no way to create s3 handler for non in/out");
     }
 
+    void registerBuckets()
+    {
+    }
+
     RegisterS3Handler()
     {
         ML::registerUriHandler("s3", getS3Handler);
@@ -2167,13 +2208,120 @@ struct RegisterS3Handler {
 
 } registerS3Handler;
 
+bool defaultBucketsRegistered = false;
+std::mutex registerBucketsMutex;
+
+/** Parse the ~/.cloud_credentials file and add those buckets in.
+
+    The format of that file is as follows:
+    1.  One entry per line
+    2.  Tab separated
+    3.  Comments are '#' in the first position
+    4.  First entry is the name of the URI scheme (here, s3)
+    5.  Second entry is the "version" of the configuration (here, 1)
+        for forward compatibility
+    6.  The rest of the entries depend upon the scheme; for s3 they are
+        tab-separated and include the following:
+        - Access key ID
+        - Access key
+        - Bandwidth from this machine to the server (MBPS)
+        - Protocol (http)
+        - S3 machine host name (s3.amazonaws.com)
+
+    If S3_ACCESS_KEY_ID and S3_ACCESS_KEY environment variables are specified,
+    they will be used first.
+*/
+void registerDefaultBuckets()
+{
+    if (defaultBucketsRegistered)
+        return;
+
+    std::unique_lock<std::mutex> guard(registerBucketsMutex);
+
+    /* Sample line
+       s3 1 accesskeyid accesskey <S3 host> <S3 protocol; def "http"> <bandwidth>
+    */
+
+    string filename = "/home/" + ML::username() + "/.cloud_credentials";
+    //cerr << "filename = " << filename << endl;
+
+    char* keyIdEnvChar = getenv("S3_ACCESS_KEY_ID");
+    string keyIdEnv = (keyIdEnvChar == NULL ? string() : string(keyIdEnvChar));
+    char* keyEnvChar = getenv("S3_ACCESS_KEY");
+    string keyEnv = (keyEnvChar == NULL ? string() : string(keyEnvChar));
+
+    if (keyIdEnv != "" && keyEnv != "")
+        registerS3Buckets(keyIdEnv, keyEnv, 20., "http", "s3.amazonaws.com");
+
+    if (ML::fileExists(filename)) {
+        std::ifstream stream(filename.c_str());
+        while (stream) {
+            string line;
+
+            //cerr << "line = " << line << endl;
+
+            getline(stream, line);
+            if (line.empty() || line[0] == '#')
+                continue;
+            if (line.find("s3") != 0)
+                continue;
+
+            vector<string> fields = ML::split(line, '\t');
+
+            //cerr << "fields = " << fields << endl;
+
+            if (fields[0] != "s3")
+                continue;
+
+            if (fields.size() < 4) {
+                cerr << "warning: skipping invalid line in ~/.cloud_credentials: "
+                     << line << endl;
+                continue;
+            }
+                
+            fields.resize(7);
+
+
+            string version = fields[1];
+            if (version != "1") {
+                cerr << "warning: ignoring unknown version "
+                     << version <<  " in ~/.cloud_credentials: "
+                     << line << endl;
+                continue;
+            }
+                
+            string keyId = fields[2];
+            string key = fields[3];
+            string bandwidth = fields[4];
+            string protocol = fields[5];
+            string serviceUri = fields[6];
+
+            if (protocol == "")
+                protocol = "http";
+            if (bandwidth == "")
+                bandwidth = "20.0";
+            if (serviceUri == "")
+                serviceUri = "s3.amazonaws.com";
+
+            //cerr << "registering " << keyId << " " << key << " " << bandwidth
+            //     << " " << protocol << " " << serviceUri << endl;
+
+            registerS3Buckets(keyId, key, boost::lexical_cast<double>(bandwidth),
+                              protocol, serviceUri);
+        }
+            
+    }
+
+    defaultBucketsRegistered = true;
+}
+
 void registerS3Buckets(const std::string & accessKeyId,
                        const std::string & accessKey,
                        double bandwidthToServiceMbps,
                        const std::string & protocol,
                        const std::string & serviceUri)
 {
-    std::unique_lock<std::mutex> guard(s3BucketsLock);
+    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
 
     auto api = std::make_shared<S3Api>(accessKeyId, accessKey,
                                        bandwidthToServiceMbps,
@@ -2196,10 +2344,16 @@ void registerS3Buckets(const std::string & accessKeyId,
 
 std::shared_ptr<S3Api> getS3ApiForBucket(const std::string & bucketName)
 {
-    std::unique_lock<std::mutex> guard(s3BucketsLock);
+    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
     auto it = s3Buckets.find(bucketName);
-    if (it == s3Buckets.end())
+    if (it == s3Buckets.end()) {
+        // On demand, load up the configuration file before we fail
+        registerDefaultBuckets();
+        it = s3Buckets.find(bucketName);
+    }
+    if (it == s3Buckets.end()) {
         throw ML::Exception("unregistered s3 bucket " + bucketName);
+    }
     return it->second.api;
 }
 
