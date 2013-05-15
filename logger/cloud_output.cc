@@ -7,14 +7,17 @@
 #include "cloud_output.h"
 #include <memory>
 #include <boost/filesystem.hpp>
+#include "jml/utils/file_functions.h"
 
 namespace Datacratic {
 using namespace std;
+    using namespace ML;
 namespace fs = boost::filesystem;
 
 CloudSink::
-CloudSink(const std::string & uri, bool append, bool disambiguate):
-          currentUri_(uri),tmpFileDir_("./cloudfiles/")
+CloudSink(const std::string & uri, bool append, bool disambiguate,
+          std::string backupDir):
+    currentUri_(uri),backupDir_(backupDir)
 {
     if (uri != "")
         open(uri, append, disambiguate);
@@ -39,7 +42,8 @@ open(const std::string & uri, bool append, bool disambiguate)
     // Get the file name from the s3 uri. We want to preserve the path since
     // if we only get the filename we could overwrite files with the same name
     // but in a different directory. uri format is s3://
-    fs::path filePath(tmpFileDir_ + uri.substr(5));
+    fs::path filePath(backupDir_ + uri.substr(5));
+    cerr << "The uri is " << uri.substr(5) << endl;
     // Get the path and create the directories
     fs::create_directories(filePath.parent_path());
     // create the local file and directory
@@ -53,7 +57,7 @@ close()
 {
    cloudStream.close();
    fileStream.close();
-   fs::path filePath(tmpFileDir_ + currentUri_.substr(5));
+   fs::path filePath(backupDir_ + currentUri_.substr(5));
    cerr << "Erasing local file " << filePath.string() << endl;
    fs::remove(filePath);
 }
@@ -74,17 +78,41 @@ flush(FileFlushLevel flushLevel)
 {
     return 0;
 }
+
+void
+CloudOutput::uploadIncompleteBackups()
+{
+    cerr << "About to upload incomplete files in backup directory " << backupDir_ << endl;
+    auto onFile = [&] (std::string dir,
+                       std::string basename,
+                       const struct stat & stats,
+                       FileType type,
+                       int depth) -> ML::FileAction
+    {
+        if(type == FT_FILE)
+        {
+            cerr << "scanning file " << basename << " in directory " << dir << endl;
+        }
+        return FA_CONTINUE;
+    };
+    if(fs::exists(backupDir_))
+        ML::scanFiles(backupDir_, onFile);
+    else
+        cerr << "backup directory does not exist" << endl;
+}
 std::shared_ptr<CompressingOutput::Sink>
 CloudOutput::createSink(const string & uri, bool append)
 {
-    //    cerr << "CloudOutput::createSink was called with uri " << uri << endl;
-    return make_shared<CloudSink>(uri, append);
+    cerr << "CloudOutput::createSink was called with uri " << uri << endl;
+    uploadIncompleteBackups();
+    return make_shared<CloudSink>(uri, append, true, backupDir_);
 }
 
-RotatingCloudOutput::RotatingCloudOutput()
+    RotatingCloudOutput::RotatingCloudOutput(std::string backupDir)
 : RotatingOutputAdaptor(std::bind(&RotatingCloudOutput::createFile,
                                       this,
-                                      std::placeholders::_1))
+                                  std::placeholders::_1)),
+  backupDir_(backupDir)
 
 {
 
@@ -101,6 +129,7 @@ open(const std::string & filenamePattern,
     this->compression = compression;
     this->level = level;
 
+    
     RotatingOutputAdaptor::open(filenamePattern, periodPattern);
 }
 
@@ -115,7 +144,7 @@ RotatingCloudOutput::
 createFile(const string & filename)
 {
     //cerr << "RotatingCloudOutput::createFile. Entering..." << endl;
-    std::unique_ptr<CloudOutput> result(new CloudOutput());
+    std::unique_ptr<CloudOutput> result(new CloudOutput(backupDir_));
 
     result->onPreFileOpen = [=] (const string & fn)
     {
@@ -143,9 +172,8 @@ createFile(const string & filename)
 /*****************************************************************************/
 
 CloudOutput::
-CloudOutput(const std::string & uri,
-            size_t ringBufferSize)
-    : NamedOutput(ringBufferSize)
+CloudOutput(std::string backupDir, size_t ringBufferSize)
+    : NamedOutput(ringBufferSize),backupDir_(backupDir)
 {
 }
 

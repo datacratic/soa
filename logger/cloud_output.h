@@ -26,9 +26,9 @@ namespace Datacratic {
 /** Class that writes to a cloud. */
 
 struct CloudSink : public CompressingOutput::Sink {
-    CloudSink(const std::string & uri = "",
-              bool append = true,
-              bool disambiguate = true);
+    CloudSink(const std::string & uri ,
+              bool append ,
+              bool disambiguate, std::string backupDir);
 
     virtual ~CloudSink();
 
@@ -44,7 +44,7 @@ struct CloudSink : public CompressingOutput::Sink {
 
     /// Uri of cloud we're writing to
     std::string currentUri_;
-    std::string tmpFileDir_;
+    std::string backupDir_;
 
     /// Current stream to the cloud (TM)
     ML::filter_ostream cloudStream;
@@ -77,13 +77,16 @@ struct CloudSink : public CompressingOutput::Sink {
 
 struct CloudOutput : public NamedOutput {
 
-    CloudOutput(const std::string & uri = "",
+    CloudOutput(std::string backupDir = "./cloudbackup/",
                size_t ringBufferSize = 65536);
 
     virtual ~CloudOutput();
 
     virtual std::shared_ptr<Sink>
     createSink(const std::string & uri, bool append);
+
+    void uploadIncompleteBackups();
+    std::string backupDir_;
 };
 
 
@@ -95,7 +98,7 @@ struct CloudOutput : public NamedOutput {
 
 struct RotatingCloudOutput : public RotatingOutputAdaptor {
 
-    RotatingCloudOutput();
+    RotatingCloudOutput(std::string backupDir = "./cloudbackup/");
 
     virtual ~RotatingCloudOutput();
 
@@ -122,6 +125,7 @@ private:
 
     std::string compression;
     int level;
+    std::string backupDir_;
 };
 
 } // namespace Datacratic
