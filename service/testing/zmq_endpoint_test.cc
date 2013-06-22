@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE( test_no_connect )
 
     ZmqNamedClientBusProxy socket;
     socket.init(proxies->config);
-    socket.connectToServiceClass("foo", "bar");
+    socket.connectToServiceClass("foo", "bar", true);
 
     socket.start();
     ML::sleep(1.0);
