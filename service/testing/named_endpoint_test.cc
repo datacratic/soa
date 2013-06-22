@@ -92,7 +92,7 @@ BOOST_AUTO_TEST_CASE( test_named_endpoint )
     zookeeper.start();
 
     auto proxies = std::make_shared<ServiceProxies>();
-    proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()));
+    proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()), "global");
 
     EchoService service(proxies, "echo");
     auto addr = service.bindTcp();
