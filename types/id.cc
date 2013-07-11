@@ -4,6 +4,8 @@
 
 */
 
+#include <cctype>
+
 #include "id.h"
 #include "jml/arch/bit_range_ops.h"
 #include "jml/arch/format.h"
@@ -74,7 +76,7 @@ inline int hexToDec3(int c)
     int i = (c & 0x60) >> 5;
     d += (i == 1) * -16;
     d += (i >= 2) * 9;
-    bool h = __builtin_isxdigit(c);
+    bool h = isxdigit(c);
     return h * d - (!h);
 }
 
