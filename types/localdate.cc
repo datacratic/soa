@@ -5,6 +5,8 @@
 */
 
 
+#include <sys/stat.h>
+
 #include <time.h>
 #include <mutex>
 #include <boost/date_time/local_time/tz_database.hpp>
@@ -125,6 +127,10 @@ recomputeTZOffset()
     else {
         call_once(once, [&] {
                 string zoneSpecFile = BOOST_TIMEZONES_DIR "/date_timezone_spec.csv";
+                struct stat buffer;   
+                if (stat (zoneSpecFile.c_str(), &buffer) != 0)
+                    zoneSpecFile = "date_timezone_spec.csv";
+ 
                 tz_db.load_from_file(zoneSpecFile);
             });
 
