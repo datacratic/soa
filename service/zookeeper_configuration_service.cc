@@ -200,8 +200,8 @@ forEachEntry(const OnEntry & onEntry,
 
     ExcAssert(zoo);
 
-    std::function<bool (const std::string &)> doNode
-        = [&] (const std::string & currentPrefix)
+    std::function<bool (const std::string &)> doNode;
+    doNode = [&] (const std::string & currentPrefix)
         {
             //cerr << "doNode " << currentPrefix << endl;
 
