@@ -104,8 +104,13 @@ struct RedisTemporaryServer : boost::noncopyable {
             signal(SIGKILL, SIG_DFL);
 
             cerr << "running redis" << endl;
+#ifdef REDIS_SERVER
+            res = execlp(REDIS_SERVER,
+                             REDIS_SERVER,
+#else
             res = execlp("redis-server",
                              "redis-server",
+#endif
                              "--port", "0",
                              "--unixsocket", "./redis-socket",
                              "--dir", uniquePath.c_str(),
