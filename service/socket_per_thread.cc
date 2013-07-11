@@ -114,10 +114,10 @@ initForThisThread() const
 
     auto mThis = const_cast<SocketPerThread *>(this);
 
-    std::auto_ptr<Entry> newEntry(new Entry());
+    std::unique_ptr<Entry> newEntry(new Entry());
     newEntry->owner = mThis;
             
-    std::auto_ptr<zmq::socket_t> newPtr
+    std::unique_ptr<zmq::socket_t> newPtr
         (new zmq::socket_t(*context, type));
     setIdentity(*newPtr, ML::format("thr%lld",
                                     (long long)ACE_OS::thr_self()));

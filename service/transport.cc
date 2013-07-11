@@ -856,7 +856,7 @@ void
 TransportBase::
 pushAsync(const boost::function<void ()> & fn, const std::string & name)
 {
-    std::auto_ptr<AsyncNode> node(new AsyncNode(fn, name));
+    std::unique_ptr<AsyncNode> node(new AsyncNode(fn, name));
     
     AsyncNode * current = asyncHead_;
     

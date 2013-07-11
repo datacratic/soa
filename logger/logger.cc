@@ -257,7 +257,7 @@ addOutput(std::shared_ptr<LogOutput> output,
     Outputs * current = outputs;
 
     for (;;) {
-        auto_ptr<Outputs> newOutputs
+        std::unique_ptr<Outputs> newOutputs
             (new Outputs(current, Output(allowChannels, denyChannels, output,
                                          logProbability)));
         if (ML::cmp_xchg(outputs, current, newOutputs.get())) {
@@ -282,7 +282,7 @@ void
 Logger::
 clearOutputs()
 {
-    auto_ptr<Outputs> newOutputs(new Outputs());
+    unique_ptr<Outputs> newOutputs(new Outputs());
 
     Outputs * current = outputs;
 

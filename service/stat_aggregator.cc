@@ -142,7 +142,7 @@ read(const std::string & prefix)
 
     boost::tie(values, oldStart) = reset();
 
-    std::auto_ptr<ML::distribution<float> > vptr(values);
+    std::unique_ptr<ML::distribution<float> > vptr(values);
 
     if (values->empty())
         return vector<StatReading>();

@@ -1687,7 +1687,7 @@ struct StreamingDownloadSource {
     }
 };
 
-std::auto_ptr<std::streambuf>
+std::unique_ptr<std::streambuf>
 S3Api::
 streamingDownload(const std::string & bucket,
                   const std::string & object,
@@ -1695,7 +1695,7 @@ streamingDownload(const std::string & bucket,
                   ssize_t endOffset,
                   const OnChunk & onChunk) const
 {
-    std::auto_ptr<std::streambuf> result;
+    std::unique_ptr<std::streambuf> result;
     result.reset(new boost::iostreams::stream_buffer<StreamingDownloadSource>
                  (StreamingDownloadSource(this, bucket, object),
                   131072));
@@ -1976,7 +1976,7 @@ struct StreamingUploadSource {
     }
 };
 
-std::auto_ptr<std::streambuf>
+std::unique_ptr<std::streambuf>
 S3Api::
 streamingUpload(const std::string & uri,
                 const ObjectMetadata & metadata) const
@@ -1986,13 +1986,13 @@ streamingUpload(const std::string & uri,
     return streamingUpload(bucket, object, metadata);
 }
 
-std::auto_ptr<std::streambuf>
+std::unique_ptr<std::streambuf>
 S3Api::
 streamingUpload(const std::string & bucket,
                 const std::string & object,
                 const ObjectMetadata & metadata) const
 {
-    std::auto_ptr<std::streambuf> result;
+    std::unique_ptr<std::streambuf> result;
     result.reset(new boost::iostreams::stream_buffer<StreamingUploadSource>
                  (StreamingUploadSource(this, bucket, object, metadata),
                   131072));
@@ -2015,7 +2015,7 @@ parseUri(const std::string & uri)
     return make_pair(bucket, object);
 }
 
-std::auto_ptr<std::streambuf>
+std::unique_ptr<std::streambuf>
 S3Api::
 streamingDownload(const std::string & uri,
                   ssize_t startOffset,

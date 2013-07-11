@@ -412,7 +412,7 @@ struct JSOutput : public Filter {
     {
         HandleScope scope;
 
-        auto_ptr<CallbackData> data((CallbackData *)req->data);
+        unique_ptr<CallbackData> data((CallbackData *)req->data);
 
         TryCatch try_catch;
 
@@ -511,7 +511,7 @@ logMessage(const std::string & channel,
     // JS to be executed in.  Here we arrange for the right thread to be called
     // back by libev once the JS engine is ready to do something.
     
-    auto_ptr<CallbackData> data(new CallbackData());
+    unique_ptr<CallbackData> data(new CallbackData());
     
     data->channel = channel;
     data->message = message;
