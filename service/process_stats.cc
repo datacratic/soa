@@ -9,7 +9,6 @@
 #include "soa/service/process_stats.h"
 #include "jml/arch/exception.h"
 
-#include <boost/algorithm/string/split.hpp>
 #include <boost/lexical_cast.hpp>
 #include <string>
 #include <vector>
@@ -20,6 +19,13 @@
 #include <unistd.h>
 #include <sys/resource.h>
 
+#include <boost/concept/assert.hpp>
+// redefine concept assert, suppress the warning etc.
+#undef BOOST_CONCEPT_ASSERT
+#define BOOST_CONCEPT_ASSERT(Model)
+#include <boost/concept_check.hpp>
+
+#include <boost/algorithm/string/split.hpp>
 
 using namespace Datacratic;
 using namespace std;
