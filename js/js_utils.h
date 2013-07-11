@@ -892,7 +892,7 @@ struct PmfInfo {
         addDefaults(sizeof...(Args) - sizeof...(Defaults),
                     sizeof...(Args), defaults...);
     }
-    
+
     template<typename Arg1, typename... Rest>
     void addDefaults(int argNum, size_t numArgs, Arg1 arg1, Rest... rest)
     {
