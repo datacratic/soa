@@ -11,6 +11,11 @@
 #include "jml/arch/rtti_utils.h"
 #include <boost/function.hpp>
 #include <unordered_map>
+
+#ifdef HAVE_CXX11
+#undef BOOST_NO_CXX11_HDR_TUPLE
+#endif
+
 #include <boost/signals2.hpp>
 #include "jml/utils/string_functions.h"
 

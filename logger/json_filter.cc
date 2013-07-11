@@ -124,7 +124,7 @@ struct JsonContext {
         }
         else {
             // not there
-            lastStrings.insert(make_pair(s, StringEntry(stringNum, 0))).second;
+            lastStrings.insert(make_pair(s, StringEntry(stringNum, 0)));
             //cerr << "string " << s << " is at ID " << stringNum << endl;
             ++stringNum;
             writeByte('S');  // interned string definition
