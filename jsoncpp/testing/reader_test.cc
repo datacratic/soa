@@ -10,6 +10,10 @@
 #include "jml/arch/exception.h"
 #include "jml/arch/exception_handler.h"
 
+#ifndef BASE_DIR
+#define BASE_DIR "."
+#endif
+
 using namespace std;
 
 
@@ -91,6 +95,6 @@ BOOST_AUTO_TEST_CASE( test_iterators )
 
 BOOST_AUTO_TEST_CASE( test_from_file )
 {
-    Json::Value json = Json::parseFromFile("soa/jsoncpp/testing/fixtures/somejson.json");
+    Json::Value json = Json::parseFromFile(BASE_DIR "/soa/jsoncpp/testing/fixtures/somejson.json");
     BOOST_CHECK_EQUAL(json["octo"], "sanchez");
 }
