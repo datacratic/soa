@@ -137,8 +137,12 @@ private:
                 throw ML::Exception(errno, "prctl failed");
             }
 
+#ifdef ZOO_SERVER
+            std::string path(ZOO_SERVER);
+#else
             std::string home = getenv("HOME");
             std::string path = home + "/local/bin/zookeeper/bin/zkServer.sh";
+#endif
             std::string file = uniquePath + "/zoo.cfg";
             std::string logs = "ZOO_LOG_DIR=" + uniquePath;
 
