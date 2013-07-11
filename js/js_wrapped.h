@@ -33,8 +33,18 @@
 #include "jml/utils/string_functions.h"
 #include "jml/arch/backtrace.h"
 #include "jml/utils/smart_ptr_utils.h"
+
+#ifdef HAVE_NODEJS
+#include <node.h>
+#else
 #include <node/node.h>
+#endif
+
+#ifdef HAVE_V8
+#include <v8.h>
+#else
 #include <v8/v8.h>
+#endif
 #include <boost/shared_ptr.hpp>
 #include <boost/type_traits/is_base_of.hpp>
 #include <boost/static_assert.hpp>
@@ -193,7 +203,12 @@ protected:
             throw ML::Exception("could not extract prototype from " + cstr(args.Data()));
         
         // Run the constructor
+#ifdef __clang__
+        std::unique_ptr<v8::Handle<v8::Value> []> _args2(new v8::Handle<v8::Value>[args.Length()]);
+        v8::Handle<v8::Value> *args2 = _args2.get();
+#else
         v8::Handle<v8::Value> args2[args.Length()];
+#endif
         for (unsigned i = 0;  i < args.Length();  ++i)
             args2[i] = args[i];
 

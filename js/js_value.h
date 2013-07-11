@@ -8,7 +8,11 @@
 #pragma once
 
 #include "js_value_fwd.h"
+#ifdef HAVE_V8
+#include <v8.h>
+#else
 #include "v8/v8.h"
+#endif
 
 namespace Datacratic {
 namespace JS {

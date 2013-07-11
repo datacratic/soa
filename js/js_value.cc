@@ -15,7 +15,11 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #include "soa/jsoncpp/json.h"
+#ifdef HAVE_NODEJS
+#include <node_buffer.h>
+#else
 #include "node/node_buffer.h"
+#endif
 #include <cxxabi.h>
 using namespace std;
 using namespace ML;
