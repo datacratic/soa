@@ -7,7 +7,11 @@
 
 #pragma once
 
+#ifdef HAVE_V8
+#include <v8.h>
+#else
 #include <v8/v8.h>
+#endif
 #include <string>
 #include "jml/arch/exception.h"
 #include "jml/utils/exc_assert.h"
@@ -893,6 +897,21 @@ struct PmfInfo {
                     sizeof...(Args), defaults...);
     }
 
+#ifdef __clang__
+    typedef T (Obj::* non_const_pmf) (Args...);
+    template<typename... Defaults>
+    PmfInfo(T (Obj::* _pmf) (Args...) const,
+              Defaults... defaults)
+        : pmf((non_const_pmf) _pmf), defaultArgs(sizeof...(Args))
+    {
+        //using namespace std;
+        //cerr << "adding " << sizeof...(Defaults) << " default args to "
+        //     << sizeof...(Args) << " existing" << endl;
+        addDefaults(sizeof...(Args) - sizeof...(Defaults),
+                    sizeof...(Args), defaults...);
+    }
+#endif 
+
     template<typename Arg1, typename... Rest>
     void addDefaults(int argNum, size_t numArgs, Arg1 arg1, Rest... rest)
     {
@@ -1043,7 +1062,7 @@ struct PropertySetter {
                 (info.Data());
             Obj & o = *Base::getShared(info.This());
             (o.*setter) (from_js(JSValue(value), (const T *)0));
-        } HANDLE_JS_EXCEPTIONS;
+        } HANDLE_JS_EXCEPTIONS_SETTER;
     }
 };
 
@@ -1173,6 +1192,18 @@ struct CallPmfWithTypePositionList {
 template<typename... ArgsWithPosition>
 struct CallPmfWithTypePositionList<TypeList<ArgsWithPosition...> > {
 
+#ifdef __clang__
+    template<typename R, typename... Args, typename Obj>
+    static R call(R (Obj::* pmf) (Args...), const Obj & obj,
+                  const JS::JSArgs & args,
+                  const std::vector<JSValue> & defaults = std::vector<JSValue>())
+    {
+        typedef R (Obj::* const_pmf) (Args...) const;
+        const_pmf _pmf = (const_pmf) pmf;
+        return (obj.*_pmf)(CallWithJsArgs<ArgsWithPosition>
+                          ::getArgAtPosition(args, defaults)...);
+    }
+#else
     template<typename R, typename... Args, typename Obj>
     static R call(R (Obj::* pmf) (Args...), Obj & obj,
                   const JS::JSArgs & args,
@@ -1181,6 +1212,7 @@ struct CallPmfWithTypePositionList<TypeList<ArgsWithPosition...> > {
         return (obj.*pmf)(CallWithJsArgs<ArgsWithPosition>
                           ::getArgAtPosition(args, defaults)...);
     }
+#endif
 
     template<typename... Args, typename Obj>
     static void call(void (Obj::* pmf) (Args...), Obj & obj,
@@ -1260,6 +1292,43 @@ callPmf(R (Obj::*pmf) (Args...), Obj & obj,
 template<typename R, typename Obj, typename Base, typename... Args>
 struct MemberFunctionCaller {
 
+#ifdef __clang__
+    static v8::Handle<v8::Value>
+    call(const v8::Arguments & args)
+    {
+      return call<R>(args);
+    }
+
+    
+    template <class T>
+    static v8::Handle<v8::Value>
+    call(const v8::Arguments & args, typename std::enable_if<std::is_void<T>::value >::type* = 0)
+    {
+         try {
+            auto info = valueToPmfInfo<R, Obj, Args...>(args.Data());
+            Obj & o = *Base::getShared(args);
+            v8::Handle<v8::Value> result = callPmf<Obj, Args...>(info->pmf, o, args,
+                                                   info->defaultArgs);
+            return result;
+        } HANDLE_JS_EXCEPTIONS;
+   
+    }
+
+    template <class T>
+    static v8::Handle<v8::Value>
+    call(const v8::Arguments & args, typename std::enable_if<!std::is_void<T>::value >::type* = 0)
+    {
+         try {
+            auto info = valueToPmfInfo<R, Obj, Args...>(args.Data());
+            Obj & o = *Base::getShared(args);
+            v8::Handle<v8::Value> result = callPmf<Obj, R, Args...>(info->pmf, o, args,
+                                                   info->defaultArgs);
+            return result;
+        } HANDLE_JS_EXCEPTIONS;
+   
+    }
+
+#else
     static v8::Handle<v8::Value>
     call(const v8::Arguments & args)
     {
@@ -1271,6 +1340,7 @@ struct MemberFunctionCaller {
             return result;
         } HANDLE_JS_EXCEPTIONS;
     }
+#endif
 };
 
 
