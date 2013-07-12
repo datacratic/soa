@@ -6,6 +6,13 @@
 
 #pragma once
 
+#undef PACKAGE
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
+#undef VERSION
+
 #include "soa/service/http_endpoint.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/utils/exc_assert.h"
