@@ -7,6 +7,10 @@
 
 #pragma once
 
+#include <strings.h>
+
+#include <boost/algorithm/string.hpp>
+
 #include <string>
 #include <map>
 #include <iostream>
@@ -72,8 +76,17 @@ struct HttpHeader {
     ssize_t contentLength;
     bool isChunked;
 
+    struct NoCaseEqual {
+        typedef const std::string & String;
+        bool operator() (String first, String second) const {
+            return !strcasecmp(first.c_str(), second.c_str());
+        }
+    };
+
+    typedef std::map<std::string, std::string, NoCaseEqual> HeaderMap;
+
     // The rest of the headers are here
-    std::map<std::string, std::string> headers;
+    HeaderMap headers;
 
     std::string getHeader(const std::string & key) const
     {
