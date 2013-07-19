@@ -29,7 +29,8 @@ int main(int argc, char ** argv)
     options_description configuration_options("Configuration options");
 
     std::string zookeeperUri("localhost:2181");
-    std::string installation;
+    std::string installation; 
+    std::string location("global");
 
     std::vector<std::string> carbonUris;  ///< TODO: zookeeper
     std::vector<std::string> fixedHttpBindAddresses;
@@ -65,6 +66,6 @@ int main(int argc, char ** argv)
     }
 
     std::shared_ptr<ServiceProxies> proxies(new ServiceProxies());
-    proxies->useZookeeper(zookeeperUri, installation);
+    proxies->useZookeeper(zookeeperUri, installation, location);
     proxies->config->dump(cerr);
 }

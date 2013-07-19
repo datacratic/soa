@@ -49,7 +49,7 @@ BOOST_AUTO_TEST_CASE( test_service_proxies_getServiceClassInstances )
     server.start();
 
     auto proxies = std::make_shared<ServiceProxies>();
-    proxies->useZookeeper(ML::format("localhost:%d", server.getPort()));
+    proxies->useZookeeper(ML::format("localhost:%d", server.getPort()),"global");
 
     set<string> expectedUris;
 
