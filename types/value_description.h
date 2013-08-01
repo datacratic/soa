@@ -158,6 +158,8 @@ struct ValueDescription {
     // Storage to cache Javascript converters
     mutable JSConverters * jsConverters;
     mutable bool jsConvertersInitialized;
+
+    static ValueDescription * get(std::string const & name);
 };
 
 void registerValueDescription(const std::type_info & type,
@@ -168,7 +170,7 @@ template<typename T>
 struct RegisterValueDescription {
     RegisterValueDescription()
     {
-        registerValueDescription(typeid(T), [] () { return getDefaultDescription((T*)0); });
+        registerValueDescription(typeid(T), [] () { return getDefaultDescription((T*)0); }, true);
     }
 };
 
@@ -185,7 +187,7 @@ struct RegisterValueDescriptionI {
 
 #define REGISTER_VALUE_DESCRIPTION(type)                                \
     namespace {                                                         \
-    static const RegisterValueDescription<type> registerValueDescription#type; \
+    static const RegisterValueDescription<type> registerValueDescription##type; \
     }
 
 
@@ -308,6 +310,17 @@ getDefaultDescription(T * = 0,
     return new DefaultDescription<T>();
 }
 
+
+/*****************************************************************************/
+/* VALUE DESCRIPTION CONCRETE IMPL                                           */
+/*****************************************************************************/
+
+/** Used when there is a concrete description of a value we want to register.
+
+    The main thing that this class does is also registers the value description
+    as part of construction.
+*/
+
 template<typename T, ValueKind kind = ValueKind::ATOM,
          typename Impl = DefaultDescription<T> >
 struct ValueDescriptionI : public ValueDescriptionT<T> {
@@ -351,16 +364,16 @@ inline const void * addOffset(const void * base, ssize_t offset)
 struct StructureDescriptionBase {
 
     StructureDescriptionBase(const std::type_info * type,
-                             const std::string & typeName = "",
+                             const std::string & structName = "",
                              bool nullAccepted = false)
         : type(type),
-          typeName(typeName.empty() ? ML::demangle(type->name()) : typeName),
+          structName(structName.empty() ? ML::demangle(type->name()) : structName),
           nullAccepted(nullAccepted)
     {
     }
 
     const std::type_info * const type;
-    const std::string typeName;
+    const std::string structName;
     bool nullAccepted;
 
     typedef ValueDescription::FieldDescription FieldDescription;
@@ -405,7 +418,7 @@ struct StructureDescriptionBase {
         }
         
         if (!context.isObject())
-            context.exception("expected structure of type " + typeName);
+            context.exception("expected structure of type " + structName);
 
         auto onMember = [&] ()
             {
@@ -454,6 +467,10 @@ struct StructureDescriptionBase {
 /*****************************************************************************/
 /* STRUCTURE DESCRIPTION                                                     */
 /*****************************************************************************/
+
+/** Class that implements the base of a description of a structure.  Contains
+    methods to register all of the member variables of the class.
+*/
 
 template<class Struct>
 struct StructureDescription

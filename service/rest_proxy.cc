@@ -5,6 +5,7 @@
 */
 
 #include "rest_proxy.h"
+#include "jml/arch/exception_handler.h"
 
 using namespace std;
 using namespace ML;
@@ -167,6 +168,7 @@ handleOperation(const Operation & op)
     }
     else {
         if (op.onDone) {
+            ML::Set_Trace_Exceptions notrace(false);
             string exc_msg = ("connection to '" + serviceName_
                               + "' is unavailable");
             op.onDone(make_exception_ptr<ML::Exception>(exc_msg), 0, "");
