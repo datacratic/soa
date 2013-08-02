@@ -52,7 +52,7 @@ services_include_HEADERS = \
   zookeeper.h \
   zmq.hpp
 
-services_includedir = $(includedir)/soa/services
+services_includedir = $(includedir)/soa/service
 
 lib_LTLIBRARIES = libopstats.la libzeromq.la libservices.la libcloud.la libredis.la
 
