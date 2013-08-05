@@ -50,7 +50,12 @@ forEachLine(const Arguments & args)
             {
                 v8::HandleScope scope;
                 int argc = 2;
+#ifdef __clang__
+                std::unique_ptr<v8::Handle<v8::Value>[]> _argv(new v8::Handle<v8::Value>[argc]);
+                v8::Handle<v8::Value> *argv = _argv.get();
+#else
                 v8::Handle<v8::Value> argv[argc];
+#endif
                 argv[0] = JS::toJS(line);
                 argv[1] = JS::toJS(lineNum);
                 

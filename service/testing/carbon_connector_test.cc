@@ -164,7 +164,7 @@ BOOST_AUTO_TEST_CASE( test_multi_aggregator )
 
     m.lock();
 
-    BOOST_REQUIRE_EQUAL(readings.size(), 8);
+    BOOST_REQUIRE_EQUAL(readings.size(), 3);
     BOOST_CHECK_EQUAL(readings[0].name, "bonus.mean");
     BOOST_CHECK_EQUAL(readings[0].value, 50.0);
 }

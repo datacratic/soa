@@ -51,10 +51,15 @@ BOOST_AUTO_TEST_CASE( test_basic_id )
 
 BOOST_AUTO_TEST_CASE( test_uuid_id )
 {
-    string uuid = "0828398c-5965-11e0-84c8-0026b937c8e1";
+    string uuid     = "0828398c-5965-11e0-84c8-0026b937c8e1";
+    string uuidLong = "11e059650828398c-5965-11e0-84c8-0026b937c8e1";
     Id id(uuid);
     BOOST_CHECK_EQUAL(id.type, Id::UUID);
-    BOOST_CHECK_EQUAL(id.toString(), uuid);
+    if (id.toString().size() == uuid.size())
+        BOOST_CHECK_EQUAL(id.toString(), uuid);
+    else
+        BOOST_CHECK_EQUAL(id.toString(), uuidLong);
+
     checkSerializeReconstitute(id);
 }
 

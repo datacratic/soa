@@ -221,30 +221,29 @@ struct StreamingJsonParsingContext
     void forEachMember(const Fn & fn)
     {
         int memberNum = 0;
+        // This structure takes care of pushing and popping our
+        // path entry.  It will make sure the member is always
+        // popped no matter what
+        struct PathPusher {
+            PathPusher(const char * memberName,
+                       int memberNum,
+                       StreamingJsonParsingContext * context)
+                : context(context)
+            {
+                context->pushPath(memberName, memberNum);
+            }
 
+            ~PathPusher()
+            {
+                context->popPath();
+            }
+
+            StreamingJsonParsingContext * const context;
+        };
         auto onMember = [&] (const char * memberName,
                              ML::Parse_Context &)
             {
-                // This structure takes care of pushing and popping our
-                // path entry.  It will make sure the member is always
-                // popped no matter what
-                struct PathPusher {
-                    PathPusher(const char * memberName,
-                               int memberNum,
-                               StreamingJsonParsingContext * context)
-                        : context(context)
-                    {
-                        context->pushPath(memberName, memberNum);
-                    }
-
-                    ~PathPusher()
-                    {
-                        context->popPath();
-                    }
-
-                    StreamingJsonParsingContext * const context;
-                } pusher(memberName, memberNum++, this);
-
+                PathPusher pusher(memberName, memberNum++, this);
                 fn();
             };
         

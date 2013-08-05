@@ -75,7 +75,7 @@ static int doCallInJs(eio_req * req)
 {
     v8::HandleScope scope;
 
-    auto_ptr<CallInJsContextData> data((CallInJsContextData *)req->data);
+    unique_ptr<CallInJsContextData> data((CallInJsContextData *)req->data);
 
     v8::TryCatch try_catch;
 
@@ -119,7 +119,7 @@ void callInJsThread(const boost::function<void ()> & fn)
     // JS to be executed in.  Here we arrange for the right thread to be called
     // back by libev once the JS engine is ready to do something.
     
-    auto_ptr<CallInJsContextData> data(new CallInJsContextData());
+    unique_ptr<CallInJsContextData> data(new CallInJsContextData());
     data->callback = fn;
     eio_custom(doNothing, EIO_PRI_DEFAULT, doCallInJs, data.release());
 }

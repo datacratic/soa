@@ -19,6 +19,7 @@
 #include "jml/arch/timers.h"
 #include "jml/arch/cmp_xchg.h"
 #include "zmq_utils.h"
+#include "jml/db/portable_iarchive.h"
 
 namespace Datacratic {
 

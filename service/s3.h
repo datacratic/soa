@@ -312,7 +312,7 @@ struct S3Api {
         an onChunk is provided, downloaded chunks will also be provided
         to that method.
     */
-    std::auto_ptr<std::streambuf>
+    std::unique_ptr<std::streambuf>
     streamingDownload(const std::string & bucket,
                       const std::string & object,
                       ssize_t startOffset = 0,
@@ -323,19 +323,19 @@ struct S3Api {
         an onChunk is provided, downloaded chunks will also be provided
         to that method.
     */
-    std::auto_ptr<std::streambuf>
+    std::unique_ptr<std::streambuf>
     streamingDownload(const std::string & uri,
                       ssize_t startOffset = 0,
                       ssize_t endOffset = -1,
                       const OnChunk & onChunk = OnChunk()) const;
 
     /** Get a streambuf that will write to s3 when written to. */
-    std::auto_ptr<std::streambuf>
+    std::unique_ptr<std::streambuf>
     streamingUpload(const std::string & uri,
                     const ObjectMetadata & md = ObjectMetadata()) const;
 
     /** Get a streambuf that will write to s3 when written to. */
-    std::auto_ptr<std::streambuf>
+    std::unique_ptr<std::streambuf>
     streamingUpload(const std::string & bucket,
                     const std::string & object,
                     const ObjectMetadata & md = ObjectMetadata()) const;

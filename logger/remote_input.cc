@@ -28,7 +28,7 @@ struct RemoteInputConnection : public PassiveConnectionHandler {
 #if 0
         using namespace boost::iostreams;
 
-        auto_ptr<filtering_ostream> new_stream
+        unique_ptr<filtering_ostream> new_stream
             (new filtering_ostream());
 
         bool gzip = true;

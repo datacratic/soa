@@ -9,6 +9,11 @@
 #include "v8.h"
 #include "soa/js/js_utils.h"
 #include "soa/js/js_call.h"
+
+#ifdef HAVE_CXX11
+#undef BOOST_NO_CXX11_HDR_TUPLE
+#endif
+
 #include <boost/signals2.hpp>
 #include <boost/bind.hpp>
 #include "jml/arch/format.h"

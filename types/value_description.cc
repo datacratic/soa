@@ -39,18 +39,26 @@ std::ostream & operator << (std::ostream & stream, ValueKind kind)
 }
 
 namespace {
-    std::unordered_map<std::string, ValueDescription *> registry;
+    std::shared_ptr<std::unordered_map<std::string, ValueDescription *>> registry;
 }
 
 ValueDescription * ValueDescription::get(std::string const & name) {
-    auto i = registry.find(name);
-    return registry.end() != i ? i->second : 0;
+    if (!registry)
+        registry = std::shared_ptr<std::unordered_map<std::string, ValueDescription *>>(
+            new std::unordered_map<std::string, ValueDescription *>);
+
+    auto i = registry->find(name);
+    return registry->end() != i ? i->second : 0;
 }
 
 void registerValueDescription(const std::type_info & type,
                               std::function<ValueDescription * ()> fn,
                               bool isDefault)
 {
+    if (!registry)
+        registry = std::shared_ptr<std::unordered_map<std::string, ValueDescription *>>(
+            new std::unordered_map<std::string, ValueDescription *>);
+
     auto desc = fn();
 
     /*
@@ -59,7 +67,7 @@ void registerValueDescription(const std::type_info & type,
          << ML::type_name(*desc) << " at " << desc << endl;
     */
 
-    registry[desc->typeName] = desc;
+    registry->insert(std::make_pair(desc->typeName, desc));
 }
 
 void

@@ -51,7 +51,7 @@ BOOST_AUTO_TEST_CASE( test_rotating_file_logger )
     logger.open("tmp/file-logger-%F-%T.log.gz", "2s");
 
     for (unsigned i = 0;  i < 60;  ++i) {
-        logger.logMessage("HELLO", "This is a message " + numLinesWritten);
+        logger.logMessage("HELLO", "This is a message " + std::to_string(numLinesWritten));
         ++numLinesWritten;
         ML::sleep(0.1);
     }

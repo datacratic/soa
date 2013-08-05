@@ -31,8 +31,7 @@ struct HttpResponse {
     HttpResponse(int responseCode,
                  std::string contentType,
                  std::string body,
-                 std::vector<std::pair<std::string, std::string> > extraHeaders
-                     = std::vector<std::pair<std::string, std::string> >())
+                 std::vector<std::pair<std::string, std::string> > extraHeaders)
         : responseCode(responseCode),
           responseStatus(getResponseReasonPhrase(responseCode)),
           contentType(contentType),
@@ -42,9 +41,18 @@ struct HttpResponse {
     }
 
     HttpResponse(int responseCode,
+                 std::string contentType,
+                 std::string body)
+        : responseCode(responseCode),
+          responseStatus(getResponseReasonPhrase(responseCode)),
+          contentType(contentType),
+          body(body)
+    {
+    }
+
+    HttpResponse(int responseCode,
                  Json::Value body,
-                 std::vector<std::pair<std::string, std::string> > extraHeaders
-                     = std::vector<std::pair<std::string, std::string> >())
+                 std::vector<std::pair<std::string, std::string> > extraHeaders)
         : responseCode(responseCode),
           responseStatus(getResponseReasonPhrase(responseCode)),
           contentType("application/json"),
@@ -52,6 +60,17 @@ struct HttpResponse {
           extraHeaders(extraHeaders)
     {
     }
+
+    HttpResponse(int responseCode,
+                 Json::Value body)
+        : responseCode(responseCode),
+          responseStatus(getResponseReasonPhrase(responseCode)),
+          contentType("application/json"),
+          body(boost::trim_copy(body.toString()))
+    {
+    }
+
+
 
     int responseCode;
     std::string responseStatus;

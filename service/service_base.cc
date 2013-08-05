@@ -268,8 +268,8 @@ forEachEntry(const OnEntry & onEntry,
 {
     Guard guard(lock);
 
-    std::function<bool (const Entry *, string)> doNode
-        = [&] (const Entry * node, string prefix)
+    std::function<bool (const Entry *, string)> doNode;
+    doNode = [&] (const Entry * node, string prefix)
         {
             if (!node)
                 return true;

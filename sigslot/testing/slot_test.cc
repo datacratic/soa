@@ -91,7 +91,12 @@ BOOST_AUTO_TEST_CASE( test_js_calling_c )
     
     // Goal: call the slot from Javascript
     int argc = 1;
+#ifdef __clang__
+    std::unique_ptr<Handle<Value> []> _argv(new Handle<Value>[argc]);
+    Handle<Value> *argv = _argv.get();
+#else
     Handle<Value> argv[argc];
+#endif
     argv[0] = JS::toJS(1);
 
     BOOST_CHECK_EQUAL(JS::cstr(n1.call(context->Global(), argc, argv)), "2");
@@ -144,7 +149,14 @@ BOOST_AUTO_TEST_CASE( test_js_calling_js )
     
     // Goal: call the slot from Javascript
     int argc = 1;
+
+#ifdef __clang__
+    std::unique_ptr<Handle<Value> []> _argv(new Handle<Value>[argc]);
+    Handle<Value> *argv = _argv.get();
+#else
     Handle<Value> argv[argc];
+#endif
+
     argv[0] = JS::toJS(1);
 
     BOOST_CHECK_EQUAL(JS::cstr(n1.call(context->Global(), argc, argv)), "1");
