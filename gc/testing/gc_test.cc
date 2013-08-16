@@ -21,6 +21,8 @@
 #include <boost/bind.hpp>
 #include <iostream>
 #include <atomic>
+#include <chrono>
+#include <thread>
 
 #include <boost/thread.hpp>
 #include <boost/thread/barrier.hpp>
@@ -41,7 +43,7 @@ extern int32_t gcLockStartingEpoch;
 BOOST_AUTO_TEST_CASE ( test_gc )
 {
     GcLock gc;
-    gc.lockShared();
+    gc.enterShared();
 
     BOOST_CHECK(gc.isLockedShared());
 
@@ -55,7 +57,7 @@ BOOST_AUTO_TEST_CASE ( test_gc )
     cerr << endl << "after defer" << endl;
     gc.dump();
 
-    gc.unlockShared();
+    gc.exitShared();
 
     cerr << endl << "after unlock shared" << endl;
     gc.dump();
@@ -248,6 +250,136 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
 
 }
 
+BOOST_AUTO_TEST_CASE(test_write_exclusion)
+{
+    cerr << "Testing write exclusion" << endl;
+
+    GcLock lock; 
+
+    std::atomic<bool> finished { false };
+
+    std::atomic<uint64_t> errors { 0 };
+    std::atomic<uint64_t> numWrite { 0 };
+    std::atomic<uint64_t> numRead { 0 };
+    std::atomic<uint64_t> numLockWrite { 0 };
+
+    auto doWriteSharedThread = [&]() {
+        while (!finished.load()) {
+            GcLock::WriteSharedGuard guard(lock);
+
+            numWrite.fetch_add(1);
+            if (numWrite.load() > 0 && numLockWrite.load() > 0) {
+                cerr << "at least one write when locked write" << endl;
+                errors.fetch_add(1);
+            }
+
+            numWrite.fetch_sub(1);
+        }
+    };
+
+    auto doLockWriteThread = [&]() {
+        GcLock::WriteLockGuard guard(lock);
+        numLockWrite.fetch_add(1);
+
+        while (!finished.load()) {
+
+            if (numWrite.load() > 0) {
+                cerr << "write after locked write" << endl;
+                errors.fetch_add(1);
+            }
+
+
+        }
+
+        numLockWrite.fetch_sub(1);
+    };
+
+    auto doReadSharedThread = [&]() {
+        while (!finished.load()) {
+            GcLock::ReadSharedGuard guard(lock);
+
+            numRead.fetch_add(1);
+            this_thread::sleep_for(chrono::milliseconds(10));
+        }
+    };
+
+    {
+        size_t writeThreads = 4;
+        cerr << "single write lock, multi writes" << endl;
+
+        boost::thread_group group;
+        for (size_t i = 0; i < writeThreads; ++i) {
+            group.create_thread(doWriteSharedThread);
+        }
+
+        this_thread::sleep_for(chrono::milliseconds(500));
+
+        group.create_thread(doLockWriteThread);
+
+        this_thread::sleep_for(chrono::seconds(1));
+
+        finished.store(true);
+        group.join_all();
+
+        BOOST_CHECK_EQUAL(errors.load(), 0);
+    }
+
+    {
+        size_t writeThreads = 16;
+        size_t writeLockThreads = 8;
+        cerr << "Multi write lock, multi writes" << endl;
+
+        finished.store(false);
+        boost::thread_group group;
+        for (size_t i = 0; i < writeThreads; ++i) {
+            group.create_thread(doWriteSharedThread);
+        }
+
+        this_thread::sleep_for(chrono::milliseconds(500));
+
+        for (size_t i = 0; i < writeLockThreads; ++i) {
+            group.create_thread(doLockWriteThread);
+        }
+
+        this_thread::sleep_for(chrono::seconds(1));
+
+        finished.store(true);
+        group.join_all();
+
+        BOOST_CHECK_EQUAL(errors.load(), 0);
+    }
+
+
+    {
+        size_t writeThreads = 4;
+        size_t readThreads = 8;
+        cerr << "mixed reads and write lock" << endl;
+
+        finished.store(false);
+        boost::thread_group group;
+        for (size_t i = 0; i < writeThreads; ++i) {
+            group.create_thread(doWriteSharedThread);
+        }
+        for (size_t i = 0; i < readThreads; ++i) {
+            group.create_thread(doReadSharedThread);
+        }
+
+        this_thread::sleep_for(chrono::milliseconds(200));
+        group.create_thread(doLockWriteThread);
+
+        this_thread::sleep_for(chrono::seconds(1));
+        finished.store(true);
+        group.join_all();
+        BOOST_CHECK_EQUAL(errors.load(), 0);
+
+        const size_t minimumReads = 100 * readThreads;
+        cout << numRead.load() << " total reads" << endl;
+        BOOST_CHECK_GE(numRead.load(), minimumReads);
+    }
+
+
+}
+
 #endif
 
 #define USE_MALLOC 1
@@ -395,7 +527,7 @@ struct TestBase {
     {
         // We're reading from someone else's pointers, so we need to lock here
         //gc.enterCS();
-        gc.lockShared();
+        gc.enterShared();
 
         for (unsigned i = 0;  i < nthreads;  ++i) {
             for (unsigned j = 0;  j < nblocks;  ++j) {
@@ -416,7 +548,7 @@ struct TestBase {
         }
 
         //gc.exitCS();
-        gc.unlockShared();
+        gc.exitShared();
     }
 
     void doReadThread(int threadNum)

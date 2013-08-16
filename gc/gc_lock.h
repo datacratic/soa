@@ -48,7 +48,7 @@ public:
     /// A thread's bookkeeping info about each GC area
     struct ThreadGcInfoEntry {
         ThreadGcInfoEntry()
-            : inEpoch(-1), readLocked(0), writeLocked(0),
+            : inEpoch(-1), readLocked(0), writeLocked(0), exclusiveLocked(0),
               owner(0)
         {
         }
@@ -65,6 +65,7 @@ public:
         int inEpoch;  // 0, 1, -1 = not in 
         int readLocked;
         int writeLocked;
+        int exclusiveLocked;
 
         GcLockBase *owner;
 
@@ -72,42 +73,44 @@ public:
             if (!owner) 
                 owner = const_cast<GcLockBase *>(self);
         }
-                
 
-        void lockShared(RunDefer runDefer) {
-            if (!readLocked && !writeLocked)
+        void enterShared(RunDefer runDefer) {
+            if (!readLocked && !exclusiveLocked)
                 owner->enterCS(this, runDefer);
 
             ++readLocked;
         }
 
-        void unlockShared(RunDefer runDefer) {
+        void exitShared(RunDefer runDefer) {
             if (readLocked <= 0)
                 throw ML::Exception("Bad read lock nesting");
 
             --readLocked;
-            if (!readLocked && !writeLocked) 
+            if (!readLocked && !exclusiveLocked) 
                 owner->exitCS(this, runDefer);
 
         }
 
         bool isLockedShared() {
-            return readLocked + writeLocked;
+            return readLocked + exclusiveLocked;
         }
 
         void lockExclusive() {
-            if (!writeLocked)
+            if (readLocked || writeLocked) 
+                throw ML::Exception("Can not lock exclusive while holding "
+                                     "read or write lock");
+            if (!exclusiveLocked)
                 owner->enterCSExclusive(this);
             
-             ++writeLocked;
+             ++exclusiveLocked;
         }
 
         void unlockExclusive() {
-            if (writeLocked <= 0)
-                throw ML::Exception("Bad write lock nesting");
+            if (exclusiveLocked <= 0)
+                throw ML::Exception("Bad exclusive lock nesting");
 
-            --writeLocked;
-            if (!writeLocked)
+            --exclusiveLocked;
+            if (!exclusiveLocked)
                 owner->exitCSExclusive(this);
         }
 
@@ -119,6 +122,10 @@ public:
     typedef ML::ThreadSpecificInstanceInfo<ThreadGcInfoEntry, GcLockBase>
         GcInfo;
     typedef typename GcInfo::PerThreadInfo ThreadGcInfo;
+
+    typedef uint64_t Word;
+    static constexpr size_t Bits = sizeof(Word) * CHAR_BIT;
+    static constexpr Word StopBitMask = (1ULL << (Bits - 1));
 
     struct Data {
         Data();
@@ -133,7 +140,7 @@ public:
                 int32_t epoch;       ///< Current epoch number (could be smaller).
                 int16_t in[2];       ///< How many threads in each epoch
                 int32_t visibleEpoch;///< Lowest epoch number that's visible
-                int32_t exclusive;   ///< Mutex value to lock exclusively
+                int32_t exclusive;       ///< Mutex value for exclusive lock
             };
             struct {
                 uint64_t bits;
@@ -143,6 +150,8 @@ public:
                 q2 q;
             };
         } JML_ALIGNED(16);
+
+        volatile Word writeLock;
 
         int16_t inCurrent() const { return in[epoch & 1]; }
         int16_t inOld() const { return in[(epoch - 1)&1]; }
@@ -205,8 +214,6 @@ public:
         ThreadGcInfoEntry *entry = gcInfo.get(info);
         entry->init(this);
         return *entry;
-
-        //return *gcInfo.get(info);
     }
 
     GcLockBase();
@@ -216,43 +223,92 @@ public:
     /** Permanently deletes any resources associated with this lock. */
     virtual void unlink() = 0;
 
-    void lockShared(GcInfo::PerThreadInfo * info = 0,
+    void enterShared(GcInfo::PerThreadInfo * info = 0,
                     RunDefer runDefer = RD_YES)
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        entry.lockShared(runDefer);
+        entry.enterShared(runDefer);
 
 #if GC_LOCK_DEBUG
         using namespace std;
-        cerr << "lockShared "
+        cerr << "enterShared "
              << this << " index " << index
              << ": now " << entry.print() << " data "
              << data->print() << endl;
 #endif
     }
 
-    void unlockShared(GcInfo::PerThreadInfo * info = 0, 
-                      RunDefer runDefer = RD_YES)
+    void exitShared(GcInfo::PerThreadInfo * info = 0, 
+                    RunDefer runDefer = RD_YES)
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        entry.unlockShared(runDefer);
+        entry.exitShared(runDefer);
 
 #if GC_LOCK_DEBUG
         using namespace std;
-        cerr << "unlockShared "
+        cerr << "exitShared "
              << this << " index " << index
              << ": now " << entry.print() << " data "
              << data->print() << endl;
 #endif
+    }
+
+    void enterWriteShared(GcInfo::PerThreadInfo * info = 0,
+                          RunDefer runDefer = RD_YES)
+    {
+        Word oldVal, newVal;
+        for (;;) {
+            auto writeLock = data->writeLock;
+            // We are write locked, continue spinning
+            if ((writeLock >> (Bits - 1)) == 1) 
+                continue;
+
+            oldVal = data->writeLock;
+            newVal = oldVal + 1;
+
+            // If the CAS fails, it surely means someone in
+            // the meantime set the stop bit,  we then retry.
+            if (ML::cmp_xchg(data->writeLock, oldVal, newVal))
+                break;
+        }
+                
+
+        enterShared(info, runDefer);
+    }
+
+    void exitWriteShared(GcInfo::PerThreadInfo * info = 0,
+                         RunDefer runDefer = RD_YES)
+    {
+        ExcAssertGreater(data->writeLock, 0);
+        ML::atomic_dec(data->writeLock);
+
+        exitShared(info, runDefer);
+    }
+
+    void enterReadShared(GcInfo::PerThreadInfo * info = 0,
+                        RunDefer runDefer = RD_YES)
+    {
+        ThreadGcInfoEntry & entry = getEntry(info);
+
+        entry.enterShared(runDefer);
+    }
+    void exitReadShared(GcInfo::PerThreadInfo * info = 0,
+                        RunDefer runDefer = RD_YES)
+    {
+        exitShared(info, runDefer);
     }
 
     int isLockedShared(GcInfo::PerThreadInfo * info = 0) const
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        return entry.isLockedShared();
+        return entry.isLockedShared() || isLockedWrite();
+    }
+
+    bool isLockedWrite() const {
+        return getEntry().writeLocked;
     }
 
     int lockedInEpoch(GcInfo::PerThreadInfo * info = 0) const
@@ -295,7 +351,56 @@ public:
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        return entry.writeLocked;
+        return entry.exclusiveLocked;
+    }
+
+    void lockWrite()
+    {
+        ThreadGcInfoEntry &entry = getEntry();
+        if (!entry.writeLocked) {
+            Word oldValue, newValue;
+            for (;;) {
+                if ((data->writeLock >> (Bits - 1)) == 1)
+                    continue;
+
+                oldValue = data->writeLock;
+                newValue = oldValue | StopBitMask;
+                if (ML::cmp_xchg(data->writeLock, oldValue, newValue))
+                    break;
+
+            }
+
+            // Stop bit must be set
+            ExcAssertEqual(data->writeLock >> (Bits - 1), 1);
+
+            // At this point, we stoped all the upcoming writes. However,
+            // ongoing writes might still be executing. Issuing a writeBarrier
+            // will wait for all writes to finish before continuing
+            writeBarrier();
+
+            // No writes must be ongoing
+            ExcAssertEqual((data->writeLock & ~StopBitMask), 0); 
+        }
+        ++entry.writeLocked;
+    }
+
+    void writeBarrier() {
+        // Busy-waiting for all writes to finish
+        while ((data->writeLock & ~StopBitMask) > 0) { }
+    }
+
+
+    void unlockWrite(GcInfo::PerThreadInfo * info = 0)
+    {
+        ThreadGcInfoEntry &entry = getEntry();
+        --entry.writeLocked;
+        if (!entry.writeLocked) {
+            Word oldValue = data->writeLock;
+            Word newValue = oldValue & ~StopBitMask;
+            if (!ML::cmp_xchg(data->writeLock, oldValue, newValue)) {
+            }
+
+        }
     }
 
 
@@ -308,18 +413,68 @@ public:
               doLock_(doLock)
         {
             if (doLock_)
-                lock.lockShared(0, runDefer_);
+                lock.enterShared(0, runDefer_);
         }
 
         ~SharedGuard()
         {
             if (doLock_)
-                lock.unlockShared(0, runDefer_);
+            lock.exitShared(0, runDefer_);
         }
         
         GcLockBase & lock;
         const RunDefer runDefer_;  ///< Can this do deferred work?
         const DoLock doLock_;      ///< Do we really lock?
+    };
+
+
+    struct ReadSharedGuard {
+        ReadSharedGuard(GcLockBase & lock, RunDefer runDefer = RD_YES)
+            : lock(lock),
+              runDefer(runDefer)
+        {
+            lock.enterReadShared(0, runDefer);
+        }
+
+        ~ReadSharedGuard()
+        {
+            lock.exitReadShared(0, runDefer);
+        }
+
+        GcLockBase & lock;
+        const RunDefer runDefer;
+    };
+
+    struct WriteSharedGuard {
+        WriteSharedGuard(GcLockBase & lock, RunDefer runDefer = RD_YES) 
+            : lock(lock),
+              runDefer(runDefer)
+        {
+            lock.enterWriteShared(0, runDefer);
+        }
+
+        ~WriteSharedGuard()
+        {
+            lock.exitWriteShared(0, runDefer);
+        }
+
+        GcLockBase & lock;
+        const RunDefer runDefer;
+    };
+
+    struct WriteLockGuard {
+        WriteLockGuard(GcLockBase & lock)
+            : lock(lock)
+        {
+            lock.lockWrite();
+        }
+
+        ~WriteLockGuard()
+        {
+            lock.unlockWrite();
+        }
+
+        GcLockBase & lock;
     };
 
     struct ExclusiveGuard {
@@ -393,7 +548,6 @@ public:
     }
 
     void dump();
-
 
 protected:
     Data* data;

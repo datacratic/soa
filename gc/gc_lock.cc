@@ -242,7 +242,8 @@ print() const
 
 inline GcLockBase::Data::
 Data() :
-    bits(0), bits2(0)
+    bits(0), bits2(0),
+    writeLock(0)
 {
     epoch = gcLockStartingEpoch; // makes it easier to test overflows.
     visibleEpoch = epoch;
@@ -253,6 +254,7 @@ Data(const Data & other)
 {
     //ML::ticks();
     q = other.q;
+    writeLock = other.writeLock;
     //ML::ticks();
 }
 
@@ -262,6 +264,7 @@ operator = (const Data & other)
 {
     //ML::ticks();
     this->q = other.q;
+    this->writeLock = other.writeLock;
     //ML::ticks();
     return *this;
 }
