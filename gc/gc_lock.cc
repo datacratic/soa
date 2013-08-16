@@ -34,8 +34,6 @@ namespace Datacratic {
 */
 int32_t gcLockStartingEpoch = 0;
 
-int32_t SpeculativeThreshold = 5;
-
 /** A safe comparaison of epochs that deals with potential overflows.
     \todo So many possible bit twiddling hacks... Must resist...
 */
@@ -345,7 +343,7 @@ GcLockBase::
 
 bool
 GcLockBase::
-updateData(Data & oldValue, Data & newValue, bool runDefer /* = true */)
+updateData(Data & oldValue, Data & newValue, RunDefer runDefer /* = true */)
 {
     bool wake;
     try {
@@ -433,7 +431,7 @@ checkDefers()
 
 void
 GcLockBase::
-enterCS(ThreadGcInfoEntry * entry, bool runDefer)
+enterCS(ThreadGcInfoEntry * entry, RunDefer runDefer)
 {
     if (!entry) entry = &getEntry();
         
@@ -481,7 +479,7 @@ enterCS(ThreadGcInfoEntry * entry, bool runDefer)
 
 void
 GcLockBase::
-exitCS(ThreadGcInfoEntry * entry, bool runDefer /* = true */)
+exitCS(ThreadGcInfoEntry * entry, RunDefer runDefer /* = true */)
 {
     if (entry->inEpoch == -1)
         throw ML::Exception("not in a CS");
@@ -534,7 +532,7 @@ enterCSExclusive(ThreadGcInfoEntry * entry)
 
         newValue = current;
         newValue.exclusive = 1;
-        if (updateData(current, newValue)) {
+        if (updateData(current, newValue, RD_YES)) {
             current = newValue;
             break;
         }

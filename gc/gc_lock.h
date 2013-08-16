@@ -23,39 +23,41 @@
 
 namespace Datacratic {
 
-extern int32_t SpeculativeThreshold;
 /*****************************************************************************/
 /* GC LOCK BASE                                                              */
 /*****************************************************************************/
 
 struct GcLockBase : public boost::noncopyable {
 
-    struct Deferred;
-    struct DeferredList;
+public:
+
+    /** Enum for type safe specification of whether or not we run deferrals on
+        entry or exit to a critical sections.  Thoss places that are latency
+        sensitive should use RD_NO.
+    */
+    enum RunDefer {
+        RD_NO = 0,      ///< Don't run deferred work on this call
+        RD_YES = 1      ///< Potentially run deferred work on this call
+    };
+
+    enum DoLock {
+        DONT_LOCK = 0,
+        DO_LOCK = 1
+    };
 
     /// A thread's bookkeeping info about each GC area
     struct ThreadGcInfoEntry {
         ThreadGcInfoEntry()
             : inEpoch(-1), readLocked(0), writeLocked(0),
-              specLocked(0), specUnlocked(0),
               owner(0)
         {
         }
 
         ~ThreadGcInfoEntry() {
             using namespace std;
-            /* We are not in a speculative critical section, check if
-             * Gc has been left locked
-             */
-            if (!specLocked && !specUnlocked && (readLocked || writeLocked))
-               cerr << "Thread died but GcLock is still locked" << endl;
 
-            /* We are in a speculative CS but Gc has not beed unlocked,
-             * then forceUnlock 
-             */
-            else if (!specLocked && specUnlocked) {
-              // unlockShared(true); 
-            }
+            if (readLocked || writeLocked)
+               cerr << "Thread died but GcLock is still locked" << endl;
            
         } 
 
@@ -63,9 +65,6 @@ struct GcLockBase : public boost::noncopyable {
         int inEpoch;  // 0, 1, -1 = not in 
         int readLocked;
         int writeLocked;
-
-        int specLocked;
-        int specUnlocked;
 
         GcLockBase *owner;
 
@@ -75,14 +74,14 @@ struct GcLockBase : public boost::noncopyable {
         }
                 
 
-        void lockShared(bool runDefer) {
+        void lockShared(RunDefer runDefer) {
             if (!readLocked && !writeLocked)
                 owner->enterCS(this, runDefer);
 
             ++readLocked;
         }
 
-        void unlockShared(bool runDefer) {
+        void unlockShared(RunDefer runDefer) {
             if (readLocked <= 0)
                 throw ML::Exception("Bad read lock nesting");
 
@@ -112,45 +111,14 @@ struct GcLockBase : public boost::noncopyable {
                 owner->exitCSExclusive(this);
         }
 
-        void lockSpeculative() {
-            if (!specLocked && !specUnlocked) 
-                lockShared(false);
-
-            ++specLocked;
-        }
-
-        void unlockSpeculative() {
-            if (!specLocked) 
-                throw ML::Exception("Bad speculative lock nesting");
-
-            --specLocked;
-            if (!specLocked) {
-                if (++specUnlocked == SpeculativeThreshold) {
-                    unlockShared(false);
-                    specUnlocked = 0;
-                }
-            }
-        }
-
-        void forceUnlock() {
-            ExcCheckEqual(specLocked, 0, "Bad forceUnlock call");
-
-            if (specUnlocked) {
-                unlockShared(true);
-                specUnlocked = 0;
-            }
-        }
-
-
         std::string print() const;
+
     };
 
 
     typedef ML::ThreadSpecificInstanceInfo<ThreadGcInfoEntry, GcLockBase>
         GcInfo;
     typedef typename GcInfo::PerThreadInfo ThreadGcInfo;
-
-    GcInfo gcInfo;
 
     struct Data {
         Data();
@@ -216,32 +184,8 @@ struct GcLockBase : public boost::noncopyable {
 
     } JML_ALIGNED(16);
 
-    Data* data;
-
-    Deferred * deferred;   ///< Deferred workloads (hidden structure)
-
-    /** Update with the new value after first checking that the current
-        value is the same as the old value.  Returns true if it
-        succeeded; otherwise oldValue is updated with the new old
-        value.
-
-        As part of doing this, it will calculate the correct value for
-        visibleEpoch() and, if it has changed, wake up anything waiting
-        on that value, and will run any deferred handlers registered for
-        that value.
-    */
-    bool updateData(Data & oldValue, Data & newValue, bool runDefer = true);
-
-    /** Executes any available deferred work. */
-    void runDefers();
-
-    /** Check what deferred updates need to be run and do them.  Must be
-        called with deferred locked.
-    */
-    std::vector<DeferredList *> checkDefers();
-
-    void enterCS(ThreadGcInfoEntry * entry = 0, bool runDefer = true);
-    void exitCS(ThreadGcInfoEntry * entry = 0, bool runDefer = true);
+    void enterCS(ThreadGcInfoEntry * entry = 0, RunDefer runDefer = RD_YES);
+    void exitCS(ThreadGcInfoEntry * entry = 0, RunDefer runDefer = RD_YES);
     void enterCSExclusive(ThreadGcInfoEntry * entry = 0);
     void exitCSExclusive(ThreadGcInfoEntry * entry = 0);
 
@@ -273,7 +217,7 @@ struct GcLockBase : public boost::noncopyable {
     virtual void unlink() = 0;
 
     void lockShared(GcInfo::PerThreadInfo * info = 0,
-                    bool runDefer = true)
+                    RunDefer runDefer = RD_YES)
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
@@ -289,7 +233,7 @@ struct GcLockBase : public boost::noncopyable {
     }
 
     void unlockShared(GcInfo::PerThreadInfo * info = 0, 
-                      bool runDefer = true)
+                      RunDefer runDefer = RD_YES)
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
@@ -304,26 +248,6 @@ struct GcLockBase : public boost::noncopyable {
 #endif
     }
 
-    void lockSpeculative(GcInfo::PerThreadInfo * info = 0)
-    {
-        ThreadGcInfoEntry & entry = getEntry(info); 
-
-        entry.lockSpeculative();
-    }
-
-    void unlockSpeculative(GcInfo::PerThreadInfo * info = 0)
-    {
-        ThreadGcInfoEntry & entry = getEntry(info);
-
-        entry.unlockSpeculative();
-    }
-
-    void forceUnlock(GcInfo::PerThreadInfo * info = 0) {
-        ThreadGcInfoEntry & entry = getEntry(info);
-
-        entry.forceUnlock();
-    }
-        
     int isLockedShared(GcInfo::PerThreadInfo * info = 0) const
     {
         ThreadGcInfoEntry & entry = getEntry(info);
@@ -374,21 +298,28 @@ struct GcLockBase : public boost::noncopyable {
         return entry.writeLocked;
     }
 
+
     struct SharedGuard {
-        SharedGuard(GcLockBase & lock, bool runDefer = true)
+        SharedGuard(GcLockBase & lock,
+                    RunDefer runDefer = RD_YES,
+                    DoLock doLock = DO_LOCK)
             : lock(lock),
-              runDefer_(runDefer)
+              runDefer_(runDefer),
+              doLock_(doLock)
         {
-            lock.lockShared(0, runDefer_);
+            if (doLock_)
+                lock.lockShared(0, runDefer_);
         }
 
         ~SharedGuard()
         {
-            lock.unlockShared(0, runDefer_);
+            if (doLock_)
+                lock.unlockShared(0, runDefer_);
         }
         
         GcLockBase & lock;
-        const bool runDefer_;
+        const RunDefer runDefer_;  ///< Can this do deferred work?
+        const DoLock doLock_;      ///< Do we really lock?
     };
 
     struct ExclusiveGuard {
@@ -405,22 +336,6 @@ struct GcLockBase : public boost::noncopyable {
 
         GcLockBase & lock;
     };
-
-    struct SpeculativeGuard {
-        SpeculativeGuard(GcLockBase &lock) :
-            lock(lock) 
-        {
-            lock.lockSpeculative();
-        }
-
-        ~SpeculativeGuard() 
-        {
-            lock.unlockSpeculative();
-        }
-
-        GcLockBase & lock;
-    };
-
 
     /** Wait until everything that's currently visible is no longer
         accessible.
@@ -478,6 +393,39 @@ struct GcLockBase : public boost::noncopyable {
     }
 
     void dump();
+
+
+protected:
+    Data* data;
+
+private:
+    struct Deferred;
+    struct DeferredList;
+
+    GcInfo gcInfo;
+
+
+    Deferred * deferred;   ///< Deferred workloads (hidden structure)
+
+    /** Update with the new value after first checking that the current
+        value is the same as the old value.  Returns true if it
+        succeeded; otherwise oldValue is updated with the new old
+        value.
+
+        As part of doing this, it will calculate the correct value for
+        visibleEpoch() and, if it has changed, wake up anything waiting
+        on that value, and will run any deferred handlers registered for
+        that value.
+    */
+    bool updateData(Data & oldValue, Data & newValue, RunDefer runDefer);
+
+    /** Executes any available deferred work. */
+    void runDefers();
+
+    /** Check what deferred updates need to be run and do them.  Must be
+        called with deferred locked.
+    */
+    std::vector<DeferredList *> checkDefers();
 };
 
 
