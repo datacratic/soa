@@ -89,6 +89,36 @@ SqsApi(const std::string & protocol, const std::string & region)
     setService("sqs", protocol, region);
 }
 
+vector<string>
+SqsApi::
+listQueues(const string & queueNamePrefix)
+{
+    vector<string> urls;
+
+    RestParams queryParams;
+    queryParams.push_back({"Action", "ListQueues"});
+    queryParams.push_back({"Version", "2012-11-05"});
+    if (queueNamePrefix != "") {
+        queryParams.push_back({"QueueNamePrefix", queueNamePrefix});
+    }
+
+    auto xml = performGet(std::move(queryParams), "");
+    // xml->Print();
+
+    auto result = extractNode(xml->RootElement(), "ListQueuesResult");
+    if (result->NoChildren()) {
+        return urls;
+    }
+
+    const tinyxml2::XMLElement * p = extractNode(result, "QueueUrl")->ToElement();
+    while (p && strcmp(p->Name(), "QueueUrl") == 0) {
+        urls.emplace_back(p->FirstChild()->ToText()->Value());
+        p = p->NextSiblingElement();
+    };
+
+    return urls;
+}
+
 std::string
 SqsApi::
 createQueue(const std::string & queueName,
@@ -144,6 +174,107 @@ deleteQueue(const std::string & queueUri)
     performGet(std::move(queryParams), getQueueResource(queueUri));
 }
 
+void
+SqsApi::
+setQueueAttributes(const std::string & queueUri,
+                   const QueueParams & attributes)
+{
+    auto setAttribute = [&] (const string & name, int value) {
+        if (value > -1) {
+            RestParams queryParams;
+            queryParams.push_back({"Action", "SetQueueAttributes"});
+            queryParams.push_back({"Version", "2012-11-05"});
+            queryParams.push_back({"Attribute.Name", name});
+            queryParams.push_back({"Attribute.Value", to_string(value)});
+
+            performGet(std::move(queryParams), getQueueResource(queueUri));
+        }
+    };
+
+    setAttribute("DelaySeconds", attributes.delaySeconds);
+    setAttribute("MaximumMessageSize", attributes.maximumMessageSize);
+    setAttribute("MessageRetentionPeriod", attributes.messageRetentionPeriod);
+    // Policy;
+    setAttribute("ReceiveMessageWaitTimeSeconds",
+                 attributes.receiveMessageWaitTimeSeconds);
+    setAttribute("VisibilityTimeout", attributes.visibilityTimeout);
+}
+
+SqsApi::QueueAttributes
+SqsApi::
+getQueueAttributes(const std::string & queueUri)
+{
+    SqsApi::QueueAttributes attributes;
+
+    RestParams queryParams;
+    queryParams.push_back({"Action", "GetQueueAttributes"});
+    queryParams.push_back({"Version", "2012-11-05"});
+    queryParams.push_back({"AttributeName.1", "All"});
+
+    auto xml = performGet(std::move(queryParams), getQueueResource(queueUri));
+    // xml->Print();
+    
+    auto result = extractNode(xml->RootElement(), "GetQueueAttributesResult");
+
+    const tinyxml2::XMLElement * p = extractNode(result, "Attribute")->ToElement();
+    while (p && strcmp(p->Name(), "Attribute") == 0) {
+        const tinyxml2::XMLNode * name = extractNode(p, "Name");
+        const tinyxml2::XMLNode * value = extractNode(p, "Value");
+        if (name && value) {
+            string attrName(name->FirstChild()->ToText()->Value());
+            string attrValue(value->FirstChild()->ToText()->Value());
+
+            if (attrName == "ApproximateNumberOfMessages") {
+                attributes.approximateNumberOfMessages = stoi(attrValue);
+            }
+            else if (attrName == "ApproximateNumberOfMessagesDelayed") {
+                attributes.approximateNumberOfMessagesDelayed = stoi(attrValue);
+            }
+            else if (attrName == "ApproximateNumberOfMessagesNotVisible") {
+                attributes.approximateNumberOfMessagesNotVisible = stoi(attrValue);
+            }
+            else if (attrName == "CreatedTimestamp") {
+                int seconds = stoi(attrValue);
+                attributes.createdTimestamp
+                    = Date::fromSecondsSinceEpoch(seconds);
+            }
+            else if (attrName == "LastModifiedTimestamp") {
+                int seconds = stoi(attrValue);
+                attributes.lastModifiedTimestamp
+                    = Date::fromSecondsSinceEpoch(seconds);
+            }
+            else if (attrName == "DelaySeconds") {
+                attributes.delaySeconds = stoi(attrValue);
+            }
+            else if (attrName == "MaximumMessageSize") {
+                attributes.maximumMessageSize = stoi(attrValue);
+            }
+            else if (attrName == "MessageRetentionPeriod") {
+                attributes.messageRetentionPeriod = stoi(attrValue);
+            }
+            else if (attrName == "Policy") {
+                // Not handled yet
+            }
+            else if (attrName == "QueueArn") {
+                attributes.queueArn = attrValue;
+            }
+            else if (attrName == "ReceiveMessageWaitTimeSeconds") {
+                attributes.receiveMessageWaitTimeSeconds = stoi(attrValue);
+            }
+            else if (attrName == "VisibilityTimeout") {
+                attributes.visibilityTimeout = stoi(attrValue);
+            }
+            else {
+                throw ML::Exception("unexpected attribute name: "
+                                    + attrName);
+            }
+        }
+        p = p->NextSiblingElement();
+    }
+
+    return attributes;
+}
+
 std::string
 SqsApi::
 getQueueUrl(const std::string & queueName,
@@ -174,6 +305,31 @@ sendMessage(const std::string & queueUri,
 
     return performPost(std::move(queryParams), getQueueResource(queueUri),
                        "SendMessageResponse/SendMessageResult/MD5OfMessageBody");
+}
+
+void
+SqsApi::
+sendMessageBatch(const string & queueUri,
+                 const vector<string> & messages,
+                 int delaySeconds)
+{
+    RestParams queryParams;
+    queryParams.push_back({"Action", "SendMessageBatch"});
+    queryParams.push_back({"Version", "2012-11-05"});
+
+    int counter(1);
+    for (const string & message: messages) {
+        string prefix("SendMessageBatchRequestEntry." + to_string(counter));
+        queryParams.push_back({prefix + ".Id", "msg" + to_string(counter)});
+        queryParams.push_back({prefix + ".MessageBody", message});
+        if (delaySeconds > -1) {
+            queryParams.push_back({prefix + ".DelaySeconds",
+                                   to_string(delaySeconds)});
+        }
+        counter++;
+    }
+
+    performPost(std::move(queryParams), getQueueResource(queueUri));
 }
 
 SqsApi::Message

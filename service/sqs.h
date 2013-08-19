@@ -42,6 +42,11 @@ struct SqsApi : public AwsBasicApi {
         int visibilityTimeout;
     };
 
+    /** List the queue urls.
+     */
+    std::vector<std::string> listQueues(const std::string
+                                        & queueNamePrefix = "");
+
     /** Create a queue.
      */
     std::string createQueue(const std::string & queueName,
@@ -54,6 +59,29 @@ struct SqsApi : public AwsBasicApi {
     /** Return the URL for the given queue. */
     std::string getQueueUrl(const std::string & queueName,
                             const std::string & ownerAccountId = "");
+
+    /** Set attributes of a queue. */
+    void setQueueAttributes(const std::string & queueUri,
+                            const QueueParams & attributes);
+
+    struct QueueAttributes : public QueueParams {
+        QueueAttributes()
+            : QueueParams(),
+              approximateNumberOfMessages(-1),
+              approximateNumberOfMessagesDelayed(-1),
+              approximateNumberOfMessagesNotVisible(-1)
+        {}
+
+        int approximateNumberOfMessages;
+        int approximateNumberOfMessagesDelayed;
+        int approximateNumberOfMessagesNotVisible;
+        Date createdTimestamp;
+        Date lastModifiedTimestamp;
+        std::string queueArn;
+    };
+
+    /** Get the attributes of a queue. */
+    QueueAttributes getQueueAttributes(const std::string & queueUri);
 
     /** Publish a message to a given SQS queue.  Returns the Message ID assigned
         by Amazon.
@@ -75,6 +103,11 @@ struct SqsApi : public AwsBasicApi {
                 const std::string & message,
                 int timeoutSeconds = 10,
                 int delaySeconds = -1);
+
+    /** Send multiple messages at once (10 at most). */
+    void sendMessageBatch(const std::string & queueUri,
+                          const std::vector<std::string> & messages,
+                          int delaySeconds = -1);
 
     struct Message {
         bool isNull()
