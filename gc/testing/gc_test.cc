@@ -263,7 +263,7 @@ BOOST_AUTO_TEST_CASE(test_write_exclusion)
     std::atomic<uint64_t> numRead { 0 };
     std::atomic<uint64_t> numLockWrite { 0 };
 
-    auto doWriteSharedThread = [&]() {
+    auto doWriteThread = [&]() {
         while (!finished.load()) {
             GcLock::WriteSharedGuard guard(lock);
 
@@ -294,9 +294,9 @@ BOOST_AUTO_TEST_CASE(test_write_exclusion)
         numLockWrite.fetch_sub(1);
     };
 
-    auto doReadSharedThread = [&]() {
+    auto doReadThread = [&]() {
         while (!finished.load()) {
-            GcLock::ReadSharedGuard guard(lock);
+            GcLock::SharedGuard guard(lock);
 
             numRead.fetch_add(1);
             this_thread::sleep_for(chrono::milliseconds(10));
@@ -309,7 +309,7 @@ BOOST_AUTO_TEST_CASE(test_write_exclusion)
 
         boost::thread_group group;
         for (size_t i = 0; i < writeThreads; ++i) {
-            group.create_thread(doWriteSharedThread);
+            group.create_thread(doWriteThread);
         }
 
         this_thread::sleep_for(chrono::milliseconds(500));
@@ -332,7 +332,7 @@ BOOST_AUTO_TEST_CASE(test_write_exclusion)
         finished.store(false);
         boost::thread_group group;
         for (size_t i = 0; i < writeThreads; ++i) {
-            group.create_thread(doWriteSharedThread);
+            group.create_thread(doWriteThread);
         }
 
         this_thread::sleep_for(chrono::milliseconds(500));
@@ -358,10 +358,10 @@ BOOST_AUTO_TEST_CASE(test_write_exclusion)
         finished.store(false);
         boost::thread_group group;
         for (size_t i = 0; i < writeThreads; ++i) {
-            group.create_thread(doWriteSharedThread);
+            group.create_thread(doWriteThread);
         }
         for (size_t i = 0; i < readThreads; ++i) {
-            group.create_thread(doReadSharedThread);
+            group.create_thread(doReadThread);
         }
 
         this_thread::sleep_for(chrono::milliseconds(200));

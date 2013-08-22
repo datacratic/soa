@@ -10,6 +10,7 @@
 #define __mmap__gc_lock_h__
 
 #define GC_LOCK_DEBUG 0
+#define GC_LOCK_SPIN_DEBUG 0
 
 #include "jml/utils/exc_assert.h"
 #include "jml/arch/atomic_ops.h"
@@ -20,6 +21,30 @@
 #if GC_LOCK_DEBUG
 #  include <iostream>
 #endif
+
+#include <chrono>
+#include "jml/arch/backtrace.h"
+
+#if GC_LOCK_SPIN_DEBUG
+
+#   define GCLOCK_SPINCHECK_DECL \
+      std::chrono::time_point<std::chrono::system_clock> __start, __end;  \
+      __start = std::chrono::system_clock::now();
+
+#    define GCLOCK_SPINCHECK                                              \
+       do {                                                               \
+           __end = std::chrono::system_clock::now();                      \
+           std::chrono::duration<double> elapsed = __end - __start;       \
+           if (elapsed > std::chrono::seconds(10)) {                      \
+               throw ML::Exception("GCLOCK_SPINCHECK: spent more than 10" \
+                                   " seconds spinning");                  \
+           }                                                              \
+       } while (0)
+#else
+#   define GCLOCK_SPINCHECK_DECL
+#   define GCLOCK_SPINCHECK ((void) 0)
+#endif
+
 
 namespace Datacratic {
 
@@ -49,6 +74,7 @@ public:
     struct ThreadGcInfoEntry {
         ThreadGcInfoEntry()
             : inEpoch(-1), readLocked(0), writeLocked(0), exclusiveLocked(0),
+              writeEntered(0),
               owner(0)
         {
         }
@@ -66,6 +92,7 @@ public:
         int readLocked;
         int writeLocked;
         int exclusiveLocked;
+        int writeEntered;
 
         GcLockBase *owner;
 
@@ -258,46 +285,66 @@ public:
     void enterWriteShared(GcInfo::PerThreadInfo * info = 0,
                           RunDefer runDefer = RD_YES)
     {
-        Word oldVal, newVal;
-        for (;;) {
-            auto writeLock = data->writeLock;
-            // We are write locked, continue spinning
-            if ((writeLock >> (Bits - 1)) == 1) 
-                continue;
+        ThreadGcInfoEntry & entry = getEntry(info);
+        if (!entry.writeEntered) {
+            Word oldVal, newVal;
+            GCLOCK_SPINCHECK_DECL
 
-            oldVal = data->writeLock;
-            newVal = oldVal + 1;
+            for (;;) {
+                auto writeLock = data->writeLock;
+                // We are write locked, continue spinning
+                GCLOCK_SPINCHECK;
+                    
+                if ((writeLock >> (Bits - 1)) == 1) {
+                    sched_yield();
+                    continue;
+                }
 
-            // If the CAS fails, it surely means someone in
-            // the meantime set the stop bit,  we then retry.
-            if (ML::cmp_xchg(data->writeLock, oldVal, newVal))
-                break;
+                oldVal = data->writeLock;
+
+                // When our thread reads current writeLock, it might
+                // have been locked by an other thread spinning
+                // right after having been unlocked.
+                // Thus we could end up in a really weird situation,
+                // where the linearization point marked by the CAS
+                // would only be reached after the writeBarrier
+                // in the locking thread.
+                //
+                // To prevent this, we check again if the stop bit
+                // is set.
+                if ((oldVal >> (Bits - 1)) == 1) {
+                    sched_yield();
+                    continue;
+                }
+
+                newVal = oldVal + 1;
+
+
+                // If the CAS fails, someone else in the meantime
+                // must have entered a CS and incremented the counter
+                // behind our back. We then retry
+                if (ML::cmp_xchg(data->writeLock, oldVal, newVal))
+                    break;
+            }
+                    
+
+            enterShared(info, runDefer);
         }
-                
-
-        enterShared(info, runDefer);
+        ++entry.writeEntered;
     }
 
     void exitWriteShared(GcInfo::PerThreadInfo * info = 0,
                          RunDefer runDefer = RD_YES)
     {
-        ExcAssertGreater(data->writeLock, 0);
-        ML::atomic_dec(data->writeLock);
-
-        exitShared(info, runDefer);
-    }
-
-    void enterReadShared(GcInfo::PerThreadInfo * info = 0,
-                        RunDefer runDefer = RD_YES)
-    {
         ThreadGcInfoEntry & entry = getEntry(info);
+        ExcAssertGreater(entry.writeEntered, 0);
+        --entry.writeEntered;
+        if (!entry.writeEntered) {
+            ExcAssertGreater(data->writeLock, 0);
+            ML::atomic_dec(data->writeLock);
 
-        entry.enterShared(runDefer);
-    }
-    void exitReadShared(GcInfo::PerThreadInfo * info = 0,
-                        RunDefer runDefer = RD_YES)
-    {
-        exitShared(info, runDefer);
+            exitShared(info, runDefer);
+        }
     }
 
     int isLockedShared(GcInfo::PerThreadInfo * info = 0) const
@@ -359,11 +406,20 @@ public:
         ThreadGcInfoEntry &entry = getEntry();
         if (!entry.writeLocked) {
             Word oldValue, newValue;
+            GCLOCK_SPINCHECK_DECL
             for (;;) {
+                GCLOCK_SPINCHECK;
                 if ((data->writeLock >> (Bits - 1)) == 1)
                     continue;
 
                 oldValue = data->writeLock;
+
+                // See enterWriteShared for the reason of this
+                // double-check.
+                // TODO: is this really needed ?
+                if ((oldValue >> (Bits - 1)) == 1)
+                    continue;
+
                 newValue = oldValue | StopBitMask;
                 if (ML::cmp_xchg(data->writeLock, oldValue, newValue))
                     break;
@@ -427,23 +483,6 @@ public:
         const DoLock doLock_;      ///< Do we really lock?
     };
 
-
-    struct ReadSharedGuard {
-        ReadSharedGuard(GcLockBase & lock, RunDefer runDefer = RD_YES)
-            : lock(lock),
-              runDefer(runDefer)
-        {
-            lock.enterReadShared(0, runDefer);
-        }
-
-        ~ReadSharedGuard()
-        {
-            lock.exitReadShared(0, runDefer);
-        }
-
-        GcLockBase & lock;
-        const RunDefer runDefer;
-    };
 
     struct WriteSharedGuard {
         WriteSharedGuard(GcLockBase & lock, RunDefer runDefer = RD_YES) 
@@ -637,6 +676,7 @@ private:
 };
 
 } // namespace Datacratic
+
 
 #endif /* __mmap__gc_lock_h__ */
 
