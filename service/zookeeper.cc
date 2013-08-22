@@ -6,6 +6,7 @@
 
 #include "soa/service/zookeeper.h"
 #include "jml/arch/timers.h"
+#include <cxxcompat/memory>
 
 using namespace std;
 
@@ -22,10 +23,8 @@ struct Init {
 
 void zk_callback(zhandle_t * ah, int type, int state, const char * path, void * user) {
     auto cb = reinterpret_cast<ZookeeperConnection::Callback *>(user);
-    if(cb) {
-        cb->unlink();
-        cb->call(type);
-    }
+    if (cb)
+        (*cb)(type);
 }
 
 } // file scope
@@ -33,8 +32,6 @@ void zk_callback(zhandle_t * ah, int type, int state, const char * path, void * 
 /*****************************************************************************/
 /* ZOOKEEPER CONNECTION                                                      */
 /*****************************************************************************/
-
-std::mutex ZookeeperConnection::lock;
 
 ZookeeperConnection::
 ZookeeperConnection()
@@ -128,11 +125,8 @@ reconnect()
         handle = 0;
     }
 
-    while(callbacks.next != &callbacks) {
-        auto i = callbacks.next;
-        i->unlink();
-        i->call(ZOO_DELETED_EVENT);
-    }
+    while (callbacks.begin() != callbacks.end())
+        (*callbacks.begin()->first)(ZOO_DELETED_EVENT);
 
     ML::sleep(1);
 
@@ -169,7 +163,7 @@ checkRes(int returnCode, int & retries,
         return CR_DONE;
 
     if (retries < maxRetries
-        && is_unrecoverable(handle) != ZOK) {
+        && (!handle || is_unrecoverable(handle) != ZOK)) {
         reconnect();
         ++retries;
         return CR_RETRY;
@@ -334,9 +328,29 @@ fixPath(const std::string & path)
     return string(path, 0, last);
 }
 
+auto ZookeeperConnection::getCallback(CallbackType watch, const string& path, void* data) -> Callback*
+{
+    if (!watch)
+        return nullptr;
+
+    auto item = make_unique<Callback>();
+    auto cb = item.get();
+    //cerr << "Callback! new " << path << " " << data << endl;
+    *cb = [=](int type)
+    {
+        if (type == ZOO_SESSION_EVENT) // Might be sent multiple times.
+            return;
+        //cerr << "Callback! " << type << " " << path << " " << data << endl;
+        watch(type, path, data);
+        this->callbacks.erase(cb);
+    };
+    callbacks[cb] = move(item);
+    return cb;
+}
+
 bool
 ZookeeperConnection::
-nodeExists(const std::string & path_, Callback::Type watcher, void * watcherData)
+nodeExists(const std::string & path_, CallbackType watcher, void * watcherData)
 {
     string path = fixPath(path_);
 
@@ -358,7 +372,7 @@ nodeExists(const std::string & path_, Callback::Type watcher, void * watcherData
 
 std::string
 ZookeeperConnection::
-readNode(const std::string & path_, Callback::Type watcher, void * watcherData)
+readNode(const std::string & path_, CallbackType watcher, void * watcherData)
 {
     string path = fixPath(path_);
 
@@ -404,7 +418,7 @@ writeNode(const std::string & path, const std::string & value)
 std::vector<std::string>
 ZookeeperConnection::
 getChildren(const std::string & path_, bool failIfNodeMissing,
-            Callback::Type watcher, void * watcherData)
+            CallbackType watcher, void * watcherData)
 {
     string path = fixPath(path_);
 
