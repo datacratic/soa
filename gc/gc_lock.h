@@ -13,6 +13,7 @@
 #define GC_LOCK_SPIN_DEBUG 0
 
 #include "jml/utils/exc_assert.h"
+#include "jml/utils/abort.h"
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/thread_specific.h"
 #include <vector>
@@ -23,7 +24,6 @@
 #endif
 
 #include <chrono>
-#include "jml/arch/backtrace.h"
 
 #if GC_LOCK_SPIN_DEBUG
 
@@ -36,6 +36,7 @@
            __end = std::chrono::system_clock::now();                      \
            std::chrono::duration<double> elapsed = __end - __start;       \
            if (elapsed > std::chrono::seconds(10)) {                      \
+               ML::do_abort();                                            \
                throw ML::Exception("GCLOCK_SPINCHECK: spent more than 10" \
                                    " seconds spinning");                  \
            }                                                              \
