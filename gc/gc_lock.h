@@ -454,7 +454,9 @@ public:
         if (!entry.writeLocked) {
             Word oldValue = data->writeLock;
             Word newValue = oldValue & ~StopBitMask;
+
             if (!ML::cmp_xchg(data->writeLock, oldValue, newValue)) {
+                throw ML::Exception("Failed to unlockWrite");
             }
 
         }
