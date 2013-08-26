@@ -368,14 +368,10 @@ public:
             GCLOCK_SPINCHECK_DECL
             for (;;) {
                 GCLOCK_SPINCHECK;
-                if (data->writeLock & StopBitMask)
-                    continue;
 
                 oldValue = data->writeLock;
 
-                // See enterWriteShared for the reason of this
-                // double-check.
-                // TODO: is this really needed ?
+                // Stop bit is set, meaning that it's already locked.
                 if (oldValue & StopBitMask)
                     continue;
 

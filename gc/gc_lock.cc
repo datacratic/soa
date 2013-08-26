@@ -636,27 +636,11 @@ enterCSWrite(GcInfo::PerThreadInfo * info,
     GCLOCK_SPINCHECK_DECL
 
     for (;;) {
-        auto writeLock = data->writeLock;
-        // We are write locked, continue spinning
         GCLOCK_SPINCHECK;
-            
-        if (writeLock & StopBitMask) {
-            sched_yield();
-            continue;
-        }
 
         oldVal = data->writeLock;
 
-        // When our thread reads current writeLock, it might
-        // have been locked by an other thread spinning
-        // right after having been unlocked.
-        // Thus we could end up in a really weird situation,
-        // where the linearization point marked by the CAS
-        // would only be reached after the writeBarrier
-        // in the locking thread.
-        //
-        // To prevent this, we check again if the stop bit
-        // is set.
+        // Stop bit is set, meaning that it's locked.
         if (oldVal & StopBitMask) {
             sched_yield();
             continue;
