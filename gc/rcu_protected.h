@@ -20,7 +20,7 @@ struct RcuLocked {
         : ptr(ptr), lock(lock)
     {
         if (lock)
-            lock->lockShared();
+            lock->enterShared();
     }
 
     /// Transfer from another lock
@@ -37,7 +37,7 @@ struct RcuLocked {
         : ptr(ptr), lock(other.lock)
     {
         if (lock)
-            lock->lockShared();
+            lock->enterShared();
     }
 
     template<typename T2>
@@ -72,7 +72,7 @@ struct RcuLocked {
     void unlock()
     {
         if (lock) {
-            lock->unlockShared();
+            lock->exitShared();
             lock = 0;
         }
     }

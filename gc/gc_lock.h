@@ -10,18 +10,44 @@
 #define __mmap__gc_lock_h__
 
 #define GC_LOCK_DEBUG 0
+#define GC_LOCK_SPIN_DEBUG 0
 
 #include "jml/utils/exc_assert.h"
+#include "jml/utils/abort.h"
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/thread_specific.h"
 #include <vector>
+#include <iostream>
 
 #if GC_LOCK_DEBUG
 #  include <iostream>
 #endif
 
-namespace Datacratic {
+#include <chrono>
 
+#if GC_LOCK_SPIN_DEBUG
+
+#   define GCLOCK_SPINCHECK_DECL \
+      std::chrono::time_point<std::chrono::system_clock> __start, __end;  \
+      __start = std::chrono::system_clock::now();
+
+#    define GCLOCK_SPINCHECK                                              \
+       do {                                                               \
+           __end = std::chrono::system_clock::now();                      \
+           std::chrono::duration<double> elapsed = __end - __start;       \
+           if (elapsed > std::chrono::seconds(10)) {                      \
+               ML::do_abort();                                            \
+               throw ML::Exception("GCLOCK_SPINCHECK: spent more than 10" \
+                                   " seconds spinning");                  \
+           }                                                              \
+       } while (0)
+#else
+#   define GCLOCK_SPINCHECK_DECL
+#   define GCLOCK_SPINCHECK ((void) 0)
+#endif
+
+
+namespace Datacratic {
 
 /*****************************************************************************/
 /* GC LOCK BASE                                                              */
@@ -30,24 +56,6 @@ namespace Datacratic {
 struct GcLockBase : public boost::noncopyable {
 
 public:
-
-    /// A thread's bookkeeping info about each GC area
-    struct ThreadGcInfoEntry {
-        ThreadGcInfoEntry()
-            : inEpoch(-1), readLocked(0), writeLocked(0)
-        {
-        }
-
-        int inEpoch;  // 0, 1, -1 = not in 
-        int readLocked;
-        int writeLocked;
-
-        std::string print() const;
-    };
-
-    typedef ML::ThreadSpecificInstanceInfo<ThreadGcInfoEntry, GcLockBase>
-        GcInfo;
-    typedef typename GcInfo::PerThreadInfo ThreadGcInfo;
 
     /** Enum for type safe specification of whether or not we run deferrals on
         entry or exit to a critical sections.  Thoss places that are latency
@@ -58,9 +66,165 @@ public:
         RD_YES = 1      ///< Potentially run deferred work on this call
     };
 
+    enum DoLock {
+        DONT_LOCK = 0,
+        DO_LOCK = 1
+    };
+
+    /// A thread's bookkeeping info about each GC area
+    struct ThreadGcInfoEntry {
+        ThreadGcInfoEntry()
+            : inEpoch(-1), readLocked(0), writeLocked(0), exclusiveLocked(0),
+              writeEntered(0),
+              owner(0)
+        {
+        }
+
+        ~ThreadGcInfoEntry() {
+            using namespace std;
+
+            if (readLocked || writeLocked)
+               cerr << "Thread died but GcLock is still locked" << endl;
+           
+        } 
+
+
+        int inEpoch;  // 0, 1, -1 = not in 
+        int readLocked;
+        int writeLocked;
+        int exclusiveLocked;
+        int writeEntered;
+
+        GcLockBase *owner;
+
+        void init(const GcLockBase * const self) {
+            if (!owner) 
+                owner = const_cast<GcLockBase *>(self);
+        }
+
+        void enterShared(RunDefer runDefer) {
+            if (!readLocked && !exclusiveLocked)
+                owner->enterCS(this, runDefer);
+
+            ++readLocked;
+        }
+
+        void exitShared(RunDefer runDefer) {
+            if (readLocked <= 0)
+                throw ML::Exception("Bad read lock nesting");
+
+            --readLocked;
+            if (!readLocked && !exclusiveLocked) 
+                owner->exitCS(this, runDefer);
+
+        }
+
+        bool isLockedShared() {
+            return readLocked + exclusiveLocked;
+        }
+
+        void lockExclusive() {
+            if (readLocked || writeLocked) 
+                throw ML::Exception("Can not lock exclusive while holding "
+                                     "read or write lock");
+            if (!exclusiveLocked)
+                owner->enterCSExclusive(this);
+            
+             ++exclusiveLocked;
+        }
+
+        void unlockExclusive() {
+            if (exclusiveLocked <= 0)
+                throw ML::Exception("Bad exclusive lock nesting");
+
+            --exclusiveLocked;
+            if (!exclusiveLocked)
+                owner->exitCSExclusive(this);
+        }
+
+        std::string print() const;
+
+    };
+
+
+    typedef ML::ThreadSpecificInstanceInfo<ThreadGcInfoEntry, GcLockBase>
+        GcInfo;
+    typedef typename GcInfo::PerThreadInfo ThreadGcInfo;
+
+    typedef uint64_t Word;
+    static constexpr size_t Bits = sizeof(Word) * CHAR_BIT;
+    static constexpr Word StopBitMask = (1ULL << (Bits - 1));
+
+    struct Data {
+        Data();
+        Data(const Data & other);
+
+        Data & operator = (const Data & other);
+
+        typedef uint64_t q2 __attribute__((__vector_size__(16)));
+        
+        volatile union {
+            struct {
+                int32_t epoch;       ///< Current epoch number (could be smaller).
+                int16_t in[2];       ///< How many threads in each epoch
+                int32_t visibleEpoch;///< Lowest epoch number that's visible
+                int32_t exclusive;       ///< Mutex value for exclusive lock
+            };
+            struct {
+                uint64_t bits;
+                uint64_t bits2;
+            };
+            struct {
+                q2 q;
+            };
+        } JML_ALIGNED(16);
+
+        volatile Word writeLock;
+
+        int16_t inCurrent() const { return in[epoch & 1]; }
+        int16_t inOld() const { return in[(epoch - 1)&1]; }
+
+        void setIn(int32_t epoch, int val)
+        {
+            //if (epoch != this->epoch && epoch + 1 != this->epoch)
+            //    throw ML::Exception("modifying wrong epoch");
+            in[epoch & 1] = val;
+        }
+
+        void addIn(int32_t epoch, int val)
+        {
+            //if (epoch != this->epoch && epoch + 1 != this->epoch)
+            //    throw ML::Exception("modifying wrong epoch");
+            in[epoch & 1] += val;
+        }
+
+        /** Check that the invariants all hold.  Throws an exception if not. */
+        void validate() const;
+
+        /** Calculate the appropriate value of visibleEpoch from the rest
+            of the fields.  Returns true if waiters should be woken up.
+        */
+        bool calcVisibleEpoch();
+        
+        /** Human readable string. */
+        std::string print() const;
+
+        bool operator == (const Data & other) const
+        {
+            return bits == other.bits && bits2 == other.bits2;
+        }
+
+        bool operator != (const Data & other) const
+        {
+            return ! operator == (other);
+        }
+
+    } JML_ALIGNED(16);
 
     void enterCS(ThreadGcInfoEntry * entry = 0, RunDefer runDefer = RD_YES);
     void exitCS(ThreadGcInfoEntry * entry = 0, RunDefer runDefer = RD_YES);
+    void enterCSWrite(GcInfo::PerThreadInfo * info = 0, RunDefer runDefer = RD_YES);
+    void exitCSWrite(GcInfo::PerThreadInfo * info = 0, RunDefer runDefer = RD_YES);
     void enterCSExclusive(ThreadGcInfoEntry * entry = 0);
     void exitCSExclusive(ThreadGcInfoEntry * entry = 0);
 
@@ -77,7 +241,9 @@ public:
     JML_ALWAYS_INLINE ThreadGcInfoEntry &
     getEntry(GcInfo::PerThreadInfo * info = 0) const
     {
-        return *gcInfo.get(info);
+        ThreadGcInfoEntry *entry = gcInfo.get(info);
+        entry->init(this);
+        return *entry;
     }
 
     GcLockBase();
@@ -87,54 +253,74 @@ public:
     /** Permanently deletes any resources associated with this lock. */
     virtual void unlink() = 0;
 
-    void lockShared(GcInfo::PerThreadInfo * info = 0,
+    void enterShared(GcInfo::PerThreadInfo * info = 0,
                     RunDefer runDefer = RD_YES)
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        if (!entry.readLocked && !entry.writeLocked)
-            enterCS(&entry, runDefer);
-
-        ++entry.readLocked;
+        entry.enterShared(runDefer);
 
 #if GC_LOCK_DEBUG
         using namespace std;
-        cerr << "lockShared "
+        cerr << "enterShared "
              << this << " index " << index
              << ": now " << entry.print() << " data "
              << data->print() << endl;
 #endif
     }
 
-    void unlockShared(GcInfo::PerThreadInfo * info = 0, 
-                      RunDefer runDefer = RD_YES)
+    void exitShared(GcInfo::PerThreadInfo * info = 0, 
+                    RunDefer runDefer = RD_YES)
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        if (entry.readLocked <= 0)
-            throw ML::Exception("bad read lock nesting");
-        --entry.readLocked;
-        if (!entry.readLocked && !entry.writeLocked)
-            exitCS(&entry, runDefer);
+        entry.exitShared(runDefer);
 
 #if GC_LOCK_DEBUG
         using namespace std;
-        cerr << "unlockShared "
+        cerr << "exitShared "
              << this << " index " << index
              << ": now " << entry.print() << " data "
              << data->print() << endl;
 #endif
+    }
+
+    void enterWriteShared(GcInfo::PerThreadInfo * info = 0,
+                          RunDefer runDefer = RD_YES)
+    {
+        ThreadGcInfoEntry & entry = getEntry(info);
+        if (!entry.writeEntered)
+            enterCSWrite(info, runDefer);
+
+        ++entry.writeEntered;
+    }
+
+    void exitWriteShared(GcInfo::PerThreadInfo * info = 0,
+                         RunDefer runDefer = RD_YES)
+    {
+        ThreadGcInfoEntry & entry = getEntry(info);
+        ExcAssertGreater(entry.writeEntered, 0);
+
+        --entry.writeEntered;
+        if (!entry.writeEntered)
+            exitCSWrite(info, runDefer);
     }
 
     int isLockedShared(GcInfo::PerThreadInfo * info = 0) const
     {
         ThreadGcInfoEntry & entry = getEntry(info);
-        return entry.readLocked + entry.writeLocked;
+
+        return entry.isLockedShared() || isLockedWrite();
+    }
+
+    bool isLockedWrite() const {
+        return getEntry().writeLocked;
     }
 
     int lockedInEpoch(GcInfo::PerThreadInfo * info = 0) const
     {
         ThreadGcInfoEntry & entry = getEntry(info);
+
         return entry.inEpoch;
     }
 
@@ -142,14 +328,7 @@ public:
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        if (entry.readLocked)
-            throw ML::Exception("can't acquire write lock with read lock held");
-
-        if (!entry.writeLocked)
-            enterCSExclusive(&entry);
-
-        ++entry.writeLocked;
-
+        entry.lockExclusive();
 #if GC_LOCK_DEBUG
         using namespace std;
         cerr << "lockExclusive "
@@ -163,11 +342,7 @@ public:
     {
         ThreadGcInfoEntry & entry = getEntry(info);
 
-        if (entry.writeLocked <= 0)
-            throw ML::Exception("bad write lock nesting");
-        --entry.writeLocked;
-        if (!entry.writeLocked)
-            exitCSExclusive(&entry);
+        entry.unlockExclusive();
 
 #if GC_LOCK_DEBUG
         using namespace std;
@@ -181,13 +356,66 @@ public:
     int isLockedExclusive(GcInfo::PerThreadInfo * info = 0) const
     {
         ThreadGcInfoEntry & entry = getEntry(info);
-        return entry.writeLocked;
+
+        return entry.exclusiveLocked;
     }
 
-    enum DoLock {
-        DONT_LOCK = 0,
-        DO_LOCK = 1
-    };
+    void lockWrite()
+    {
+        ThreadGcInfoEntry &entry = getEntry();
+        if (!entry.writeLocked) {
+            Word oldValue, newValue;
+            GCLOCK_SPINCHECK_DECL
+            for (;;) {
+                GCLOCK_SPINCHECK;
+
+                oldValue = data->writeLock;
+
+                // Stop bit is set, meaning that it's already locked.
+                if (oldValue & StopBitMask)
+                    continue;
+
+                newValue = oldValue | StopBitMask;
+                if (ML::cmp_xchg(data->writeLock, oldValue, newValue))
+                    break;
+
+            }
+
+            // Stop bit must be set
+            ExcAssertEqual((data->writeLock & StopBitMask), StopBitMask);
+
+            // At this point, we stoped all the upcoming writes. However,
+            // ongoing writes might still be executing. Issuing a writeBarrier
+            // will wait for all writes to finish before continuing
+            writeBarrier();
+
+            // No writes must be ongoing
+            ExcAssertEqual((data->writeLock & ~StopBitMask), 0); 
+        }
+        ++entry.writeLocked;
+    }
+
+    void writeBarrier() {
+        // Busy-waiting for all writes to finish
+        while ((data->writeLock & ~StopBitMask) > 0) { }
+    }
+
+
+    void unlockWrite(GcInfo::PerThreadInfo * info = 0)
+    {
+        ThreadGcInfoEntry &entry = getEntry();
+        --entry.writeLocked;
+        if (!entry.writeLocked) {
+            Word oldValue = data->writeLock;
+            Word newValue = oldValue & ~StopBitMask;
+
+            if (!ML::cmp_xchg(data->writeLock, oldValue, newValue)) {
+                throw ML::Exception("Failed to unlockWrite");
+            }
+
+        }
+    }
+
 
     struct SharedGuard {
         SharedGuard(GcLockBase & lock,
@@ -198,18 +426,51 @@ public:
               doLock_(doLock)
         {
             if (doLock_)
-                lock.lockShared(0, runDefer_);
+                lock.enterShared(0, runDefer_);
         }
 
         ~SharedGuard()
         {
             if (doLock_)
-                lock.unlockShared(0, runDefer_);
+            lock.exitShared(0, runDefer_);
         }
         
         GcLockBase & lock;
         const RunDefer runDefer_;  ///< Can this do deferred work?
         const DoLock doLock_;      ///< Do we really lock?
+    };
+
+
+    struct WriteSharedGuard {
+        WriteSharedGuard(GcLockBase & lock, RunDefer runDefer = RD_YES) 
+            : lock(lock),
+              runDefer(runDefer)
+        {
+            lock.enterWriteShared(0, runDefer);
+        }
+
+        ~WriteSharedGuard()
+        {
+            lock.exitWriteShared(0, runDefer);
+        }
+
+        GcLockBase & lock;
+        const RunDefer runDefer;
+    };
+
+    struct WriteLockGuard {
+        WriteLockGuard(GcLockBase & lock)
+            : lock(lock)
+        {
+            lock.lockWrite();
+        }
+
+        ~WriteLockGuard()
+        {
+            lock.unlockWrite();
+        }
+
+        GcLockBase & lock;
     };
 
     struct ExclusiveGuard {
@@ -283,70 +544,6 @@ public:
     }
 
     void dump();
-
-    struct Data {
-        Data();
-        Data(const Data & other);
-
-        Data & operator = (const Data & other);
-
-        typedef uint64_t q2 __attribute__((__vector_size__(16)));
-        
-        volatile union {
-            struct {
-                int32_t epoch;       ///< Current epoch number (could be smaller).
-                int16_t in[2];       ///< How many threads in each epoch
-                int32_t visibleEpoch;///< Lowest epoch number that's visible
-                int32_t exclusive;   ///< Mutex value to lock exclusively
-            };
-            struct {
-                uint64_t bits;
-                uint64_t bits2;
-            };
-            struct {
-                q2 q;
-            };
-        } JML_ALIGNED(16);
-
-        int16_t inCurrent() const { return in[epoch & 1]; }
-        int16_t inOld() const { return in[(epoch - 1)&1]; }
-
-        void setIn(int32_t epoch, int val)
-        {
-            //if (epoch != this->epoch && epoch + 1 != this->epoch)
-            //    throw ML::Exception("modifying wrong epoch");
-            in[epoch & 1] = val;
-        }
-
-        void addIn(int32_t epoch, int val)
-        {
-            //if (epoch != this->epoch && epoch + 1 != this->epoch)
-            //    throw ML::Exception("modifying wrong epoch");
-            in[epoch & 1] += val;
-        }
-
-        /** Check that the invariants all hold.  Throws an exception if not. */
-        void validate() const;
-
-        /** Calculate the appropriate value of visibleEpoch from the rest
-            of the fields.  Returns true if waiters should be woken up.
-        */
-        bool calcVisibleEpoch();
-        
-        /** Human readable string. */
-        std::string print() const;
-
-        bool operator == (const Data & other) const
-        {
-            return bits == other.bits && bits2 == other.bits2;
-        }
-
-        bool operator != (const Data & other) const
-        {
-            return ! operator == (other);
-        }
-
-    } JML_ALIGNED(16);
 
 protected:
     Data* data;
@@ -436,6 +633,7 @@ private:
 };
 
 } // namespace Datacratic
+
 
 #endif /* __mmap__gc_lock_h__ */
 

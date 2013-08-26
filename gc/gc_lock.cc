@@ -242,7 +242,8 @@ print() const
 
 inline GcLockBase::Data::
 Data() :
-    bits(0), bits2(0)
+    bits(0), bits2(0),
+    writeLock(0)
 {
     epoch = gcLockStartingEpoch; // makes it easier to test overflows.
     visibleEpoch = epoch;
@@ -253,6 +254,7 @@ Data(const Data & other)
 {
     //ML::ticks();
     q = other.q;
+    writeLock = other.writeLock;
     //ML::ticks();
 }
 
@@ -262,6 +264,7 @@ operator = (const Data & other)
 {
     //ML::ticks();
     this->q = other.q;
+    this->writeLock = other.writeLock;
     //ML::ticks();
     return *this;
 }
@@ -481,8 +484,6 @@ void
 GcLockBase::
 exitCS(ThreadGcInfoEntry * entry, RunDefer runDefer /* = true */)
 {
-    if (!entry) entry = &getEntry();
-
     if (entry->inEpoch == -1)
         throw ML::Exception("not in a CS");
 
@@ -514,8 +515,6 @@ void
 GcLockBase::
 enterCSExclusive(ThreadGcInfoEntry * entry)
 {
-    if (!entry) entry = &getEntry();
-        
     ExcAssertEqual(entry->inEpoch, -1);
 
     Data current = *data, newValue;
@@ -627,6 +626,48 @@ exitCSExclusive(ThreadGcInfoEntry * entry)
     futex_wake(data->exclusive);
 
     entry->inEpoch = -1;
+}
+
+void GcLockBase::
+enterCSWrite(GcInfo::PerThreadInfo * info,
+             RunDefer runDefer)
+{
+    Word oldVal, newVal;
+    GCLOCK_SPINCHECK_DECL
+
+    for (;;) {
+        GCLOCK_SPINCHECK;
+
+        oldVal = data->writeLock;
+
+        // Stop bit is set, meaning that it's locked.
+        if (oldVal & StopBitMask) {
+            sched_yield();
+            continue;
+        }
+
+        newVal = oldVal + 1;
+
+
+        // If the CAS fails, someone else in the meantime
+        // must have entered a CS and incremented the counter
+        // behind our back. We then retry
+        if (ML::cmp_xchg(data->writeLock, oldVal, newVal))
+            break;
+    }
+            
+
+    enterShared(info, runDefer);
+}
+
+void GcLockBase::
+exitCSWrite(GcInfo::PerThreadInfo * info,
+            RunDefer runDefer)
+{
+    ExcAssertGreater(data->writeLock, 0);
+    ML::atomic_dec(data->writeLock);
+
+    exitShared(info, runDefer);
 }
 
 void
