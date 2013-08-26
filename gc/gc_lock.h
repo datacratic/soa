@@ -223,6 +223,8 @@ public:
 
     void enterCS(ThreadGcInfoEntry * entry = 0, RunDefer runDefer = RD_YES);
     void exitCS(ThreadGcInfoEntry * entry = 0, RunDefer runDefer = RD_YES);
+    void enterCSWrite(GcInfo::PerThreadInfo * info = 0, RunDefer runDefer = RD_YES);
+    void exitCSWrite(GcInfo::PerThreadInfo * info = 0, RunDefer runDefer = RD_YES);
     void enterCSExclusive(ThreadGcInfoEntry * entry = 0);
     void exitCSExclusive(ThreadGcInfoEntry * entry = 0);
 
@@ -287,50 +289,9 @@ public:
                           RunDefer runDefer = RD_YES)
     {
         ThreadGcInfoEntry & entry = getEntry(info);
-        if (!entry.writeEntered) {
-            Word oldVal, newVal;
-            GCLOCK_SPINCHECK_DECL
+        if (!entry.writeEntered)
+            enterCSWrite(info, runDefer);
 
-            for (;;) {
-                auto writeLock = data->writeLock;
-                // We are write locked, continue spinning
-                GCLOCK_SPINCHECK;
-                    
-                if (writeLock & StopBitMask) {
-                    sched_yield();
-                    continue;
-                }
-
-                oldVal = data->writeLock;
-
-                // When our thread reads current writeLock, it might
-                // have been locked by an other thread spinning
-                // right after having been unlocked.
-                // Thus we could end up in a really weird situation,
-                // where the linearization point marked by the CAS
-                // would only be reached after the writeBarrier
-                // in the locking thread.
-                //
-                // To prevent this, we check again if the stop bit
-                // is set.
-                if (oldVal & StopBitMask) {
-                    sched_yield();
-                    continue;
-                }
-
-                newVal = oldVal + 1;
-
-
-                // If the CAS fails, someone else in the meantime
-                // must have entered a CS and incremented the counter
-                // behind our back. We then retry
-                if (ML::cmp_xchg(data->writeLock, oldVal, newVal))
-                    break;
-            }
-                    
-
-            enterShared(info, runDefer);
-        }
         ++entry.writeEntered;
     }
 
@@ -339,13 +300,10 @@ public:
     {
         ThreadGcInfoEntry & entry = getEntry(info);
         ExcAssertGreater(entry.writeEntered, 0);
-        --entry.writeEntered;
-        if (!entry.writeEntered) {
-            ExcAssertGreater(data->writeLock, 0);
-            ML::atomic_dec(data->writeLock);
 
-            exitShared(info, runDefer);
-        }
+        --entry.writeEntered;
+        if (!entry.writeEntered)
+            exitCSWrite(info, runDefer);
     }
 
     int isLockedShared(GcInfo::PerThreadInfo * info = 0) const

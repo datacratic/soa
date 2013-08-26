@@ -628,6 +628,64 @@ exitCSExclusive(ThreadGcInfoEntry * entry)
     entry->inEpoch = -1;
 }
 
+void GcLockBase::
+enterCSWrite(GcInfo::PerThreadInfo * info,
+             RunDefer runDefer)
+{
+    Word oldVal, newVal;
+    GCLOCK_SPINCHECK_DECL
+
+    for (;;) {
+        auto writeLock = data->writeLock;
+        // We are write locked, continue spinning
+        GCLOCK_SPINCHECK;
+            
+        if (writeLock & StopBitMask) {
+            sched_yield();
+            continue;
+        }
+
+        oldVal = data->writeLock;
+
+        // When our thread reads current writeLock, it might
+        // have been locked by an other thread spinning
+        // right after having been unlocked.
+        // Thus we could end up in a really weird situation,
+        // where the linearization point marked by the CAS
+        // would only be reached after the writeBarrier
+        // in the locking thread.
+        //
+        // To prevent this, we check again if the stop bit
+        // is set.
+        if (oldVal & StopBitMask) {
+            sched_yield();
+            continue;
+        }
+
+        newVal = oldVal + 1;
+
+
+        // If the CAS fails, someone else in the meantime
+        // must have entered a CS and incremented the counter
+        // behind our back. We then retry
+        if (ML::cmp_xchg(data->writeLock, oldVal, newVal))
+            break;
+    }
+            
+
+    enterShared(info, runDefer);
+}
+
+void GcLockBase::
+exitCSWrite(GcInfo::PerThreadInfo * info,
+            RunDefer runDefer)
+{
+    ExcAssertGreater(data->writeLock, 0);
+    ML::atomic_dec(data->writeLock);
+
+    exitShared(info, runDefer);
+}
+
 void
 GcLockBase::
 visibleBarrier()
