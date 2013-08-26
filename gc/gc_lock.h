@@ -296,7 +296,7 @@ public:
                 // We are write locked, continue spinning
                 GCLOCK_SPINCHECK;
                     
-                if ((writeLock >> (Bits - 1)) == 1) {
+                if (writeLock & StopBitMask) {
                     sched_yield();
                     continue;
                 }
@@ -313,7 +313,7 @@ public:
                 //
                 // To prevent this, we check again if the stop bit
                 // is set.
-                if ((oldVal >> (Bits - 1)) == 1) {
+                if (oldVal & StopBitMask) {
                     sched_yield();
                     continue;
                 }
@@ -410,7 +410,7 @@ public:
             GCLOCK_SPINCHECK_DECL
             for (;;) {
                 GCLOCK_SPINCHECK;
-                if ((data->writeLock >> (Bits - 1)) == 1)
+                if (data->writeLock & StopBitMask)
                     continue;
 
                 oldValue = data->writeLock;
@@ -418,7 +418,7 @@ public:
                 // See enterWriteShared for the reason of this
                 // double-check.
                 // TODO: is this really needed ?
-                if ((oldValue >> (Bits - 1)) == 1)
+                if (oldValue & StopBitMask)
                     continue;
 
                 newValue = oldValue | StopBitMask;
@@ -428,7 +428,7 @@ public:
             }
 
             // Stop bit must be set
-            ExcAssertEqual(data->writeLock >> (Bits - 1), 1);
+            ExcAssertEqual((data->writeLock & StopBitMask), StopBitMask);
 
             // At this point, we stoped all the upcoming writes. However,
             // ongoing writes might still be executing. Issuing a writeBarrier
