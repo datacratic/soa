@@ -157,9 +157,7 @@ struct JsonParsingContext {
     virtual bool expectBool() = 0;
     virtual bool matchUnsignedLongLong(unsigned long long & val) = 0;
     virtual bool matchLongLong(long long & val) = 0;
-    virtual std::string expectStringAscii() = 0;
-    virtual ssize_t expectStringAscii(char * value, size_t maxLen) = 0;
-    virtual Utf8String expectStringUtf8() = 0;
+    virtual std::string expectString() = 0;
     virtual Json::Value expectJson() = 0;
     virtual void expectNull() = 0;
     virtual bool isObject() const = 0;
@@ -172,6 +170,10 @@ struct JsonParsingContext {
     virtual bool isInt() const = 0;
 #endif
     virtual void skip() = 0;
+
+	/** Deprecated */
+	inline std::string expectStringAscii() { return expectString(); }
+	inline Utf8String expectStringUtf8() { return Utf8String(expectString()); }
 
     virtual void forEachMember(const std::function<void ()> & fn) = 0;
     virtual void forEachElement(const std::function<void ()> & fn) = 0;
@@ -333,6 +335,8 @@ struct StreamingJsonParsingContext
         return ML::expectJsonBool(*context);
     }
 
+    virtual std::string expectString();
+
     virtual void expectNull()
     {
         context->expect_literal("null");
@@ -347,18 +351,6 @@ struct StreamingJsonParsingContext
     {
         return context->match_long_long(val);
     }
-
-    virtual std::string expectStringAscii()
-    {
-        return expectJsonStringAscii(*context);
-    }
-
-    virtual ssize_t expectStringAscii(char * value, size_t maxLen)
-    {
-        return expectJsonStringAscii(*context, value, maxLen);
-    }
-
-    virtual Utf8String expectStringUtf8();
 
     virtual bool isObject() const
     {
@@ -521,26 +513,9 @@ struct StructuredJsonParsingContext: public JsonParsingContext {
         return false;
     }
 
-    virtual std::string expectStringAscii()
+    virtual std::string expectString()
     {
         return current->asString();
-    }
-
-    virtual ssize_t expectStringAscii(char * value, size_t maxLen)
-    {
-        const std::string & strValue = current->asString();
-        ssize_t realSize = strValue.size();
-        if (realSize >= maxLen) {
-            return -1;
-        }
-        memcpy(value, strValue.c_str(), realSize);
-        value[realSize] = '\0';
-        return realSize;
-    }
-
-    virtual Utf8String expectStringUtf8()
-    {
-        return Utf8String(current->asString());
     }
 
     virtual Json::Value expectJson()
@@ -691,15 +666,7 @@ void parseJson(Id * output, Context & context)
     using namespace std;
 
     if (context.isString()) {
-        char buffer[4096];
-        ssize_t realSize = context.expectStringAscii(buffer, sizeof(buffer));
-        if (realSize > -1) {
-            *output = Id(buffer, realSize);
-        }
-        else {
-            std::string value = context.expectStringAscii();
-            *output = Id(value);
-        }
+        *output = Id(context.expectString());
         return;
     }
 
