@@ -77,7 +77,7 @@ watcherFn(int type, std::string const & path, void * watcherCtx)
     }
 }
 
-ZookeeperConnection::Callback::Type
+ZookeeperConnection::CallbackType
 getWatcherFn(const ConfigurationService::Watch & watch)
 {
     if (!watch)
