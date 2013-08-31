@@ -21,6 +21,7 @@
 #include <sys/eventfd.h>
 #include <linux/tcp.h>
 #include <poll.h>
+#include <chrono>
 
 
 using namespace std;
@@ -1035,8 +1036,18 @@ SocketTransport::getEstimatedRTT()
 
     int success = peer().get_option(IPPROTO_TCP, TCP_INFO, &tcpinfo, &len);
     if (success != -1) {
-        // usec -> msec
-        return tcpinfo.tcpi_rtt / double(1000);
+
+        std::chrono::milliseconds rtt     = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds(tcpinfo.tcpi_rtt));
+        std::chrono::milliseconds rtt_var = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds(tcpinfo.tcpi_rttvar));
+
+        /*
+         * As discussed on the ML:
+         * We could also add some 'safety' levels to account for user-level
+         * overhead and weird values that could be returned from this i.e.
+         * rtt = tcp_rtt+3 * var_rtt + 2ms clamp to range (2ms, 50ms)
+         */
+        return rtt.count() + 3 * rtt_var.count() + 2;
+
     } else {
         return double(-1);
     }
