@@ -19,6 +19,7 @@
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <sys/eventfd.h>
+#include <linux/tcp.h>
 #include <poll.h>
 
 
@@ -1025,6 +1026,22 @@ closePeer()
     addActivityS("closePeer");
     return peer().close();
 }
+
+double
+SocketTransport::getEstimatedRTT()
+{
+    tcp_info tcpinfo;
+    int len = sizeof(tcpinfo);
+
+    int success = peer().get_option(IPPROTO_TCP, TCP_INFO, &tcpinfo, &len);
+    if (success != -1) {
+        // usec -> msec
+        return tcpinfo.tcpi_rtt / double(1000);
+    } else {
+        return double(-1);
+    }
+}
+
 
 } // namespace Datacratic
 
