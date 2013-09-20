@@ -512,16 +512,15 @@ runEventThread(int threadNum, int numThreads)
         };
 
 
-    const double stopThreshold = (threadNum * 0.7) / numThreads;
-    const double startThreshold = (threadNum * 0.9) / numThreads;
+    const double stopThreshold = ((threadNum + 1) * 0.7) / numThreads;
+    const double startThreshold = ((threadNum + 1) * 0.9) / numThreads;
 
     // don't sleep for too long otherwise the time slept could be seen as load
     // in the other threads.
     static constexpr double maxSleepTime = 0.01;
 
     Date lastSampleTime = Date::now();
-    vector<double> lastSamples = totalSleepSeconds();
-    double smoothedLoad = 0.0;
+    vector<double> lastSamples(numThreads, 0.0);
 
     while (!shutdown_) {
         if (handleEvents(0, 4, handleEvent, beforeSleep, afterSleep) > 0)
@@ -549,9 +548,9 @@ runEventThread(int threadNum, int numThreads)
             load /= numThreads;
 
             lastSamples = std::move(samples);
-            smoothedLoad = load * 0.1 + smoothedLoad * 0.9;
+            lastSampleTime = Date::now();
 
-            return smoothedLoad;
+            return load;
         };
 
         if (sampleLoad(elapsed) > stopThreshold) continue;
@@ -564,7 +563,7 @@ runEventThread(int threadNum, int numThreads)
                 ML::sleep(maxSleepTime);
                 afterSleep();
             }
-        } while (sampleLoad(maxSleepTime) < startThreshold);
+        } while (sampleLoad(0.1) < startThreshold);
     }
 
     cerr << "thread shutting down" << endl;
