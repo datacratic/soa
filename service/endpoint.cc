@@ -495,17 +495,10 @@ runEventThread(int threadNum, int numThreads)
 {
     prctl(PR_SET_NAME,"EptCtrl",0,0,0);
 
-    bool debug = false;
-    //debug = name() == "Backchannel";
-    //debug = threadNum == 7;
-
     ML::Duty_Cycle_Timer duty;
-
-    Date lastCheck = Date::now();
 
     ML::atomic_inc(threadsActive_);
     futex_wake(threadsActive_);
-    //cerr << "threadsActive_ " << threadsActive_ << endl;
 
     Epoller::OnEvent beforeSleep = [&] ()
         {
@@ -515,108 +508,63 @@ runEventThread(int threadNum, int numThreads)
     Epoller::OnEvent afterSleep = [&] ()
         {
             duty.notifyAfterSleep();
+            totalSleepTime[threadNum] += duty.afterSleep - duty.beforeSleep;
         };
 
 
-    // Where does my timeslice start?
-    double timesliceUs = 1000.0 / numThreads;
-    int myStartUs = timesliceUs * threadNum;
-    int myEndUs   = timesliceUs * (threadNum + 1);
+    const double stopThreshold = (threadNum * 0.7) / numThreads;
+    const double startThreshold = (threadNum * 0.9) / numThreads;
 
-    if (debug) {
-        static ML::Spinlock lock;
-        lock.acquire();
-        cerr << "threadNum = " << threadNum << " of " << name()
-             << " numThreads = " << numThreads
-             << " myStartUs = " << myStartUs
-             << " myEndUs = " << myEndUs
-             << endl;
-        lock.release();
-    }
+    // don't sleep for too long otherwise the time slept could be seen as load
+    // in the other threads.
+    static constexpr double maxSleepTime = 0.01;
 
-    bool forceInSlice = false;
+    Date lastSampleTime = Date::now();
+    vector<double> lastSamples = totalSleepSeconds();
+    double smoothedLoad = 0.0;
 
     while (!shutdown_) {
+        if (handleEvents(0, 4, handleEvent, beforeSleep, afterSleep) > 0)
+            continue;
 
         Date now = Date::now();
-        
-        if (now.secondsSince(lastCheck) > 1.0 && debug) {
-            ML::Duty_Cycle_Timer::Stats stats = duty.stats();
-            string msg = format("control thread for %s: "
-                                "events %lld sleeping %lld "
-                                "processing %lld duty %.2f%%",
-                                name().c_str(),
-                                (long long)stats.numWakeups,
-                                (long long)stats.usAsleep,
-                                (long long)stats.usAwake,
-                                stats.duty_cycle() * 100.0);
-            cerr << msg << flush;
-            duty.clear();
-            lastCheck = now;
+        double elapsed = now.secondsSince(lastSampleTime);
+
+        if (elapsed < 0.1) {
+            int usToWait = std::min(maxSleepTime, (0.1 - elapsed)) * 1000000;
+            if (handleEvents(usToWait, 4, handleEvent, beforeSleep, afterSleep) > 0)
+                continue;
         }
 
-        int us = now.fractionalSeconds() * 1000000;
-        int fracms = us % 1000;  // fractional part of the millisecond
-        
-        if (debug && false) {
-            cerr << "now = " << now.print(6) << " us = " << us
-                 << " fracms = " << fracms << " myStartUs = "
-                 << myStartUs << " myEndUs = " << myEndUs
-                 << endl;
-        }
+        auto sampleLoad = [&] (double elapsed) {
+            // First thread should always be running.
+            if (!threadNum) return 1.0;
 
-        // Are we in our timeslice?
-        if (/* forceInSlice
-               || */(fracms >= myStartUs && fracms < myEndUs)) {
-            // Yes... then sleep in epoll_wait...
-            int usToWait = myEndUs - fracms;
-            if (usToWait < 0 || usToWait > timesliceUs)
-                usToWait = timesliceUs;
+            double load = 0.0;
+            vector<double> samples = totalSleepSeconds();
 
-            totalSleepTime[threadNum] += double(usToWait) / 1000000.0;
-            int numHandled = handleEvents(usToWait, 4, handleEvent,
-                                          beforeSleep, afterSleep);
-            if (debug && false)
-                cerr << "  in slice: handled " << numHandled << " events "
-                     << "for " << usToWait << " microseconds "
-                     << " taken " << Date::now().secondsSince(now) * 1000000
-                     << "us" << endl;
-            if (numHandled == -1) break;
-            forceInSlice = false;
-        }
-        else {
-            // No... try to handle something and then sleep if we don't
-            // find anything to do
-            int numHandled = handleEvents(0, 1, handleEvent,
-                                          beforeSleep, afterSleep);
-            if (debug && false)
-                cerr << "  out of slice: handled " << numHandled << " events"
-                     << endl;
-            if (numHandled == -1) break;
-            if (numHandled == 0) {
-                // Sleep until our timeslice
-                duty.notifyBeforeSleep();
-                int usToSleep = myStartUs - fracms;
-                if (usToSleep < 0)
-                    usToSleep += 1000;
-                ExcAssertGreaterEqual(usToSleep, 0);
-                if (debug && false)
-                    cerr << "sleeping for " << usToSleep << " micros" << endl;
+            for (size_t i = 0; i < numThreads; ++i)
+                load += 1.0 - ((samples[i] - lastSamples[i]) / elapsed);
 
-                double secToSleep = double(usToSleep) / 1000000.0;
-                totalSleepTime[threadNum] += secToSleep;
+            load /= numThreads;
 
-                ML::sleep(secToSleep);
-                duty.notifyAfterSleep();
-                forceInSlice = true;
+            lastSamples = std::move(samples);
+            smoothedLoad = load * 0.1 + smoothedLoad * 0.9;
 
-                if (debug && false)
-                    cerr << " slept for "
-                         << Date::now().secondsSince(now) * 1000000
-                         << "us when " << usToSleep << " requested"
-                         << endl;
+            return smoothedLoad;
+        };
+
+        if (sampleLoad(elapsed) > stopThreshold) continue;
+
+        do {
+            // The odd setup is to make sure we update our thread load
+            // periodically.
+            for (size_t i = 0; i < 10; ++i) {
+                beforeSleep();
+                ML::sleep(maxSleepTime);
+                afterSleep();
             }
-        }
+        } while (sampleLoad(maxSleepTime) < startThreshold);
     }
 
     cerr << "thread shutting down" << endl;
