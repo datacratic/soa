@@ -511,60 +511,10 @@ runEventThread(int threadNum, int numThreads)
             totalSleepTime[threadNum] += duty.afterSleep - duty.beforeSleep;
         };
 
-
-    const double stopThreshold = ((threadNum + 1) * 0.7) / numThreads;
-    const double startThreshold = ((threadNum + 1) * 0.9) / numThreads;
-
-    // don't sleep for too long otherwise the time slept could be seen as load
-    // in the other threads.
-    static constexpr double maxSleepTime = 0.01;
-
-    Date lastSampleTime = Date::now();
-    vector<double> lastSamples(numThreads, 0.0);
-
-    while (!shutdown_) {
-        if (handleEvents(0, 4, handleEvent, beforeSleep, afterSleep) > 0)
-            continue;
-
-        Date now = Date::now();
-        double elapsed = now.secondsSince(lastSampleTime);
-
-        if (elapsed < 0.1) {
-            int usToWait = std::min(maxSleepTime, (0.1 - elapsed)) * 1000000;
-            if (handleEvents(usToWait, 4, handleEvent, beforeSleep, afterSleep) > 0)
-                continue;
-        }
-
-        auto sampleLoad = [&] (double elapsed) {
-            // First thread should always be running.
-            if (!threadNum) return 1.0;
-
-            double load = 0.0;
-            vector<double> samples = totalSleepSeconds();
-
-            for (size_t i = 0; i < numThreads; ++i)
-                load += 1.0 - ((samples[i] - lastSamples[i]) / elapsed);
-
-            load /= numThreads;
-
-            lastSamples = std::move(samples);
-            lastSampleTime = Date::now();
-
-            return load;
-        };
-
-        if (sampleLoad(elapsed) > stopThreshold) continue;
-
-        do {
-            // The odd setup is to make sure we update our thread load
-            // periodically.
-            for (size_t i = 0; i < 10; ++i) {
-                beforeSleep();
-                ML::sleep(maxSleepTime);
-                afterSleep();
-            }
-        } while (sampleLoad(0.1) < startThreshold);
-    }
+    // Null scheduler - It's CPU heavy but minimizes the variance on the network
+    // observed network latency.
+    while (!shutdown_)
+        handleEvents(0, 4, handleEvent, beforeSleep, afterSleep);
 
     cerr << "thread shutting down" << endl;
 
