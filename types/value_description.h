@@ -1006,34 +1006,29 @@ struct DefaultDescription<std::set<T> >
     }
 };
 
+inline std::string stringToKey(const std::string & str, std::string *) { return str; }
+inline std::string keyToString(const std::string & str) { return str; }
+
+#define ENABLE_KEYCODEC 0
+
+#if ENABLE_KEYCODEC
+template<typename T, typename Enable = void>
+struct KeyCodec {
+    static T decode(const std::string & s) { return stringToKey(s, (T *)0); }
+
+    static std::string encode(const T & t) { return keyToString(t); }
+};
+#endif
+
 /*****************************************************************************/
 /* DEFAULT DESCRIPTION FOR MAP                                               */
 /*****************************************************************************/
 
-inline std::string stringToKey(const std::string & str, std::string *) { return str; }
-inline std::string keyToString(const std::string & str) { return str; }
-
-template<typename T>
-inline T stringToKey(const std::string & str, T *) { return boost::lexical_cast<T>(str); }
-
-template<typename T>
-inline std::string keyToString(const T & key)
-{
-    using std::to_string;
-    return to_string(key);
-}
-
-template<typename T, typename Enable = void>
-struct FreeFunctionKeyCodec {
-    static T decode(const std::string & s, T *) { return stringToKey(s, (T *)0); }
-    static std::string encode(const T & t) { return keyToString(t); }
-};
-
-template<typename K, typename T, typename KeyCodec = FreeFunctionKeyCodec<K> >
-struct MapValueDescription
+template<typename K, typename T>
+struct DefaultDescription<std::map<K, T> >
     : public ValueDescriptionI<std::map<K, T>, ValueKind::MAP> {
 
-    MapValueDescription(ValueDescriptionT<T> * inner
+    DefaultDescription(ValueDescriptionT<T> * inner
                       = getDefaultDescription((T *)0))
         : inner(inner)
     {
@@ -1055,7 +1050,11 @@ struct MapValueDescription
 
         auto onMember = [&] ()
             {
-                K key = KeyCodec::decode(context.fieldName(), (K *)0);
+#if ENABLE_KEYCODEC
+                K key = KeyCodec<K>::decode(context.fieldName());
+#else
+                K key = stringToKey(context.fieldName(), (K *)0);
+#endif
                 inner->parseJsonTyped(&res[key], context);
             };
 
@@ -1075,7 +1074,11 @@ struct MapValueDescription
     {
         context.startObject();
         for (auto & v: *val) {
-            context.startMember(KeyCodec::encode(v.first));
+#if ENABLE_KEYCODEC
+            context.startMember(KeyCodec<K>::encode(v.first));
+#else
+            context.startMember(keyToString(v.first));
+#endif
             inner->printJsonTyped(&v.second, context);
         }
         context.endObject();
@@ -1123,17 +1126,6 @@ struct MapValueDescription
         return *this->inner;
     }
 };
-
-template<typename Key, typename Value>
-struct DefaultDescription<std::map<Key, Value> >
-    : public MapValueDescription<Key, Value> {
-    DefaultDescription(ValueDescriptionT<Value> * inner
-                       = getDefaultDescription((Value *)0))
-        : MapValueDescription<Key, Value>(inner)
-    {
-    }
-};
-
 
 
 /*****************************************************************************/
@@ -1354,7 +1346,7 @@ inline Json::Value jsonEncode(const char * str)
 /// overload for it.  The constructor still needs to be done.
 #define CREATE_STRUCTURE_DESCRIPTION_NAMED(Name, Type)          \
     struct Name                                                 \
-        : public Datacratic::StructureDescription<Type> { \
+        : public Datacratic::StructureDescriptionImpl<Type, Name> { \
         Name();                                                 \
     };                                                          \
                                                                 \
@@ -1369,7 +1361,7 @@ inline Json::Value jsonEncode(const char * str)
 
 #define CREATE_CLASS_DESCRIPTION_NAMED(Name, Type)              \
     struct Name                                                 \
-        : public Datacratic::StructureDescription<Type> { \
+        : public Datacratic::StructureDescriptionImpl<Type, Name> { \
         Name() {                                                \
             Type::createDescription(*this);                     \
         }                                                       \

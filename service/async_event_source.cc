@@ -5,7 +5,6 @@
 #include "async_event_source.h"
 #include <sys/timerfd.h>
 #include "jml/arch/exception.h"
-#include "jml/arch/futex.h"
 #include <iostream>
 #include "message_loop.h"
 
@@ -28,16 +27,6 @@ disconnect()
     parent_ = nullptr;
 }
 
-void
-AsyncEventSource::
-waitConnectionState(int state)
-    const
-{
-    while (connectionState_ != state) {
-        int oldVal = connectionState_;
-        ML::futex_wait(connectionState_, oldVal);
-    }
-}
 
 /*****************************************************************************/
 /* PERIODIC EVENT SOURCE                                                     */

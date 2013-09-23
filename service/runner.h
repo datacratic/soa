@@ -60,29 +60,6 @@ struct Runner: public Epoller {
 
 private:
     struct Task {
-        struct ChildFds {
-            ChildFds();
-
-            void closeRemainingFds();
-            void dupToStdStreams();
-            void close();
-
-            int stdIn;
-            int stdOut;
-            int stdErr;
-            int statusFd;
-        };
-
-        struct ChildStatus {
-            ChildStatus()
-                : pid(-1)
-            {}
-            union {
-                pid_t pid;
-                int status;
-            };
-        };
-
         enum StatusState {
             START,
             STOP,
@@ -101,9 +78,6 @@ private:
         void setupInSink();
         void flushInSink();
         void flushStdInBuffer();
-        void RunWrapper(const std::vector<std::string> & command,
-                        ChildFds & fds);
-                        
         void postTerminate(Runner & runner);
 
         std::vector<std::string> command;
@@ -116,7 +90,6 @@ private:
         int stdOutFd;
         int stdErrFd;
         int statusFd;
-
         StatusState statusState;
         std::string statusStateAsString() {
             if (statusState == START) {
@@ -139,22 +112,19 @@ private:
     void handleChildStatus(const struct epoll_event & event);
     void handleOutputStatus(const struct epoll_event & event,
                             int fd, std::shared_ptr<InputSink> & sink);
-    void handleWakeup(const struct epoll_event & event);
 
     void attemptTaskTermination();
 
+    void closeStdInSink();
+
     int running_;
     pid_t childPid_;
-
-    ML::Wakeup_Fd wakeup_;
 
     std::shared_ptr<AsyncFdOutputSink> stdInSink_;
     std::shared_ptr<InputSink> stdOutSink_;
     std::shared_ptr<InputSink> stdErrSink_;
 
     Task task_;
-    char statusBuffer_[sizeof(Task::ChildStatus)];
-    size_t statusRemaining_;
 };
 
 
