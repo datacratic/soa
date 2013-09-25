@@ -23,8 +23,9 @@ namespace
 
 struct syslog_init {
     syslog_init() {
-        ::openlog("RTBkit", LOG_PID, LOG_LOCAL7);
+        ::openlog("RTBkit", LOG_PID, LOG_USER);
     }
+
 } syslog_init_;
 
 } // anonymous namespace
@@ -38,7 +39,7 @@ void syslog_probe_sink(const ProbeCtx& ctx, const std::vector<Span>& vs)
     auto format = [&] (Span const& s) {
         std::ostringstream oss;
         oss << "{"
-        << "\"tid\":\"" << std::this_thread::get_id() << "\""
+        << "\"tid\":" << std::this_thread::get_id()
         << ",\"host\":\"" << hostname << "\""
         << ",\"kpid\":" << pid
         << ",\"kind\":\"" << get<0>(ctx) << "\""
@@ -52,6 +53,7 @@ void syslog_probe_sink(const ProbeCtx& ctx, const std::vector<Span>& vs)
         << "}";
         return oss.str();
     };
+    std::cerr << vs.size() << " spans" << std::endl;
     for (const auto& s: vs)
     {
         const auto str = format(s);

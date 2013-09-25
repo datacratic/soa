@@ -10,6 +10,7 @@
 #define BOOST_TEST_DYN_LINK
 #include <sstream>
 #include <string>
+#include <boost/lexical_cast.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include "jml/utils/file_functions.h"
@@ -142,14 +143,13 @@ BOOST_AUTO_TEST_CASE( test_default_description_parse_id_128_str )
     BOOST_CHECK_EQUAL(expected, result);
 }
 
-#if ENABLE_THIS_TEST
 
 namespace Datacratic {
 
 typedef map<string, string> StringDict;
 
-#if ENABLE_KEYCODEC
 /* SubClass1, where function overloads are used */
+
 struct SubClass1 : public std::string
 {
     explicit SubClass1(const std::string & other)
@@ -175,16 +175,18 @@ struct SubClass2 : public std::string
 typedef map<SubClass2, string> SubClass2Dict;
 
 template<typename T>
-struct KeyCodec<SubClass2, T>
+struct FreeFunctionKeyCodec<SubClass2, T>
 {
-    static SubClass2 decode(const std::string & s) { return SubClass2(s); }
+    static SubClass2 decode(const std::string & s, SubClass2 *) { return SubClass2(s); }
     static std::string encode(const SubClass2 & t) { return t; }
 };
-#endif
 
-/* StrClass, a class convertible from/to std::string */
+/* CompatClass, a class convertible from/to std::string */
 struct CompatClass
 {
+    CompatClass()
+    {}
+
     CompatClass(const std::string & value)
         : value_(value)
     {}
@@ -199,8 +201,21 @@ struct CompatClass
     { return value_ < other.value_; }
 };
 
-
 typedef map<CompatClass, string> CompatClassDict;
+
+string to_string(const CompatClass & k)
+{ return string(k); }
+
+}
+
+namespace boost {
+
+template<>
+CompatClass
+lexical_cast<CompatClass>(const string & s)
+{
+    return CompatClass(s);
+}
 
 }
 
@@ -219,7 +234,6 @@ BOOST_AUTO_TEST_CASE( test_value_description_map )
         BOOST_CHECK_EQUAL(dict["key2"], string("value2"));
     }
 
-#if ENABLE_KEYCODEC
     {
         SubClass1Dict dict;
 
@@ -235,7 +249,6 @@ BOOST_AUTO_TEST_CASE( test_value_description_map )
         BOOST_CHECK_EQUAL(dict[SubClass2("key1")], string("value"));
         BOOST_CHECK_EQUAL(dict[SubClass2("key2")], string("value2"));
     }
-#endif
 
     {
         CompatClassDict dict;
@@ -250,4 +263,56 @@ BOOST_AUTO_TEST_CASE( test_value_description_map )
 
 }
 
-#endif
+struct SomeTestStructure {
+    Id someId;
+    std::string someText;
+
+    SomeTestStructure(Id id = Id(0), std::string text = "nothing") : someId(id), someText(text) {
+    }
+
+    bool operator==(SomeTestStructure const & other) const {
+        return someId == other.someId && someText == other.someText;
+    }
+
+    friend std::ostream & operator<<(std::ostream & stream, SomeTestStructure const & data) {
+        return stream << "id=" << data.someId << " text=" << data.someText;
+    }
+};
+
+CREATE_STRUCTURE_DESCRIPTION(SomeTestStructure)
+
+SomeTestStructureDescription::
+SomeTestStructureDescription() {
+    addField("someId", &SomeTestStructure::someId, "");
+    addField("someText", &SomeTestStructure::someText, "");
+}
+
+BOOST_AUTO_TEST_CASE( test_structure_description )
+{
+    SomeTestStructure data(Id(42), "hello world");
+
+    // write the thing
+    using namespace Datacratic;
+    ValueDescription * desc = getDefaultDescription(&data);
+    std::stringstream stream;
+    StreamJsonPrintingContext context(stream);
+    desc->printJson(&data, context);
+
+    // inline in some other thing
+    std::string value = ML::format("{\"%s\":%s}", desc->typeName, stream.str());
+
+    // parse it back
+    SomeTestStructure result;
+    ML::Parse_Context source("test", value.c_str(), value.size());
+        expectJsonObject(source, [&](std::string key,
+                                     ML::Parse_Context & context) {
+            auto * desc = ValueDescription::get(key);
+            if(desc) {
+                StreamingJsonParsingContext json(context);
+                desc->parseJson(&result, json);
+            }
+        });
+
+    BOOST_CHECK_EQUAL(result, data);
+}
+
