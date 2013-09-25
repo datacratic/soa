@@ -495,13 +495,7 @@ runEventThread(int threadNum, int numThreads)
 {
     prctl(PR_SET_NAME,"EptCtrl",0,0,0);
 
-    bool debug = false;
-    //debug = name() == "Backchannel";
-    //debug = threadNum == 7;
-
     ML::Duty_Cycle_Timer duty;
-
-    Date lastCheck = Date::now();
 
     ML::atomic_inc(threadsActive_);
     futex_wake(threadsActive_);
@@ -515,109 +509,17 @@ runEventThread(int threadNum, int numThreads)
     Epoller::OnEvent afterSleep = [&] ()
         {
             duty.notifyAfterSleep();
+            totalSleepTime[threadNum] += duty.afterSleep - duty.beforeSleep;
         };
 
-
-    // Where does my timeslice start?
-    double timesliceUs = 1000.0 / numThreads;
-    int myStartUs = timesliceUs * threadNum;
-    int myEndUs   = timesliceUs * (threadNum + 1);
-
-    if (debug) {
-        static ML::Spinlock lock;
-        lock.acquire();
-        cerr << "threadNum = " << threadNum << " of " << name()
-             << " numThreads = " << numThreads
-             << " myStartUs = " << myStartUs
-             << " myEndUs = " << myEndUs
-             << endl;
-        lock.release();
-    }
-
-    bool forceInSlice = false;
-
-    while (!shutdown_) {
-
-        Date now = Date::now();
-        
-        if (now.secondsSince(lastCheck) > 1.0 && debug) {
-            ML::Duty_Cycle_Timer::Stats stats = duty.stats();
-            string msg = format("control thread for %s: "
-                                "events %lld sleeping %lld "
-                                "processing %lld duty %.2f%%",
-                                name().c_str(),
-                                (long long)stats.numWakeups,
-                                (long long)stats.usAsleep,
-                                (long long)stats.usAwake,
-                                stats.duty_cycle() * 100.0);
-            cerr << msg << flush;
-            duty.clear();
-            lastCheck = now;
-        }
-
-        int us = now.fractionalSeconds() * 1000000;
-        int fracms = us % 1000;  // fractional part of the millisecond
-        
-        if (debug && false) {
-            cerr << "now = " << now.print(6) << " us = " << us
-                 << " fracms = " << fracms << " myStartUs = "
-                 << myStartUs << " myEndUs = " << myEndUs
-                 << endl;
-        }
-
-        // Are we in our timeslice?
-        if (/* forceInSlice
-               || */(fracms >= myStartUs && fracms < myEndUs)) {
-            // Yes... then sleep in epoll_wait...
-            int usToWait = myEndUs - fracms;
-            if (usToWait < 0 || usToWait > timesliceUs)
-                usToWait = timesliceUs;
-
-            totalSleepTime[threadNum] += double(usToWait) / 1000000.0;
-            int numHandled = handleEvents(usToWait, 4, handleEvent,
-                                          beforeSleep, afterSleep);
-            if (debug && false)
-                cerr << "  in slice: handled " << numHandled << " events "
-                     << "for " << usToWait << " microseconds "
-                     << " taken " << Date::now().secondsSince(now) * 1000000
-                     << "us" << endl;
-            if (numHandled == -1) break;
-            forceInSlice = false;
-        }
-        else {
-            // No... try to handle something and then sleep if we don't
-            // find anything to do
-            int numHandled = handleEvents(0, 1, handleEvent,
-                                          beforeSleep, afterSleep);
-            if (debug && false)
-                cerr << "  out of slice: handled " << numHandled << " events"
-                     << endl;
-            if (numHandled == -1) break;
-            if (numHandled == 0) {
-                // Sleep until our timeslice
-                duty.notifyBeforeSleep();
-                int usToSleep = myStartUs - fracms;
-                if (usToSleep < 0)
-                    usToSleep += 1000;
-                ExcAssertGreaterEqual(usToSleep, 0);
-                if (debug && false)
-                    cerr << "sleeping for " << usToSleep << " micros" << endl;
-
-                double secToSleep = double(usToSleep) / 1000000.0;
-                totalSleepTime[threadNum] += secToSleep;
-
-                ML::sleep(secToSleep);
-                duty.notifyAfterSleep();
-                forceInSlice = true;
-
-                if (debug && false)
-                    cerr << " slept for "
-                         << Date::now().secondsSince(now) * 1000000
-                         << "us when " << usToSleep << " requested"
-                         << endl;
-            }
-        }
-    }
+    // Low latency polling loop which ensures that all polling threads are able
+    // to react as fast as possible to any incoming events. This scheme has the
+    // issue that it spends a significant (10%) amount of it's time contending
+    // for a spin lock within the epoll implementation. This can be solved by
+    // either backing-off when there are no events to process or handling more
+    // events at once.
+    while (!shutdown_)
+        handleEvents(0, 1, handleEvent, beforeSleep, afterSleep);
 
     cerr << "thread shutting down" << endl;
 
