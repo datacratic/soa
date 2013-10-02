@@ -16,6 +16,7 @@
 #include <deque>
 #include <boost/scoped_ptr.hpp>
 
+#include <atomic>
 
 namespace Datacratic {
 
@@ -74,8 +75,8 @@ struct CounterAggregator : public StatAggregator {
     virtual std::vector<StatReading> read(const std::string & prefix);
 
 private:
-    Date start;    //< Date at which we last cleared the counter
-    double total;  //< total since we last added it up
+    Date start;                 //< Date at which we last cleared the counter
+    std::atomic<double> total;  //< total since we last added it up
 
     std::deque<double> totalsBuffer; //< Totals for the last n reads.
 
@@ -115,7 +116,7 @@ struct GaugeAggregator : public StatAggregator {
 private:
     Verbosity verbosity;
     Date start;  //< Date at which we last cleared the counter
-    ML::distribution<float> * volatile values;  //< List of added values
+    std::atomic<ML::distribution<float> *> values;
 };
 
 

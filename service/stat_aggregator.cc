@@ -9,7 +9,6 @@
 #include "jml/arch/exception.h"
 #include "jml/arch/format.h"
 #include <iostream>
-#include "jml/arch/cmp_xchg.h"
 #include "jml/arch/atomic_ops.h"
 #include "jml/utils/floating_point.h"
 #include "jml/utils/smart_ptr_utils.h"
@@ -43,18 +42,16 @@ void
 CounterAggregator::
 record(float value)
 {
-    double oldval = total;
+    double oldval = total.load();
 
-    while (!ML::cmp_xchg(total, oldval, oldval + value));
+    while (total.compare_exchange_weak(oldval, oldval + value));
 }
 
 std::pair<double, Date>
 CounterAggregator::
 reset()
 {
-    double oldval = total;
-
-    while (!ML::cmp_xchg(total, oldval, 0.0));
+    double oldval = total.exchange(0.0);
 
     Date oldStart = start;
     start = Date::now();
@@ -92,7 +89,7 @@ GaugeAggregator::
 GaugeAggregator(Verbosity verbosity)
     : verbosity(verbosity), values(new ML::distribution<float>())
 {
-    values->reserve(100);
+    values.load()->reserve(100);
 }
 
 GaugeAggregator::
@@ -105,10 +102,11 @@ void
 GaugeAggregator::
 record(float value)
 {
-    ML::distribution<float> * current = values;
-    while ((current = values) == 0 || !cmp_xchg(values, current,
-                                     (ML::distribution<float>*)0));
-    
+    ML::distribution<float> * current = values.load();
+    while ((current = values.load()) == 0 ||
+           !values.compare_exchange_weak(current,
+                                         (ML::distribution<float>*)0));
+
     current->push_back(value);
 
     memory_barrier();
@@ -120,12 +118,13 @@ std::pair<ML::distribution<float> *, Date>
 GaugeAggregator::
 reset()
 {
-    ML::distribution<float> * current = values;
+    ML::distribution<float> * current = values.load();
     ML::distribution<float> * new_current = new ML::distribution<float>();
 
     // TODO: reserve memory for new_current
 
-    while ((current = values) == 0 || !cmp_xchg(values, current, new_current));
+    while ((current = values.load()) == 0 ||
+           !values.compare_exchange_weak(current, new_current));
 
     Date oldStart = start;
     start = Date::now();
