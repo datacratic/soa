@@ -28,7 +28,7 @@
 
 namespace {
 
-constexpr size_t MaxEntries = 1 << 4;
+constexpr size_t MaxEntries = 1 << 16;
 
 }
 
@@ -102,11 +102,13 @@ struct TracingRestEndpoint : public ServiceBase, public RestServiceEndpoint {
 
     TracingRestEndpoint(
             const std::shared_ptr<ServiceProxies> &proxies,
-            const std::string &name = "tracing.rest-endpoint"
+            const std::string &name = "tracing-service"
             )
         : ServiceBase(name, proxies), RestServiceEndpoint(getServices()->zmqContext)
         , index { 0 }
+        , full { false }
         {
+            registerServiceProvider(serviceName(), { "tracing" });
             init(getServices()->config, serviceName());
             installRoutes();
         }
@@ -149,6 +151,7 @@ struct TracingRestEndpoint : public ServiceBase, public RestServiceEndpoint {
 private:
     std::array<TraceEntry, MaxEntries> entries;
     uint64_t index;
+    bool full;
 
     RestRequestRouter restRouter;
 
@@ -207,6 +210,7 @@ private:
 
         Json::Value toJson() const {
             Json::Value value;
+            value["tag"] = tag;
             value["centile"] = centile;
             value["mean"] = mean;
             value["median"] = median;
@@ -232,9 +236,13 @@ private:
 
         Json::Value toJson() const {
             Json::Value value;
+            Json::Value data;
             std::for_each(begin(values), end(values), [&](const StatsEntry &entry) {
-                value[entry.tag] = entry.toJson();
+                value["kind"] = kind;
+                data.append(entry.toJson());
             });
+
+            value["data"] = data;
 
             return value;
         }
@@ -249,7 +257,7 @@ private:
         Json::Value toJson() const {
             Json::Value root;
             std::for_each(begin(), end(), [&](const ObjectStats &stats) {
-                root[stats.kind] = stats.toJson();
+                root.append(stats.toJson());
             });
 
             return root;
@@ -284,6 +292,8 @@ private:
         entries[index] = std::move(entry);
 
         index = (index + 1) & (MaxEntries - 1);
+        if (!index)
+            full = true;
 
         return true;
     }
@@ -293,7 +303,16 @@ private:
         /* Maps object type (kind) to tracing data */
         std::map<std::string, TracingData> data;
 
-        std::for_each(begin(entries), end(entries), [&](const TraceEntry &entry) {
+        /* If the ring buffer is not full, do not attempt to iterator over
+         * invalid entries 
+         */
+        auto end_it = begin(entries);
+        if (!full)
+            std::advance(end_it, index);
+        else
+            end_it = end(entries);
+
+        std::for_each(begin(entries), end_it, [&](const TraceEntry &entry) {
             auto &tracingData = data[entry.context.kind];
             auto &vec = tracingData[entry.span.tag];
             vec.push_back(entry);
@@ -337,16 +356,27 @@ int main(int argc, const char *argv[]) {
 
     options.add_options() 
         ("path,p", po::value<std::string>(&fifoPath),
-              "path of the fifo where logs are stored");
+              "path of the fifo where logs are stored")
+        ("help,h", "Display this help message");
 
     po::variables_map vm;
-    po::store(po::command_line_parser(argc, argv).options(options).run(), vm);
-    po::notify(vm);
+    try {
+        po::store(po::command_line_parser(argc, argv).options(options).run(), vm);
+        po::notify(vm);
+    } catch (const std::exception &e) {
+        std::cout << options << std::endl;
+        return 1;
+    }
+
+    if (vm.count("help")) {
+        std::cout << options << std::endl;
+        return 0;
+    }
 
     auto proxies = serviceArgs.makeServiceProxies();
-    auto serviceName = serviceArgs.serviceName("tracing");
+    auto serviceName = serviceArgs.serviceName("tracing-service");
     TracingRestEndpoint endpoint(proxies, serviceName);
-    endpoint.bindFixedHttpAddress("localhost", 3481);
+    endpoint.bindTcp(PortRange { 3481 }, PortRange { 3482 });
     endpoint.start();
     endpoint.run(fifoPath);
 
