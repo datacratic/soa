@@ -28,7 +28,7 @@ void displayResults(const Json::Value &data) {
         const auto &data = value["data"];
         for (const auto &span: data) {
             cout << string(4, ' ') << span["tag"].asString() << ":" << endl;
-            cout << string(8, ' ') << "99th centile: " << span["centile"].asDouble() 
+            cout << string(8, ' ') << "99th centile: " << span["centile_99"].asDouble() 
                                    << "ms" << endl;
             cout << string(8, ' ') << "median      : " << span["median"].asDouble() 
                                    << "ms" << endl;
