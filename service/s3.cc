@@ -5,6 +5,8 @@
     Code to talk to s3.
 */
 
+#include <cstdint>
+
 #include "soa/service/s3.h"
 #include "jml/utils/string_functions.h"
 #include "soa/types/date.h"
@@ -102,12 +104,17 @@ S3Api::SignedRequest::
 performSync() const
 {
     int numRetries = 7;
+    string body;
 
-    string savedBody;
+    bool hasRange = (rangeStart != UINT64_MAX);
 
     for (unsigned i = 0;  i < numRetries;  ++i) {
         string responseHeaders;
-        string body;
+
+        uint64_t start = body.size();
+        if (hasRange) {
+            start += rangeStart;
+        }
 
         try {
             responseHeaders.clear();
@@ -127,6 +134,12 @@ performSync() const
 
             curlHeaders.push_back("Date: " + params.date);
             curlHeaders.push_back("Authorization: " + auth);
+
+            if (start > 0 || hasRange) {
+                uint64_t end = start + params.expectedBytesToDownload - 1;
+                curlHeaders.emplace_back(move(ML::format("range: bytes=%zd-%zd",
+                                                         start, end)));
+            }
 
             //cerr << "getting " << uri << " " << params.headers << endl;
 
@@ -360,6 +373,7 @@ S3Api::
 get(const std::string & bucket,
     const std::string & resource,
     uint64_t expectedBytesToDownload,
+    uint64_t rangeStart,
     const std::string & subResource,
     const StrPairVector & headers,
     const StrPairVector & queryParams) const
@@ -372,6 +386,7 @@ get(const std::string & bucket,
     request.headers = headers;
     request.queryParams = queryParams;
     request.date = Date::now().printRfc2616();
+    request.rangeStart = rangeStart;
     request.expectedBytesToDownload = expectedBytesToDownload;
 
     return prepare(request).performSync();
@@ -421,6 +436,7 @@ put(const std::string & bucket,
 
     return prepare(request).performSync();
 }
+
 S3Api::Response
 S3Api::
 erase(const std::string & bucket,
@@ -473,7 +489,7 @@ S3Api::isMultiPartUploadInProgress(
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 8192, "uploads", {},
+    auto inProgressReq = get(bucket, "/", 8192, UINT64_MAX, "uploads", {},
                           { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -521,7 +537,7 @@ obtainMultiPartUpload(const std::string & bucket,
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 8192, "uploads", {},
+    auto inProgressReq = get(bucket, "/", 8192, UINT64_MAX, "uploads", {},
                           { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -564,7 +580,7 @@ obtainMultiPartUpload(const std::string & bucket,
         continue;
 
         // TODO: check metadata, etc
-        auto inProgressInfo = get(bucket, resource, 8192,
+        auto inProgressInfo = get(bucket, resource, 8192, UINT64_MAX,
                                   "uploadId=" + uploadId)
             .bodyXml();
 
@@ -700,7 +716,7 @@ upload(const char * data,
 
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
         auto existingResource
-            = get(bucket, "/", 8192, "", {},
+            = get(bucket, "/", 8192, UINT64_MAX, "", {},
                   { { "prefix", outputPrefix } })
             .bodyXml();
 
@@ -963,7 +979,7 @@ forEachObject(const std::string & bucket,
         if (marker != "")
             queryParams.push_back({"marker", marker});
 
-        auto listingResult = get(bucket, "/", 8192, "",
+        auto listingResult = get(bucket, "/", 8192, UINT64_MAX, "",
                                  {}, queryParams);
         auto listingResultXml = listingResult.bodyXml();
 
@@ -1067,7 +1083,7 @@ getObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
+    auto listingResult = get(bucket, "/", 8192, UINT64_MAX, "", {}, queryParams);
 
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -1105,7 +1121,8 @@ tryGetObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
+    auto listingResult = get(bucket, "/", 8192, UINT64_MAX,
+                             "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
         throw ML::Exception("error getting object request: %d",
@@ -1210,13 +1227,7 @@ download(const std::string & bucket,
             Part & part = parts[i];
             //cerr << "part " << i << " with " << part.size << " bytes" << endl;
 
-            StrPairVector headerParams;
-            headerParams.push_back({"range",
-                        ML::format("bytes=%zd-%zd",
-                                   part.offset,
-                                   part.offset + part.size - 1)});
-
-            auto partResult = get(bucket, "/" + object, part.size, "", headerParams, {});
+            auto partResult = get(bucket, "/" + object, part.size, part.offset);
             if (partResult.code_ != 206) {
                 cerr << "error getting part " << i << ": "
                      << partResult.bodyXmlStr() << endl;
@@ -1504,16 +1515,10 @@ struct StreamingDownloadSource {
                 futex_wake(writePartNumber);
 
                 // Download my part
-                S3Api::StrPairVector headerParams;
-                headerParams.push_back({"range",
-                            ML::format("bytes=%zd-%zd",
-                                       start, end - 1)});
-
                 //cerr << "downloading" << endl;
 
                 auto partResult
-                    = owner->get(bucket, "/" + object, end - start,
-                                 "", headerParams, {});
+                    = owner->get(bucket, "/" + object, end - start, start);
                 if (partResult.code_ != 206) {
                     cerr << "error getting part "
                          << partResult.bodyXmlStr() << endl;
@@ -2001,7 +2006,7 @@ forEachBucket(const OnBucket & onBucket) const
 
     //cerr << "forEachObject under " << prefix << endl;
 
-    auto listingResult = get("", "/", 8192, "");
+    auto listingResult = get("", "/", 8192);
     auto listingResultXml = listingResult.bodyXml();
 
     //listingResultXml->Print();

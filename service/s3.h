@@ -87,7 +87,7 @@ struct S3Api : public AwsApi {
     struct RequestParams {
 
         RequestParams()
-            : expectedBytesToDownload(0)
+            : rangeStart(UINT64_MAX), expectedBytesToDownload(0)
         {
         }
 
@@ -100,6 +100,7 @@ struct S3Api : public AwsApi {
         std::string contentType;
         std::string contentMd5;
         Content content;
+        int64_t rangeStart;
         uint64_t expectedBytesToDownload;
 
         StrPairVector headers;
@@ -209,6 +210,7 @@ struct S3Api : public AwsApi {
     Response get(const std::string & bucket,
                  const std::string & resource,
                  uint64_t expectedBytesToTransfer,
+                 uint64_t rangeStart = UINT64_MAX,
                  const std::string & subResource = "",
                  const StrPairVector & headers = StrPairVector(),
                  const StrPairVector & queryParams = StrPairVector()) const;
