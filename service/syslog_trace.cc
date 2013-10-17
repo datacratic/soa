@@ -33,7 +33,7 @@ constexpr size_t MaxEntries = 1 << 16;
 }
 
 // See Ring::add below for the reason of this assertion
-static_assert(!(MaxEntries & 1), "MaxEntries must be 2^M");
+static_assert(!(MaxEntries & (MaxEntries - 1)), "MaxEntries must be 2^M");
 
 using namespace Datacratic;
 
