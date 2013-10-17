@@ -32,6 +32,7 @@ constexpr size_t MaxEntries = 1 << 16;
 
 }
 
+// See Ring::add below for the reason of this assertion
 static_assert(!(MaxEntries & 1), "MaxEntries must be 2^M");
 
 using namespace Datacratic;
@@ -105,8 +106,6 @@ struct TracingRestEndpoint : public ServiceBase, public RestServiceEndpoint {
             const std::string &name = "tracing-service"
             )
         : ServiceBase(name, proxies), RestServiceEndpoint(getServices()->zmqContext)
-        , index { 0 }
-        , full { false }
         {
             registerServiceProvider(serviceName(), { "tracing" });
             init(getServices()->config, serviceName());
@@ -149,16 +148,60 @@ struct TracingRestEndpoint : public ServiceBase, public RestServiceEndpoint {
     }
 
 private:
-    std::array<TraceEntry, MaxEntries> entries;
-    uint64_t index;
-    bool full;
+    struct Ring {
+        Ring()
+           : index { 0 }
+           , full { false }
+        { }
+
+        typedef std::array<TraceEntry, MaxEntries> value_type;
+
+        void add(TraceEntry entry) {
+            entries[index] = std::move(entry);
+
+            /* Little optimization trick here. If we know that MaxEntries is a power
+             * of 2, we can replace the modulo operation to compute the ring buffer index
+             * with a bitwise mask.
+             *
+             * This is why MaxEntries must be a power of 2, hence the static assertion
+             * above
+             */
+            index = (index + 1) & (MaxEntries - 1);
+
+            if (!index)
+                full = true;
+            }
+
+        bool isFull() const {
+            return full;
+        }
+
+        value_type::const_iterator begin() const {
+            return std::begin(entries);
+        }
+
+        value_type::const_iterator end() const {
+            auto it = begin();
+            if (JML_LIKELY(full))
+                it = std::end(entries);
+            else
+                std::advance(it, index);
+
+            return it;
+        }
+
+    private:
+        uint64_t index;
+        bool full;
+        value_type entries;
+    } ring;
 
     RestRequestRouter restRouter;
 
     struct StatsEntry {
         StatsEntry(const std::string &tag, const std::vector<TraceEntry> &serie)
            : tag { tag }
-           , centile { 0.0 }
+           , centile_99 { 0.0 }
            , mean { 0.0 }
            , median { 0.0 }
            , serie_ { serie }
@@ -185,7 +228,7 @@ private:
             const auto size = serie_.size();
             const auto rank_99 = int { round(0.99 * (size - 1)) };
             const auto &entry_99 = serie_[rank_99];
-            centile =  duration(entry_99);
+            centile_99 =  duration(entry_99);
 
             auto acc = [this](double current, const TraceEntry &entry)
                       {
@@ -204,14 +247,14 @@ private:
         }    
 
         std::string tag;
-        double centile;
+        double centile_99;
         double mean;
         double median;
 
         Json::Value toJson() const {
             Json::Value value;
             value["tag"] = tag;
-            value["centile"] = centile;
+            value["centile_99"] = centile_99;
             value["mean"] = mean;
             value["median"] = median;
             return value;
@@ -289,11 +332,7 @@ private:
         }
 
         auto entry = TraceEntry::fromJson(root);
-        entries[index] = std::move(entry);
-
-        index = (index + 1) & (MaxEntries - 1);
-        if (!index)
-            full = true;
+        ring.add(std::move(entry));
 
         return true;
     }
@@ -303,16 +342,7 @@ private:
         /* Maps object type (kind) to tracing data */
         std::map<std::string, TracingData> data;
 
-        /* If the ring buffer is not full, do not attempt to iterator over
-         * invalid entries 
-         */
-        auto end_it = begin(entries);
-        if (!full)
-            std::advance(end_it, index);
-        else
-            end_it = end(entries);
-
-        std::for_each(begin(entries), end_it, [&](const TraceEntry &entry) {
+        std::for_each(std::begin(ring), std::end(ring), [&](const TraceEntry &entry) {
             auto &tracingData = data[entry.context.kind];
             auto &vec = tracingData[entry.span.tag];
             vec.push_back(entry);
