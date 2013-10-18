@@ -10,6 +10,7 @@
 #include <string>
 #include <sstream>
 #include <chrono>
+#include <mutex>
 
 #include "soa/jsoncpp/json.h"
 #include "soa/service/nprobe.h"
@@ -25,6 +26,7 @@
 #include <boost/program_options/variables_map.hpp>
 
 #include "soa/service/service_utils.h"
+#include "jml/arch/spinlock.h"
 
 namespace {
 
@@ -197,6 +199,10 @@ private:
     } ring;
 
     RestRequestRouter restRouter;
+    typedef ML::Spinlock Lock;
+    typedef std::lock_guard<Lock> Guard;
+
+    mutable Lock ringLock;
 
     struct StatsEntry {
         StatsEntry(const std::string &tag, const std::vector<TraceEntry> &serie)
@@ -332,7 +338,15 @@ private:
         }
 
         auto entry = TraceEntry::fromJson(root);
-        ring.add(std::move(entry));
+        /* We need a lock here because the ring might also be read by the 
+         * REST thread
+         *
+         * TODO: lock-free on write-side ?
+         */
+        {
+            Guard guard(ringLock);
+            ring.add(std::move(entry));
+        }
 
         return true;
     }
@@ -342,11 +356,14 @@ private:
         /* Maps object type (kind) to tracing data */
         std::map<std::string, TracingData> data;
 
-        std::for_each(std::begin(ring), std::end(ring), [&](const TraceEntry &entry) {
-            auto &tracingData = data[entry.context.kind];
-            auto &vec = tracingData[entry.span.tag];
-            vec.push_back(entry);
-        });
+        {
+            Guard guard(ringLock);
+            std::for_each(std::begin(ring), std::end(ring), [&](const TraceEntry &entry) {
+                auto &tracingData = data[entry.context.kind];
+                auto &vec = tracingData[entry.span.tag];
+                vec.push_back(entry);
+            });
+        }
 
         GlobalStats stats;
 
