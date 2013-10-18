@@ -21,6 +21,8 @@
 namespace Datacratic {
 
 
+const uint64_t uint64_max(0xffffffffffffffffLL);
+
 /*****************************************************************************/
 /* S3 API                                                                    */
 /*****************************************************************************/
@@ -87,7 +89,7 @@ struct S3Api : public AwsApi {
     struct RequestParams {
 
         RequestParams()
-            : rangeStart(UINT64_MAX), expectedBytesToDownload(0)
+            : rangeStart(uint64_max), expectedBytesToDownload(0)
         {
         }
 
@@ -210,7 +212,7 @@ struct S3Api : public AwsApi {
     Response get(const std::string & bucket,
                  const std::string & resource,
                  uint64_t expectedBytesToTransfer,
-                 uint64_t rangeStart = UINT64_MAX,
+                 uint64_t rangeStart = uint64_max,
                  const std::string & subResource = "",
                  const StrPairVector & headers = StrPairVector(),
                  const StrPairVector & queryParams = StrPairVector()) const;

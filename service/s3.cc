@@ -5,8 +5,6 @@
     Code to talk to s3.
 */
 
-#include <cstdint>
-
 #include "soa/service/s3.h"
 #include "jml/utils/string_functions.h"
 #include "soa/types/date.h"
@@ -106,7 +104,7 @@ performSync() const
     int numRetries = 7;
     string body;
 
-    bool hasRange = (rangeStart != UINT64_MAX);
+    bool hasRange = (rangeStart != uint64_max);
 
     for (unsigned i = 0;  i < numRetries;  ++i) {
         string responseHeaders;
@@ -489,7 +487,7 @@ S3Api::isMultiPartUploadInProgress(
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 8192, UINT64_MAX, "uploads", {},
+    auto inProgressReq = get(bucket, "/", 8192, uint64_max, "uploads", {},
                           { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -537,7 +535,7 @@ obtainMultiPartUpload(const std::string & bucket,
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 8192, UINT64_MAX, "uploads", {},
+    auto inProgressReq = get(bucket, "/", 8192, uint64_max, "uploads", {},
                           { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -580,7 +578,7 @@ obtainMultiPartUpload(const std::string & bucket,
         continue;
 
         // TODO: check metadata, etc
-        auto inProgressInfo = get(bucket, resource, 8192, UINT64_MAX,
+        auto inProgressInfo = get(bucket, resource, 8192, uint64_max,
                                   "uploadId=" + uploadId)
             .bodyXml();
 
@@ -716,7 +714,7 @@ upload(const char * data,
 
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
         auto existingResource
-            = get(bucket, "/", 8192, UINT64_MAX, "", {},
+            = get(bucket, "/", 8192, uint64_max, "", {},
                   { { "prefix", outputPrefix } })
             .bodyXml();
 
@@ -979,7 +977,7 @@ forEachObject(const std::string & bucket,
         if (marker != "")
             queryParams.push_back({"marker", marker});
 
-        auto listingResult = get(bucket, "/", 8192, UINT64_MAX, "",
+        auto listingResult = get(bucket, "/", 8192, uint64_max, "",
                                  {}, queryParams);
         auto listingResultXml = listingResult.bodyXml();
 
@@ -1083,7 +1081,7 @@ getObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, UINT64_MAX, "", {}, queryParams);
+    auto listingResult = get(bucket, "/", 8192, uint64_max, "", {}, queryParams);
 
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -1121,7 +1119,7 @@ tryGetObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, UINT64_MAX,
+    auto listingResult = get(bucket, "/", 8192, uint64_max,
                              "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
