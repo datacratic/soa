@@ -110,6 +110,7 @@ performSync() const
         string responseHeaders;
 
         uint64_t start = body.size();
+        uint64_t bytesToDownload = params.expectedBytesToDownload - body.size();
         if (hasRange) {
             start += rangeStart;
         }
@@ -134,14 +135,14 @@ performSync() const
             curlHeaders.push_back("Authorization: " + auth);
 
             if (start > 0 || hasRange) {
-                uint64_t end = start + params.expectedBytesToDownload - 1;
+                uint64_t end = start + bytesToDownload - 1;
                 curlHeaders.emplace_back(move(ML::format("range: bytes=%zd-%zd",
                                                          start, end)));
             }
 
             //cerr << "getting " << uri << " " << params.headers << endl;
 
-            uint64_t totalBytesToTransfer = params.expectedBytesToDownload
+            uint64_t totalBytesToTransfer = bytesToDownload
                 + params.content.size;
             double expectedTimeSeconds
                 = totalBytesToTransfer
