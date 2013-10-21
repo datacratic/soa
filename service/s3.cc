@@ -104,7 +104,7 @@ performSync() const
     int numRetries = 7;
     string body;
 
-    bool hasRange = (rangeStart != uint64_max);
+    bool hasRange = (params.rangeStart != uint64_max);
 
     for (unsigned i = 0;  i < numRetries;  ++i) {
         string responseHeaders;
@@ -112,7 +112,7 @@ performSync() const
         uint64_t start = body.size();
         uint64_t bytesToDownload = params.expectedBytesToDownload - body.size();
         if (hasRange) {
-            start += rangeStart;
+            start += params.rangeStart;
         }
 
         try {
@@ -136,6 +136,8 @@ performSync() const
 
             if (start > 0 || hasRange) {
                 uint64_t end = start + bytesToDownload - 1;
+                // cerr << "requesting range [" << start << ", " << end << "]"
+                //      << endl;
                 curlHeaders.emplace_back(move(ML::format("range: bytes=%zd-%zd",
                                                          start, end)));
             }
@@ -1224,7 +1226,8 @@ download(const std::string & bucket,
             if (failed) return;
 
             Part & part = parts[i];
-            //cerr << "part " << i << " with " << part.size << " bytes" << endl;
+            // cerr << "part " << i << " with " << part.size << " bytes"
+            //      << " and offset : " << part.offset << endl;
 
             auto partResult = get(bucket, "/" + object, part.size, part.offset);
             if (partResult.code_ != 206) {

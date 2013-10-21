@@ -191,7 +191,7 @@ struct S3Api : public AwsApi {
     };
 
     /** Signed request that can be executed. */
-    struct SignedRequest : public RequestParams {
+    struct SignedRequest {
         RequestParams params;
         std::string auth;
         std::string uri;
