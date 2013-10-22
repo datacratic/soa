@@ -106,7 +106,7 @@ spinup(int num_threads, bool synchronous)
 
     threadsActive_ = 0;
 
-    totalWorkTime.resize(num_threads, 0.0);
+    totalSleepTime.resize(num_threads, 0.0);
 
     for (unsigned i = 0;  i < num_threads;  ++i) {
         boost::thread * thread
@@ -504,68 +504,22 @@ runEventThread(int threadNum, int numThreads)
     Epoller::OnEvent beforeSleep = [&] ()
         {
             duty.notifyBeforeSleep();
-            totalWorkTime[threadNum] += duty.beforeSleep - duty.afterSleep;
         };
 
     Epoller::OnEvent afterSleep = [&] ()
         {
             duty.notifyAfterSleep();
+            totalSleepTime[threadNum] += duty.afterSleep - duty.beforeSleep;
         };
 
-    Date now = Date::now();
-    Date lastLoadCheck = now;
-    const double loadCheckFreq = 0.01;
-    double smoothedLoad = 0.0;
-    vector<double> lastLoadSample = totalWorkSeconds();
-
-    auto sampleLoad = [&] () {
-        vector<double> loadSample = totalWorkSeconds();
-        double elapsed = now - lastLoadCheck;
-
-        if (threadNum) {
-            unsigned i = threadNum - 1;
-            double load = (loadSample[i] - lastLoadSample[i]) / elapsed;
-            smoothedLoad = smoothedLoad * 0.9 + std::min(load, 1.0) * 0.1;
-            // cerr << format("[%d/%d] load: (%f - %f / %f) = %f\n",
-            //         threadNum, numThreads,
-            //         loadSample[i], lastLoadSample[i], elapsed, load);
-        }
-        else smoothedLoad = 1.0;
-
-        lastLoadSample = std::move(loadSample);
-        lastLoadCheck = now;
-        return smoothedLoad;
-    };
-
-    // cerr << format("[%d/%d] init\n", threadNum, numThreads);
-
-    while (!shutdown_) {
-
-        // Prevents time sampling (syscall) when there's still work to do.
-        if (handleEvents(0, 1, 0, handleEvent, beforeSleep, afterSleep) > 0)
-            continue;
-
-        now = Date::now();
-        if (now < lastLoadCheck.plusSeconds(loadCheckFreq)) {
-            unsigned sleepMs = ceil((now - lastLoadCheck) * 1000);
-            handleEvents(0, 1, sleepMs, handleEvent, beforeSleep, afterSleep);
-            continue;
-        }
-
-        double load = sampleLoad();
-        if (load > 0.4) continue;
-
-        // cerr << format("[%d/%d] stop=%f\n", threadNum, numThreads, load);
-
-        do {
-            beforeSleep();
-            sleep(loadCheckFreq);
-            afterSleep();
-            now = Date::now();
-        } while (!shutdown_ && (load = sampleLoad()) < 0.9);
-
-        // cerr << format("[%d/%d] start=%f\n", threadNum, numThreads, load);
-    }
+    // Low latency polling loop which ensures that all polling threads are able
+    // to react as fast as possible to any incoming events. This scheme has the
+    // issue that it spends a significant (10%) amount of it's time contending
+    // for a spin lock within the epoll implementation. This can be solved by
+    // either backing-off when there are no events to process or handling more
+    // events at once.
+    while (!shutdown_)
+        handleEvents(0, 1, handleEvent, beforeSleep, afterSleep);
 
     cerr << "thread shutting down" << endl;
 
