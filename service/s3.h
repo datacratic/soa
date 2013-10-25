@@ -85,11 +85,35 @@ struct S3Api : public AwsApi {
         std::string contentMd5;
     };
 
+    struct Range {
+        Range(uint64_t aSize)
+            : offset(0), size(aSize)
+        {}
+
+        Range(uint64_t aOffset, uint64_t aSize)
+            : offset(aOffset), size(aSize)
+        {}
+
+        uint64_t endPos()
+        { return (offset + size - 1); }
+
+        void adjust(size_t downloaded)
+        {
+            if (downloaded > size) {
+                throw ML::Exception("excessive adjustment size");
+            }
+            offset += downloaded;
+            size -= downloaded;
+        }
+
+        uint64_t offset;
+        uint64_t size;
+    };
+
     /** A set of parameters that specify a request. */
     struct RequestParams {
-
         RequestParams()
-            : rangeStart(uint64_max), expectedBytesToDownload(0)
+            : downloadRange(0)
         {
         }
 
@@ -102,8 +126,7 @@ struct S3Api : public AwsApi {
         std::string contentType;
         std::string contentMd5;
         Content content;
-        int64_t rangeStart;
-        uint64_t expectedBytesToDownload;
+        Range downloadRange;
 
         StrPairVector headers;
         StrPairVector queryParams;
@@ -211,8 +234,7 @@ struct S3Api : public AwsApi {
     /** Perform a GET request from end to end. */
     Response get(const std::string & bucket,
                  const std::string & resource,
-                 uint64_t expectedBytesToTransfer,
-                 uint64_t rangeStart = uint64_max,
+                 const Range & downloadRange,
                  const std::string & subResource = "",
                  const StrPairVector & headers = StrPairVector(),
                  const StrPairVector & queryParams = StrPairVector()) const;

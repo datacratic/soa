@@ -104,20 +104,18 @@ performSync() const
     int numRetries = 7;
     string body;
 
-    bool hasRange = (params.rangeStart != uint64_max);
+    Range currentRange = params.downloadRange;
+    bool useRange(false);
+    if (params.verb == "GET") {
+        useRange = true;
+    }
 
-    for (unsigned i = 0;  i < numRetries;  ++i) {
+    for (unsigned i = 0;  i < numRetries; ++i) {
         string responseHeaders;
-
-        uint64_t start = body.size();
-        uint64_t bytesToDownload = params.expectedBytesToDownload - body.size();
-        if (hasRange) {
-            start += params.rangeStart;
-        }
+        size_t received(0);
 
         try {
-            responseHeaders.clear();
-            body.clear();
+            JML_TRACE_EXCEPTIONS(false);
 
             auto connection = owner->proxy.getConnection();
             curlpp::Easy & myRequest = *connection;
@@ -134,26 +132,21 @@ performSync() const
             curlHeaders.push_back("Date: " + params.date);
             curlHeaders.push_back("Authorization: " + auth);
 
-            if (start > 0 || hasRange) {
-                uint64_t end = start + bytesToDownload - 1;
-                // cerr << "requesting range [" << start << ", " << end << "]"
-                //      << endl;
-                curlHeaders.emplace_back(move(ML::format("range: bytes=%zd-%zd",
-                                                         start, end)));
+            if (useRange) {
+                uint64_t end = currentRange.endPos();
+                string range = ML::format("range: bytes=%zd-%zd",
+                                          currentRange.offset, end);
+                ::fprintf(stderr, "%p: requesting %s\n", this, range.c_str());
+                curlHeaders.emplace_back(move(range));
             }
 
-            //cerr << "getting " << uri << " " << params.headers << endl;
+            cerr << "getting " << uri << " " << params.headers << endl;
 
-            uint64_t totalBytesToTransfer = bytesToDownload
-                + params.content.size;
             double expectedTimeSeconds
-                = totalBytesToTransfer
-                / 1000000.0
-                / bandwidthToServiceMbps;
+                = (currentRange.size / 1000000.0) / bandwidthToServiceMbps;
             int timeout = 15 + std::max<int>(30, expectedTimeSeconds * 6);
 
-#if 0
-            cerr << "totalBytesToTransfer = " << totalBytesToTransfer << endl;
+#if 1
             cerr << "expectedTimeSeconds = " << expectedTimeSeconds << endl;
             cerr << "timeout = " << timeout << endl;
 #endif
@@ -185,10 +178,11 @@ performSync() const
 
             auto onWriteData = [&] (char * data, size_t ofs1, size_t ofs2) -> size_t
                 {
-                    body.append(data, ofs1 * ofs2);
-                    return ofs1 * ofs2;
+                    size_t total = ofs1 * ofs2;
+                    received += total;
+                    body.append(data, total);
+                    return total;
                     //cerr << "called onWrite for " << ofs1 << " " << ofs2 << endl;
-                    return 0;
                 };
 
             auto onProgress = [&] (double p1, double p2, double p3, double p4) -> int
@@ -253,6 +247,10 @@ performSync() const
                 cerr << "response headers " << responseHeaders << endl;
                 cerr << "body is " << body << endl;
 
+                if (useRange) {
+                    currentRange.adjust(received);
+                }
+
                 ML::sleep(10);
                 continue;  // retry
             }
@@ -295,6 +293,10 @@ performSync() const
                 continue;
             }
 #endif
+
+            if (useRange) {
+                currentRange.adjust(received);
+            }
 
             if (i < numRetries)
                 cerr << "retrying" << endl;
@@ -373,8 +375,7 @@ S3Api::Response
 S3Api::
 get(const std::string & bucket,
     const std::string & resource,
-    uint64_t expectedBytesToDownload,
-    uint64_t rangeStart,
+    const Range & downloadRange,
     const std::string & subResource,
     const StrPairVector & headers,
     const StrPairVector & queryParams) const
@@ -387,8 +388,7 @@ get(const std::string & bucket,
     request.headers = headers;
     request.queryParams = queryParams;
     request.date = Date::now().printRfc2616();
-    request.rangeStart = rangeStart;
-    request.expectedBytesToDownload = expectedBytesToDownload;
+    request.downloadRange = downloadRange;
 
     return prepare(request).performSync();
 }
@@ -490,8 +490,8 @@ S3Api::isMultiPartUploadInProgress(
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 8192, uint64_max, "uploads", {},
-                          { { "prefix", outputPrefix } });
+    auto inProgressReq = get(bucket, "/", Range(0, 8192), "uploads", {},
+                             { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
 
@@ -538,8 +538,8 @@ obtainMultiPartUpload(const std::string & bucket,
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 8192, uint64_max, "uploads", {},
-                          { { "prefix", outputPrefix } });
+    auto inProgressReq = get(bucket, "/", Range(0, 8192), "uploads", {},
+                             { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
 
@@ -581,7 +581,7 @@ obtainMultiPartUpload(const std::string & bucket,
         continue;
 
         // TODO: check metadata, etc
-        auto inProgressInfo = get(bucket, resource, 8192, uint64_max,
+        auto inProgressInfo = get(bucket, resource, Range(0, 8192),
                                   "uploadId=" + uploadId)
             .bodyXml();
 
@@ -717,7 +717,7 @@ upload(const char * data,
 
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
         auto existingResource
-            = get(bucket, "/", 8192, uint64_max, "", {},
+            = get(bucket, "/", Range(0, 8192), "", {},
                   { { "prefix", outputPrefix } })
             .bodyXml();
 
@@ -980,7 +980,7 @@ forEachObject(const std::string & bucket,
         if (marker != "")
             queryParams.push_back({"marker", marker});
 
-        auto listingResult = get(bucket, "/", 8192, uint64_max, "",
+        auto listingResult = get(bucket, "/", Range(0, 8192), "",
                                  {}, queryParams);
         auto listingResultXml = listingResult.bodyXml();
 
@@ -1084,7 +1084,7 @@ getObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, uint64_max, "", {}, queryParams);
+    auto listingResult = get(bucket, "/", Range(0, 8192), "", {}, queryParams);
 
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -1122,7 +1122,7 @@ tryGetObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, uint64_max,
+    auto listingResult = get(bucket, "/", Range(0, 8192),
                              "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -1206,13 +1206,10 @@ download(const std::string & bucket,
 
     //cerr << "getting " << endOffset << " bytes" << endl;
 
-    vector<Part> parts;
+    vector<S3Api::Range> parts;
 
     for (uint64_t offset = 0;  offset < endOffset;  offset += chunkSize) {
-        Part part;
-        part.offset = offset;
-        part.size = std::min<ssize_t>(endOffset - offset, chunkSize);
-        parts.push_back(part);
+        parts.emplace_back(offset, std::min<ssize_t>(endOffset - offset, chunkSize));
     }
 
     //cerr << "getting in " << parts.size() << " parts" << endl;
@@ -1225,11 +1222,11 @@ download(const std::string & bucket,
         {
             if (failed) return;
 
-            Part & part = parts[i];
+            S3Api::Range & part = parts[i];
             // cerr << "part " << i << " with " << part.size << " bytes"
             //      << " and offset : " << part.offset << endl;
 
-            auto partResult = get(bucket, "/" + object, part.size, part.offset);
+            auto partResult = get(bucket, "/" + object, part);
             if (partResult.code_ != 206) {
                 cerr << "error getting part " << i << ": "
                      << partResult.bodyXmlStr() << endl;
@@ -1520,7 +1517,7 @@ struct StreamingDownloadSource {
                 //cerr << "downloading" << endl;
 
                 auto partResult
-                    = owner->get(bucket, "/" + object, end - start, start);
+                    = owner->get(bucket, "/" + object, S3Api::Range(start, end - start));
                 if (partResult.code_ != 206) {
                     cerr << "error getting part "
                          << partResult.bodyXmlStr() << endl;
@@ -2107,7 +2104,8 @@ void registerS3Bucket(const std::string & bucketName,
     info.api = std::make_shared<S3Api>(accessKeyId, accessKey,
                                        bandwidthToServiceMbps,
                                        protocol, serviceUri);
-    info.api->get("", "/" + bucketName + "/", 8192);//throws if !accessible
+    info.api->get("", "/" + bucketName + "/",
+                  S3Api::Range(0, 8192));//throws if !accessible
     s3Buckets[bucketName] = info;
 }
 
