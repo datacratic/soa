@@ -1122,8 +1122,7 @@ tryGetObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192,
-                             "", {}, queryParams);
+    auto listingResult = get(bucket, "/", 8192);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
         throw ML::Exception("error getting object request: %d",
@@ -1517,7 +1516,7 @@ struct StreamingDownloadSource {
                 //cerr << "downloading" << endl;
 
                 auto partResult
-                    = owner->get(bucket, "/" + object, S3Api::Range(start, end - start));
+                    = owner->get(bucket, "/" + object, end - start);
                 if (partResult.code_ != 206) {
                     cerr << "error getting part "
                          << partResult.bodyXmlStr() << endl;
@@ -2005,7 +2004,7 @@ forEachBucket(const OnBucket & onBucket) const
 
     //cerr << "forEachObject under " << prefix << endl;
 
-    auto listingResult = get("", "/", 8192);
+    auto listingResult = get("", "/", 8192, "");
     auto listingResultXml = listingResult.bodyXml();
 
     //listingResultXml->Print();
