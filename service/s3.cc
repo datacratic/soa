@@ -1122,7 +1122,7 @@ tryGetObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192);
+    auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
         throw ML::Exception("error getting object request: %d",
