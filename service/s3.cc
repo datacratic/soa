@@ -490,7 +490,7 @@ S3Api::isMultiPartUploadInProgress(
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", Range(0, 8192), "uploads", {},
+    auto inProgressReq = get(bucket, "/", 8192, "uploads", {},
                              { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -538,7 +538,7 @@ obtainMultiPartUpload(const std::string & bucket,
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", Range(0, 8192), "uploads", {},
+    auto inProgressReq = get(bucket, "/", 8192, "uploads", {},
                              { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -581,7 +581,7 @@ obtainMultiPartUpload(const std::string & bucket,
         continue;
 
         // TODO: check metadata, etc
-        auto inProgressInfo = get(bucket, resource, Range(0, 8192),
+        auto inProgressInfo = get(bucket, resource, 8192,
                                   "uploadId=" + uploadId)
             .bodyXml();
 
@@ -717,7 +717,7 @@ upload(const char * data,
 
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
         auto existingResource
-            = get(bucket, "/", Range(0, 8192), "", {},
+            = get(bucket, "/", 8192, "", {},
                   { { "prefix", outputPrefix } })
             .bodyXml();
 
@@ -980,7 +980,7 @@ forEachObject(const std::string & bucket,
         if (marker != "")
             queryParams.push_back({"marker", marker});
 
-        auto listingResult = get(bucket, "/", Range(0, 8192), "",
+        auto listingResult = get(bucket, "/", 8192, "",
                                  {}, queryParams);
         auto listingResultXml = listingResult.bodyXml();
 
@@ -1084,7 +1084,7 @@ getObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", Range(0, 8192), "", {}, queryParams);
+    auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
 
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -1122,7 +1122,7 @@ tryGetObjectInfo(const std::string & bucket,
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", Range(0, 8192),
+    auto listingResult = get(bucket, "/", 8192,
                              "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -2104,8 +2104,7 @@ void registerS3Bucket(const std::string & bucketName,
     info.api = std::make_shared<S3Api>(accessKeyId, accessKey,
                                        bandwidthToServiceMbps,
                                        protocol, serviceUri);
-    info.api->get("", "/" + bucketName + "/",
-                  S3Api::Range(0, 8192));//throws if !accessible
+    info.api->get("", "/" + bucketName + "/", 8192);//throws if !accessible
     s3Buckets[bucketName] = info;
 }
 
