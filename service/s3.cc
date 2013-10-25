@@ -1516,7 +1516,7 @@ struct StreamingDownloadSource {
                 //cerr << "downloading" << endl;
 
                 auto partResult
-                    = owner->get(bucket, "/" + object, end - start);
+                    = owner->get(bucket, "/" + object, Range(start, end - start));
                 if (partResult.code_ != 206) {
                     cerr << "error getting part "
                          << partResult.bodyXmlStr() << endl;
