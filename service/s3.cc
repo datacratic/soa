@@ -136,17 +136,17 @@ performSync() const
                 uint64_t end = currentRange.endPos();
                 string range = ML::format("range: bytes=%zd-%zd",
                                           currentRange.offset, end);
-                ::fprintf(stderr, "%p: requesting %s\n", this, range.c_str());
+                // ::fprintf(stderr, "%p: requesting %s\n", this, range.c_str());
                 curlHeaders.emplace_back(move(range));
             }
 
-            cerr << "getting " << uri << " " << params.headers << endl;
+            // cerr << "getting " << uri << " " << params.headers << endl;
 
             double expectedTimeSeconds
                 = (currentRange.size / 1000000.0) / bandwidthToServiceMbps;
             int timeout = 15 + std::max<int>(30, expectedTimeSeconds * 6);
 
-#if 1
+#if 0
             cerr << "expectedTimeSeconds = " << expectedTimeSeconds << endl;
             cerr << "timeout = " << timeout << endl;
 #endif
