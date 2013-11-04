@@ -108,7 +108,7 @@ struct ZookeeperConnection {
 
 
     ZookeeperConnection();
-    ~ZookeeperConnection() { close(); }
+    ~ZookeeperConnection();
 
     static std::string printEvent(int eventType);
 
