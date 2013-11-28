@@ -436,8 +436,14 @@ Json::Value from_js(const JSValue & val, Json::Value *)
                 v8::Handle<v8::String> key
                     = prop_names->Get(v8::Uint32::New(i))->ToString();
                 if (!objPtr->HasOwnProperty(key)) continue;
+
+                const auto & value = objPtr->Get(key);
+                if (value->IsUndefined()) {
+                    continue;
+                }
+
                 result[from_js(key, (string *)0)] =
-                        from_js(objPtr->Get(key), (Json::Value *)0);
+                       from_js(value, (Json::Value *)0);
             }
 
             return result;
