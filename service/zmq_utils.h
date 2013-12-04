@@ -219,6 +219,13 @@ inline bool sendMesg(zmq::socket_t & sock,
 {
     return sendMesg(sock, msg.rawString(), options);
 }
+
+inline bool sendMesg(zmq::socket_t & sock,
+                     const Utf32String & msg,
+                     int options = 0)
+{
+    return sendMesg(sock, msg.utf8String(), options);
+}
     
 inline bool sendMesg(zmq::socket_t & sock,
                      const char * msg,
