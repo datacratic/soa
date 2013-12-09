@@ -1021,6 +1021,27 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
 
 };
 
+/**
+ * \brief Registers a route handler and post-processor that return a JSON
+ * body.
+ *
+ * Then "pmf" handler function receives parameters from rest values, as
+ * configured. Its return value is then passed to the "transformResult"
+ * function as parameter, which is expected to return a valid json
+ * representation of that result. This pair of functions cannot set the http
+ * status code and content-type header. The former is set to 200 when no
+ * exception is thrown, and the latter is always set to "application/json".
+ *
+ * \param router a RestRequestRouter
+ * \param path the PathSpec with which the new route is associated
+ * \param filter the RequestFilter applied to the web method
+ * \param description a string describing the method
+ * \param resultDescription a string describing the handler output
+ * \param transformResult a  function converting the handler output as JSON
+ * \param pmf a pointer-to-member-function to the handler
+ * \param ptr an instance
+ * \param params a vararg describing the arguments to the handler method
+ */
 template<typename Return, typename Obj, typename... Args, typename Ptr,
          typename TransformResult,
          typename... Params>
@@ -1081,6 +1102,25 @@ addRouteSyncReturn(RestRequestRouter & router,
     router.addRoute(path, filter, description, cb, help);
 }
 
+/**
+ * \brief Registers a route handler and post-processor that return a statuc
+ * code and a JSON body.
+ *
+ * The "pmf" handler function receives parameters from rest values, as
+ * configured, and returns a pair where the first member is an integer
+ * representing the http status code and the second member the body of the
+ * response. The returned content-type is always "application/json".
+ *
+ * \param router a RestRequestRouter
+ * \param path the PathSpec with which the new route is associated
+ * \param filter the RequestFilter applied to the web method
+ * \param description a string describing the method
+ * \param resultDescription a string pair describing the handler
+ *                          output
+ * \param pmf a pointer-to-member-function to the handler
+ * \param ptr an instance
+ * \param params a vararg describing the arguments to the handler method
+ */
 template<typename Return, typename Obj, typename... Args, typename Ptr,
          typename... Params>
 void
