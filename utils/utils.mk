@@ -46,4 +46,3 @@ $(eval $(call library,test_utils,$(LIB_TEST_UTILS_SOURCES),$(LIB_TEST_UTILS_LINK
 $(eval $(call library,variadic_hash,variadic_hash.cc,cityhash))
 
 $(eval $(call include_sub_make,testing))
-
