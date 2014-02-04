@@ -174,7 +174,7 @@ struct RcuProtected {
         }
     }
     
-    bool cmp_xchg(RcuLocked<T> & current, std::auto_ptr<T> & newValue,
+    bool cmp_xchg(RcuLocked<T> & current, std::unique_ptr<T> & newValue,
                   bool defer = true)
     {
         T * currentVal = current.ptr;

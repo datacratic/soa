@@ -73,7 +73,7 @@ struct LeveldbPendingPersistence : public PendingPersistence {
         options.snapshot = snapshot;
 
         // Now iterate over everything in the database
-        std::auto_ptr<leveldb::Iterator> it
+        std::unique_ptr<leveldb::Iterator> it
             (db->NewIterator(options));
         it->SeekToFirst();
         if (!it->status().ok()) {
@@ -149,7 +149,7 @@ struct LeveldbPendingPersistence : public PendingPersistence {
         options.verify_checksums = true;
 
         // Now iterate over everything in the database
-        std::auto_ptr<leveldb::Iterator> it
+        std::unique_ptr<leveldb::Iterator> it
             (db->NewIterator(options));
 
         it->SeekToFirst();

@@ -386,7 +386,7 @@ std::string sharedPtrToMessage(std::shared_ptr<T> ptr)
 {
     static const int mypid = getpid();
 
-    std::auto_ptr<std::shared_ptr<T> > ptrToTransfer
+    std::unique_ptr<std::shared_ptr<T> > ptrToTransfer
         (new std::shared_ptr<T>(ptr));
     
     std::string ptrMsg
@@ -418,7 +418,7 @@ sharedPtrFromMessage(const std::string & message)
         throw ML::Exception("wrong name for type info: %s vs %s",
                             name, typeid(T).name());
 
-    std::auto_ptr<std::shared_ptr<T> > ptrHolder(ptr);
+    std::unique_ptr<std::shared_ptr<T> > ptrHolder(ptr);
     return *ptr;
 }
 
