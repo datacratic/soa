@@ -1,4 +1,4 @@
-/**s3.cc
+/** s3.cc
     Jeremy Barnes, 3 July 2012
     Copyright (c) 2012 Datacratic.  All rights reserved.
 
