@@ -1354,4 +1354,29 @@ struct DefaultDescription<List<T> >
     }
 };
 
+
+/* This class template enables the handling of null for any corresponding
+ * target type, by specifying a default value. */
+template<typename T, typename Parent = DefaultDescription<T> >
+struct NullableValueDescription : public Parent {
+    NullableValueDescription(T nullValue)
+        : nullValue_(nullValue)
+    {
+    }
+
+    virtual void parseJsonTyped(T * val, JsonParsingContext & context)
+        const
+    {
+        if (context.isNull()) {
+            context.expectNull();
+            *val = nullValue_;
+        }
+        else {
+            Parent::parseJsonTyped(val, context);
+        }
+    }
+
+    T nullValue_;
+};
+
 } // namespace Datacratic
