@@ -977,7 +977,7 @@ getDefaultDescription(Enum *,
     return new TaggedEnumDescription<Enum>();
 }
 
-typedef Utf8String CSList;  // comma-separated list
+typedef UtfString CSList;  // comma-separated list
 
 template<typename T>
 struct List: public ML::compact_vector<T, 3> {
