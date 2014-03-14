@@ -14,6 +14,8 @@
 #include <set>
 #include "jml/arch/exception.h"
 #include "jml/arch/demangle.h"
+#include "jml/arch/demangle.h"
+#include "jml/utils/exc_assert.h"
 #include "jml/utils/filter_streams.h"
 #include "jml/utils/smart_ptr_utils.h"
 #include "json_parsing.h"
@@ -975,6 +977,16 @@ struct EnumDescription: public ValueDescriptionT<Enum> {
         if (!parse.insert(make_pair(name, value)).second)
             throw ML::Exception("double added name to enum");
         print.insert(make_pair(value, name));
+    }
+
+    void addValue(const std::string & name, Enum value,
+                  const std::string & description)
+    {
+        if (!parse.insert(make_pair(name, value)).second)
+            throw ML::Exception("double added name to enum");
+        print.insert(make_pair(value, name));
+
+        // TODO: description
     }
 
     std::unordered_map<std::string, Enum> parse;
