@@ -186,6 +186,11 @@ struct RcuProtected {
             }
         }
     }
+
+    std::unique_ptr<T> replaceCustomCleanup(T * newVal)
+    {
+        return std::unique_ptr<T>(ML::atomic_xchg(val, newVal));
+    }
     
     bool cmp_xchg(RcuLocked<T> & current, std::auto_ptr<T> & newValue,
                   bool defer = true,
