@@ -138,6 +138,16 @@ struct ValueDescription {
         throw ML::Exception("type is not an array");
     }
 
+    /** Return the value description for the nth array element.  This is
+        necessary for tuple types, which don't have the same type for each
+        element.
+    */
+    virtual const ValueDescription &
+    getArrayElementDescription(const void * val, uint32_t element)
+    {
+        return contained();
+    }
+
     virtual void setArrayLength(void * val, size_t newLength) const
     {
         throw ML::Exception("type is not an array");
@@ -557,6 +567,41 @@ getDefaultDescriptionShared(T * = 0)
 
     return cast;
 }
+
+
+template<typename T, typename Enable = void>
+struct GetDefaultDescriptionMaybe {
+    static std::shared_ptr<const ValueDescription> get()
+    {
+        return nullptr;
+    }
+};
+
+template<typename T>
+struct GetDefaultDescriptionMaybe<T, decltype(getDefaultDescription((T *)0))> {
+    static std::shared_ptr<const ValueDescription> get()
+    {
+        return getDefaultDescriptionShared((T *)0);
+    }
+};
+
+/** Return the default description for the given type if it exists, or
+    otherwise return a null pointer.
+*/
+    
+template<typename T>
+inline std::shared_ptr<const ValueDescription>
+maybeGetDefaultDescriptionShared(T * = 0)
+{
+    auto result = GetDefaultDescriptionMaybe<T>::get();
+    if (!result) {
+        // Look to see if it's registered in the registry so that we can
+        // get it
+        result = ValueDescription::getType<T>();
+    }
+    return result;
+}
+
 
 /*****************************************************************************/
 /* VALUE DESCRIPTION CONCRETE IMPL                                           */
