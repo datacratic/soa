@@ -152,7 +152,7 @@ shutdown()
 
     //cerr << "shutting down socket monitor at " << this << endl;
     
-    connectedUri.clear();
+    disconnect();
     std::unique_lock<Lock> guard(lock);
     monitorEndpoint.reset();
 
@@ -167,6 +167,7 @@ disconnect()
     std::unique_lock<Lock> guard(lock);
     if (monitorEndpoint)
         monitorEndpoint->tryDisconnect(connectedUri.c_str());
+    connectedUri.clear();
 }
 
 void
