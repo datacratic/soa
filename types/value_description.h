@@ -112,6 +112,8 @@ struct ValueDescription {
     virtual void copyValue(const void * from, void * to) const = 0;
     virtual void moveValue(void * from, void * to) const = 0;
     virtual void swapValues(void * from, void * to) const = 0;
+    virtual void * constructDefault() const = 0;
+    virtual void destroy(void *) const = 0;
     
     virtual void * optionalMakeValue(void * val) const
     {
@@ -413,6 +415,16 @@ struct ValueDescriptionT : public ValueDescription {
         std::swap(*from2, *to2);
     }
 
+    virtual void * constructDefault() const
+    {
+        return constructDefault(typename Datacratic::is_default_constructible<T>::type());
+    }
+
+    virtual void destroy(void * val) const
+    {
+        delete (T*)val;
+    }
+
     virtual void set(
             void* obj, void* value, const ValueDescription* valueDesc) const
     {
@@ -467,6 +479,18 @@ private:
         throw ML::Exception("type is not move assignable");
     }
 
+    // Template parameter so not instantiated for types that are not
+    // default constructible
+    template<typename X>
+    void * constructDefault(X) const
+    {
+        return new T();
+    }
+
+    void * constructDefault(std::false_type) const
+    {
+        throw ML::Exception("type is not default constructible");
+    }
 };
 
 /** Basic function to implement getting a default description for a type.
