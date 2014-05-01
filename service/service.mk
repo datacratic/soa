@@ -46,6 +46,7 @@ LIBSERVICES_SOURCES := \
 	rest_request_router.cc \
 	runner.cc \
 	sink.cc \
+	tcp_socket.cc \
 	zookeeper.cc \
 	http_client.cc \
 	http_rest_proxy.cc \
