@@ -21,7 +21,7 @@ using namespace Datacratic;
 /* helpers functions used in tests */
 namespace {
 
-typedef tuple<HttpClientError, int, string> ClientResponse;
+typedef tuple<int, int, string> ClientResponse;
 
 /* sync request helpers */
 ClientResponse
@@ -34,7 +34,7 @@ doGetRequest(MessageLoop & loop,
 
     int done(false);
     auto onResponse = [&] (const HttpRequest & rq,
-                           HttpClientError error,
+                           int error,
                            int status,
                            string && headers,
                            string && body) {
@@ -42,7 +42,7 @@ doGetRequest(MessageLoop & loop,
         code = status;
         string & body_ = get<2>(response);
         body_ = move(body);
-        HttpClientError & errorCode = get<0>(response);
+        int & errorCode = get<0>(response);
         errorCode = error;
         done = true;
         ML::futex_wake(done);
@@ -80,7 +80,7 @@ doUploadRequest(MessageLoop & loop,
     int done(false);
 
     auto onResponse = [&] (const HttpRequest & rq,
-                           HttpClientError error,
+                           int error,
                            int status,
                            string && headers,
                            string && body) {
@@ -88,7 +88,7 @@ doUploadRequest(MessageLoop & loop,
         code = status;
         string & body_ = get<2>(response);
         body_ = move(body);
-        HttpClientError & errorCode = get<0>(response);
+        int & errorCode = get<0>(response);
         errorCode = error;
         done = true;
         ML::futex_wake(done);
@@ -98,7 +98,7 @@ doUploadRequest(MessageLoop & loop,
     loop.addSource("httpClient", client);
     client->waitConnectionState(AsyncEventSource::CONNECTED);
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
-    HttpRequest::Content content(body, type);
+    MimeContent content(body, type);
     if (isPut) {
         client->put(resource, cbs, content);
     }
@@ -119,6 +119,113 @@ doUploadRequest(MessageLoop & loop,
 
 }
 
+#if 1
+BOOST_AUTO_TEST_CASE( http_response_parser_test )
+{
+    string statusLine;
+    vector<string> headers;
+    string body;
+    bool done(false);
+
+    auto clearResult = [&] () {
+        statusLine.clear();
+        headers.clear();
+        body.clear();
+        done = true;
+    };
+
+    HttpResponseParser parser;
+    parser.onResponseStart = [&] (const string & httpVersion, int code) {
+        cerr << "response start\n";
+        statusLine = httpVersion + "/" + to_string(code);
+    };
+    parser.onHeader = [&] (const char * data, size_t size) {
+        // cerr << "header: " + string(data, size) + "\n";
+        headers.emplace_back(data, size);
+    };
+    parser.onData = [&] (const char * data, size_t size) {
+        // cerr << "data\n";
+        body.append(data, size);
+    };
+    parser.onDone = [&] () {
+        done = true;
+    };
+
+    auto checkTrow = [&] (const string & data) {
+        BOOST_CHECK_THROW(parser.feed(data.c_str(), data.size()),
+                          ML::Exception);
+    };
+
+    /* status line */
+    parser.feed("HTTP/1.");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("1 200 Th");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("is is ");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("some blabla\r");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("\n");
+    BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/200");
+
+    /* headers */
+    parser.feed("Head");
+    BOOST_CHECK_EQUAL(headers.size(), 0);
+    parser.feed("er1: value1\r\nHeader2: value2");
+    BOOST_CHECK_EQUAL(headers.size(), 1);
+    BOOST_CHECK_EQUAL(headers[0], "Header1: value1");
+    parser.feed("\r");
+    BOOST_CHECK_EQUAL(headers.size(), 1);
+    parser.feed("\n");
+    BOOST_CHECK_EQUAL(headers.size(), 2);
+    BOOST_CHECK_EQUAL(headers[1], "Header2: value2");
+    parser.feed("");
+    BOOST_CHECK_EQUAL(headers.size(), 2);
+    parser.feed("He");
+    BOOST_CHECK_EQUAL(headers.size(), 2);
+    parser.feed("ad");
+    BOOST_CHECK_EQUAL(headers.size(), 2);
+    parser.feed("er3: Val3\r\n");
+    BOOST_CHECK_EQUAL(headers.size(), 3);
+    BOOST_CHECK_EQUAL(headers[2], "Header3: Val3");
+    parser.feed("Content-Length: 10\r\n\r");
+    BOOST_CHECK_EQUAL(headers.size(), 4);
+    BOOST_CHECK_EQUAL(headers[3], "Content-Length: 10");
+    BOOST_CHECK_EQUAL(parser.remainingBody(), 10);
+    parser.feed("\n");
+
+    /* body */
+    parser.feed("0123");
+    parser.feed("456");
+    parser.feed("789");
+    BOOST_CHECK_EQUAL(body, "0123456789");
+    BOOST_CHECK_EQUAL(done, true);
+
+    clearResult();
+
+    /* one full response and a partial one without body */
+    parser.feed("HTTP/1.1 204 No content\r\n"
+                "MyHeader: my value1\r\n\r\nHTTP");
+
+    BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/204");
+    BOOST_CHECK_EQUAL(headers.size(), 1);
+    BOOST_CHECK_EQUAL(headers[0], "MyHeader: my value1");
+    BOOST_CHECK_EQUAL(body, "");
+    BOOST_CHECK_EQUAL(done, true);
+    BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
+
+    clearResult();
+
+    parser.feed("/1.1 666 The number of the beast\r\n"
+                "Header: value\r\n\r\n");
+    BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/666");
+    BOOST_CHECK_EQUAL(headers.size(), 1);
+    BOOST_CHECK_EQUAL(headers[0], "Header: value");
+    BOOST_CHECK_EQUAL(body, "");
+    BOOST_CHECK_EQUAL(done, true);
+    BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
+}
+#endif
 
 #if 1
 BOOST_AUTO_TEST_CASE( test_http_client_get )
@@ -128,6 +235,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     auto proxies = make_shared<ServiceProxies>();
     HttpGetService service(proxies);
 
+    sleep (1);
+
     service.addResponse("GET", "/coucou", 200, "coucou");
     service.start();
 
@@ -136,7 +245,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
 
     service.waitListening();
 
-#if 0
+#if 1
     /* FIXME: this test does not work because the Datacratic router silently
      * either drops packets to unreachable host or the arp timeout is very
      * high */
@@ -145,20 +254,20 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://123.234.12.23");
         auto resp = doGetRequest(loop, baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
-                          HttpClientError::COULD_NOT_CONNECT);
+                          ConnectionResult::COULD_NOT_CONNECT);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
     }
 #endif
 
     /* FIXME: this test does not work because the Datacratic name service
      * always returns something */
-#if 0
+#if 1
     /* request to bad hostname */
     {
         string baseUrl("http://somewhere.lost");
         auto resp = doGetRequest(loop, baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
-                          HttpClientError::HOST_NOT_FOUND);
+                          ConnectionResult::HOST_UNKNOWN);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
     }
 #endif
@@ -168,7 +277,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
         auto resp = doGetRequest(loop, baseUrl, "/timeout", {}, 1);
         BOOST_CHECK_EQUAL(get<0>(resp),
-                          HttpClientError::TIMEOUT);
+                          ConnectionResult::TIMEOUT);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
     }
 
@@ -177,7 +286,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
         auto resp = doGetRequest(loop, baseUrl, "/nothing");
-        BOOST_CHECK_EQUAL(get<0>(resp), HttpClientError::NONE);
+        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
         BOOST_CHECK_EQUAL(get<1>(resp), 404);
     }
 
@@ -186,7 +295,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
         auto resp = doGetRequest(loop, baseUrl, "/coucou");
-        BOOST_CHECK_EQUAL(get<0>(resp), HttpClientError::NONE);
+        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
         BOOST_CHECK_EQUAL(get<1>(resp), 200);
         BOOST_CHECK_EQUAL(get<2>(resp), "coucou");
     }
@@ -215,6 +324,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_post )
     HttpUploadService service(proxies);
     service.start();
 
+    sleep (1);
+
     MessageLoop loop;
     loop.start();
 
@@ -224,7 +335,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_post )
                        + to_string(service.port()));
         auto resp = doUploadRequest(loop, false, baseUrl, "/post-test",
                                     "post body", "application/x-nothing");
-        BOOST_CHECK_EQUAL(get<0>(resp), HttpClientError::NONE);
+        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
         BOOST_CHECK_EQUAL(get<1>(resp), 200);
         Json::Value jsonBody = Json::parse(get<2>(resp));
         BOOST_CHECK_EQUAL(jsonBody["verb"], "POST");
@@ -243,6 +354,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     HttpUploadService service(proxies);
     service.start();
 
+    sleep (1);
+
     MessageLoop loop;
     loop.start();
 
@@ -254,7 +367,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     }
     auto resp = doUploadRequest(loop, true, baseUrl, "/put-test",
                                 bigBody, "application/x-nothing");
-    BOOST_CHECK_EQUAL(get<0>(resp), HttpClientError::NONE);
+    BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
     BOOST_CHECK_EQUAL(get<1>(resp), 200);
     Json::Value jsonBody = Json::parse(get<2>(resp));
     BOOST_CHECK_EQUAL(jsonBody["verb"], "PUT");
@@ -291,16 +404,16 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
     int numResponses(0);
 
     auto onDone = [&] (const HttpRequest & rq,
-                       HttpClientError errorCode, int status,
+                       int errorCode, int status,
                        string && headers, string && body) {
-        // cerr << ("* onResponse " + to_string(numResponses)
+        // cerr << "* onResponse " + to_string(numResponses) + "\n";
         //          + ": " + to_string(get<1>(resp))
         //          + "\n\n\n");
         // cerr << "    body =\n/" + get<2>(resp) + "/\n";
         numResponses++;
-        // if ((numResponses & 0xff) == 0 || numResponses > 9980) {
-        //     ::fprintf(stderr, "responses: %d\n", numResponses);
-        // }
+        if ((numResponses & 0xff) == 0 || numResponses > 9980) {
+            ::fprintf(stderr, "responses: %d\n", numResponses);
+        }
         if (numResponses == numReqs) {
             ML::futex_wake(numResponses);
         }
@@ -326,67 +439,10 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
         ML::futex_wait(numResponses, old);
     }
 
+    cerr << " disconnecting client\n";
     loop.removeSource(client.get());
+    cerr << " removed source\n";
     client->waitConnectionState(AsyncEventSource::DISCONNECTED);
-}
-#endif
-
-#if 1
-/* Ensure that the move constructor and assignment operator behave
-   reasonably well. */
-BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
-{
-    cerr << "move_constructor\n";
-    ML::Watchdog watchdog(30);
-    auto proxies = make_shared<ServiceProxies>();
-
-    HttpGetService service(proxies);
-    service.addResponse("GET", "/", 200, "coucou");
-    service.start();
-    service.waitListening();
-
-    MessageLoop loop;
-    loop.start();
-
-    string baseUrl("http://127.0.0.1:"
-                   + to_string(service.port()));
-
-    auto doGet = [&] (HttpClient & getClient) {
-        loop.addSource("client", getClient);
-        getClient.waitConnectionState(AsyncEventSource::CONNECTED);
-
-        int done(false);
-
-        auto onDone = [&] (const HttpRequest & rq,
-                           HttpClientError errorCode, int status,
-                           string && headers, string && body) {
-            done = true;
-            ML::futex_wake(done);
-        };
-        auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
-
-        getClient.get("/", cbs);
-        while (!done) {
-            int old = done;
-            ML::futex_wait(done, old);
-        }
-
-        loop.removeSource(&getClient);
-        getClient.waitConnectionState(AsyncEventSource::DISCONNECTED);
-    };
-
-    /* move constructor */
-    cerr << "testing move constructor\n";
-    auto makeClient = [&] () {
-        return HttpClient(baseUrl, 1);
-    };
-    HttpClient client1(move(makeClient()));
-    doGet(client1);
-
-    /* move assignment operator */
-    cerr << "testing move assignment op.\n";
-    HttpClient client2("notp://nowhere", 1);
-    client2 = move(client1);
-    doGet(client2);
+    cerr << " done\n";
 }
 #endif

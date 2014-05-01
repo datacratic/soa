@@ -37,7 +37,7 @@ AsyncModelBench(const string & baseUrl, int maxReqs, int concurrency,
     auto client = make_shared<HttpClient>(baseUrl, concurrency);
     loop.addSource("httpClient", client);
 
-    auto onDone = [&] (const HttpRequest & rq, HttpClientError errorCode_) {
+    auto onDone = [&] (const HttpRequest & rq, int errorCode_) {
         numResponses++;
         if (numResponses == numReqs) {
             ML::futex_wake(numResponses);

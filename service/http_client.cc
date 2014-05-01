@@ -1,19 +1,16 @@
 #include <errno.h>
 #include <poll.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
-
-#include <curlpp/cURLpp.hpp>
-#include <curlpp/Easy.hpp>
-#include <curlpp/Options.hpp>
-#include <curlpp/Info.hpp>
-#include <curlpp/Infos.hpp>
 
 #include "jml/arch/cmp_xchg.h"
 #include "jml/arch/timers.h"
 #include "jml/arch/exception.h"
 #include "jml/utils/string_functions.h"
 
+#include "soa/types/url.h"
 #include "soa/service/message_loop.h"
 #include "soa/service/http_header.h"
 
@@ -23,52 +20,67 @@
 using namespace std;
 using namespace Datacratic;
 
-namespace curlopt = curlpp::options;
-
 namespace {
 
-HttpClientError
-translateError(CURLcode curlError)
+int
+antoi(const char * start, const char * end)
 {
-    HttpClientError error;
+    const char * ptr = start;
+    int result(0);
 
-    switch (curlError) {
-    case CURLE_OK:
-        error = HttpClientError::NONE;
-        break;
-    case CURLE_OPERATION_TIMEDOUT:
-        error = HttpClientError::TIMEOUT;
-        break;
-    case CURLE_COULDNT_RESOLVE_HOST:
-        error = HttpClientError::HOST_NOT_FOUND;
-        break;
-    case CURLE_COULDNT_CONNECT:
-        error = HttpClientError::COULD_NOT_CONNECT;
-        break;
-    default:
-        ::fprintf(stderr, "returning 'unknown' for code %d\n", curlError);
-        error = HttpClientError::UNKNOWN;
+    while (ptr < end) {
+        if (isdigit(*ptr)) {
+            result = (result * 10) + int(*ptr) - 48;
+            ptr++;
+        }
+        else {
+            throw ML::Exception("expected digit");
+        }
     }
 
-    return error;
+    return result;
 }
 
 }
 
 
-/* HTTPCLIENTERROR */
+/* HTTP REQUEST */
 
-std::ostream &
-Datacratic::
-operator << (std::ostream & stream, HttpClientError error)
+void
+HttpRequest::
+makeRequestStr()
+    noexcept
 {
-    return stream << to_string(int(error));
-}
+    Url url(url_);
+    requestStr_.reserve(10000);
+    requestStr_ = verb_ + " " + url.path();
+    string query = url.query();
+    if (query.size() > 0) {
+        requestStr_ += "?" + query;
+    }
+    requestStr_ += " HTTP/1.1\r\n";
 
+    requestStr_ += "Host: "+ url.host();
+    int port = url.port();
+    if (port > 0) {
+        requestStr_ += ":" + to_string(port) + "\r\n";
+    }
+    requestStr_ += "Accept: */*\r\n";
+    for (const auto & header: headers_) {
+        requestStr_ += header.first + ":" + header.second + "\r\n";
+    }
+    if (!content_.isVoid()) {
+        requestStr_ += ("Content-Length: "
+                        + to_string(content_.size()) + "\r\n");
+        requestStr_ += "Content-Type: " + content_.contentType() + "\r\n";
+    }
+    requestStr_ += "\r\n";
+}
 
 
 /* HTTPCLIENTCALLBACKS */
 
+#if 0
 const string &
 HttpClientCallbacks::
 errorMessage(HttpClientError errorCode)
@@ -80,13 +92,13 @@ errorMessage(HttpClientError errorCode)
     static const string timeout = "Request timed out";
 
     switch (errorCode) {
-    case HttpClientError::NONE:
+    case HttpClientError::SUCCESS:
         return none;
     case HttpClientError::UNKNOWN:
         return unknown;
     case HttpClientError::TIMEOUT:
         return timeout;
-    case HttpClientError::HOST_NOT_FOUND:
+    case HttpClientError::HOST_UNKNOWN:
         return hostNotFound;
     case HttpClientError::COULD_NOT_CONNECT:
         return couldNotConnect;
@@ -94,6 +106,7 @@ errorMessage(HttpClientError errorCode)
         throw ML::Exception("invalid error code");
     };
 }
+#endif
 
 void
 HttpClientCallbacks::
@@ -122,10 +135,395 @@ onData(const HttpRequest & rq, const char * data, size_t size)
 
 void
 HttpClientCallbacks::
-onDone(const HttpRequest & rq, HttpClientError errorCode)
+onDone(const HttpRequest & rq, int errorCode)
 {
     if (onDone_)
         onDone_(rq, errorCode);
+}
+
+
+/* HTTP RESPONSE PARSER */
+
+void
+HttpResponseParser::
+clear()
+{
+    state_ = 0;
+    buffer_.resize(0);
+    remainingBody_ = 0;
+}
+
+void
+HttpResponseParser::
+feed(const char * bufferData)
+{
+    // cerr << "feed: /" + ML::hexify_string(string(bufferData)) + "/\n";
+    feed(bufferData, strlen(bufferData));
+}
+
+void
+HttpResponseParser::
+feed(const char * bufferData, size_t bufferSize)
+{
+    const char * data;
+    size_t dataSize;
+    bool fromBuffer;
+
+    // cerr << ("data: /"
+    //          + ML::hexify_string(string(bufferData, bufferSize))
+    //          + "/\n");
+
+    if (buffer_.size() > 0) {
+        buffer_.append(bufferData, bufferSize);
+        data = buffer_.c_str();
+        fromBuffer = true;
+        dataSize = buffer_.size();
+    }
+    else {
+        data = bufferData;
+        fromBuffer = false;
+        dataSize = bufferSize;
+    }
+
+    size_t ptr = 0;
+
+    auto skipToChar = [&] (char c, bool throwOnEol) {
+        while (ptr < dataSize) {
+            if (data[ptr] == c)
+                return true;
+            else if (throwOnEol
+                     && (data[ptr] == '\r' || data[ptr] == '\n')) {
+                throw ML::Exception("unexpected end of line");
+            }
+            ptr++;
+        }
+
+        return false;
+    };
+
+    // cerr << ("state: " + to_string(state_)
+    //          + "; dataSize: " + to_string(dataSize) + "\n");
+
+    while (true) {
+        if (dataSize == 0) {
+            return;
+        }
+        if (state_ == 0) {
+            // status line
+            // HTTP/1.1 200 OK
+
+            /* sizeof("HTTP/1.1 200 ") */
+            if (dataSize < 16) {
+                if (!fromBuffer) {
+                    buffer_.append(data, dataSize);
+                }
+                return;
+            }
+
+            if (::memcmp(data, "HTTP/", 5) != 0) {
+                throw ML::Exception("version must start with 'HTTP/'");
+            }
+            ptr += 5;
+
+            if (!skipToChar(' ', true)) {
+                /* post-version ' ' not found even though size is sufficient */
+                throw ML::Exception("version too long");
+            }
+            size_t versionEnd = ptr;
+
+            ptr++;
+            size_t codeStart = ptr;
+            if (!skipToChar(' ', true)) {
+                /* post-code ' ' not found even though size is sufficient */
+                throw ML::Exception("code too long");
+            }
+
+            size_t codeEnd = ptr;
+            int code = antoi(data + codeStart, data + codeEnd);
+
+            /* we skip the whole "reason" string */
+            if (!skipToChar('\r', false)) {
+                if (!fromBuffer) {
+                    buffer_.append(data, dataSize);
+                }
+                return;
+            }
+            ptr++;
+            if (ptr == dataSize) {
+                if (!fromBuffer) {
+                    buffer_.append(data, dataSize);
+                }
+                return;
+            }
+            if (data[ptr] != '\n') {
+                throw ML::Exception("expected \\n");
+            }
+            ptr++;
+            onResponseStart(string(data, versionEnd), code);
+            state_ = 1;
+
+            dataSize -= ptr;
+            buffer_.assign(data + ptr, dataSize);
+            if (dataSize == 0) {
+                return;
+            }
+            data = buffer_.c_str();
+            fromBuffer = true;
+            ptr = 0;
+        }
+        else if (state_ == 1) {
+            while (data[ptr] != '\r') {
+                if (!skipToChar(':', true) || !skipToChar('\r', false)) {
+                    if (!fromBuffer) {
+                        buffer_.append(data, dataSize);
+                    }
+                    return;
+                }
+                ptr++;
+                if (ptr == dataSize) {
+                    if (!fromBuffer) {
+                        buffer_.append(data, dataSize);
+                    }
+                    return;
+                }
+                if (data[ptr] != '\n') {
+                    throw ML::Exception("expected \\n");
+                }
+                ptr++;
+                onHeader(data, ptr - 2);
+                if (ptr > 13) {
+                    if (::strncasecmp(data, "Content-Length", 14) == 0) {
+                        remainingBody_ = antoi(data + 16, data + ptr - 2);
+                        // cerr << "body: " + to_string(remainingBody_) + "\n";
+                    }
+                }
+                dataSize -= ptr;
+                // cerr << "dataSize: " + to_string(dataSize) + "\n";
+                buffer_.assign(data + ptr, dataSize);
+                // cerr << "buffer: /" + buffer_ + "/\n";
+                if (dataSize == 0) {
+                    // cerr << "returning\n";
+                    return;
+                }
+                data = buffer_.c_str();
+                fromBuffer = true;
+                ptr = 0;
+            }
+            ptr++;
+            if (ptr == dataSize) {
+                buffer_.assign(data, dataSize);
+                return;
+            }
+            if (data[ptr] != '\n') {
+                throw ML::Exception("expected \\n");
+            }
+            ptr++;
+
+            if (remainingBody_ == 0) {
+                state_ = 0;
+                onDone();
+            }
+            else {
+                state_ = 2;
+            }
+
+            dataSize -= ptr;
+            buffer_.assign(data + ptr, dataSize);
+            if (dataSize == 0) {
+                return;
+            }
+            data = buffer_.c_str();
+            fromBuffer = true;
+            ptr = 0;
+        }
+        else if (state_ == 2) {
+            uint64_t chunkSize = min(dataSize, remainingBody_);
+            // cerr << "toSend: " + to_string(chunkSize) + "\n";
+            // cerr << "received body: /" + string(data, chunkSize) + "/\n";
+            onData(data, chunkSize);
+            dataSize -= chunkSize;
+            remainingBody_ -= chunkSize;
+            if (remainingBody_ == 0) {
+                state_ = 0;
+                onDone();
+            }
+            buffer_.assign(data + chunkSize, dataSize);
+            if (dataSize > 0) {
+                data = buffer_.c_str();
+                fromBuffer = true;
+            }
+            else {
+                return;
+            }
+        }
+    }
+}
+
+
+/* HTTP CONNECTION */
+
+HttpConnection::
+HttpConnection()
+    : state_(IDLE)
+{
+    // cerr << "HttpConnection(): " << this << "\n";
+
+    parser_.onResponseStart = [&] (const std::string & httpVersion,
+                                   int code) {
+        this->onParserResponseStart(httpVersion, code);
+    };
+    parser_.onHeader = [&] (const char * data, size_t size) {
+        this->onParserHeader(data, size);
+    };
+    parser_.onData = [&] (const char * data, size_t size) {
+        this->onParserData(data, size);
+    };
+    parser_.onDone = [&] () {
+        this->onParserDone();
+    };
+}
+
+HttpConnection::
+~HttpConnection()
+{
+    // cerr << "~HttpConnection: " << this << "\n";
+}
+
+void
+HttpConnection::
+clear()
+{
+    request_.clear();
+    parser_.clear();
+}
+
+void
+HttpConnection::
+perform(HttpRequest && request)
+{
+    if (state_ != IDLE) {
+        ::fprintf(stderr, "cannot process a request when state is not idle");
+        abort();
+    }
+
+    // cerr << "perform: " << this << endl;
+
+    request_ = move(request);
+
+    state_ = HEADERS;
+    if (canSendMessages()) {
+        write(request_.requestStr());
+    }
+    else {
+        connect();
+    }
+}
+
+void
+HttpConnection::
+onConnectionResult(ConnectionResult result, const vector<string> & msgs)
+{
+    // cerr << " onConnectionResult: " << this << "  " + to_string(result) + "\n";
+    if (result == ConnectionResult::SUCCESS) {
+        write(request_.requestStr());
+    }
+    else {
+        cerr << " failure with result: "  + to_string(result) + "\n";
+        handleEndOfRq(result);
+    }
+}
+
+void
+HttpConnection::
+onWriteResult(int error, const string & written, size_t writtenSize)
+{
+    if (error == 0) {
+        const MimeContent content = request_.content();
+        if (state_ == HEADERS) {
+            if (content.size() > 0) {
+                state_ = BODY;
+                uploadOffset_ = 0;
+            }
+            else {
+                state_ = IDLE;
+            }
+        }
+        else if (state_ != BODY) {
+            throw ML::Exception("invalid state");
+        }
+        if (state_ == BODY) {
+            uploadOffset_ += writtenSize;
+            uint64_t remaining = content.size() - uploadOffset_;
+            uint64_t chunkSize = min(remaining, HttpConnection::sendSize);
+            if (chunkSize == 0) {
+                state_ = IDLE;
+                uploadOffset_ = 0;
+            }
+            else {
+                write(content.data() + uploadOffset_, chunkSize);
+            }
+        }
+    }
+    else {
+        throw ML::Exception("unhandled error");
+    }
+}
+
+void
+HttpConnection::
+onReceivedData(const char * data, size_t size)
+{
+    // cerr << "onReceivedData: " + string(data, size) + "\n";
+    parser_.feed(data, size);
+}
+
+void
+HttpConnection::
+onException(const exception_ptr & excPtr)
+{
+    cerr << "http client received exception\n";
+    abort();
+}
+
+void
+HttpConnection::
+onParserResponseStart(const std::string & httpVersion, int code)
+{
+    // cerr << "onParserResponseStart: " << this << endl;
+    request_.callbacks().onResponseStart(request_, httpVersion, code);
+}
+
+void
+HttpConnection::
+onParserHeader(const char * data, size_t size)
+{
+    // cerr << "onParserHeader: " << this << endl;
+    request_.callbacks().onHeader(request_, data, size);
+}
+
+void
+HttpConnection::
+onParserData(const char * data, size_t size)
+{
+    // cerr << "onParserData: " << this << endl;
+    request_.callbacks().onData(request_, data, size);
+}
+
+void
+HttpConnection::
+onParserDone()
+{
+    handleEndOfRq(0);
+}
+
+void
+HttpConnection::
+handleEndOfRq(int code)
+{
+    // cerr << "handleEndOfRq: " << this << endl;
+    request_.callbacks().onDone(request_, 0);
+    clear();
+    onDone(0);
 }
 
 
@@ -133,411 +531,125 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
 
 HttpClient::
 HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
-    : AsyncEventSource(),
+    : MessageLoop(),
       noSSLChecks(false),
       baseUrl_(baseUrl),
-      fd_(-1),
-      wakeup_(EFD_NONBLOCK | EFD_CLOEXEC),
-      timerFd_(-1),
+      debug_(false),
       connectionStash_(numParallel),
       avlConnections_(numParallel),
       nextAvail_(0),
       queue_(queueSize)
 {
-    fd_ = epoll_create1(EPOLL_CLOEXEC);
-    if (fd_ == -1) {
-        throw ML::Exception(errno, "epoll_create");
-    }
+    init(1);
 
-    addFd(wakeup_.fd(), false, EPOLLIN);
+    queue_.onEvent = [&] (HttpRequest && rq) {
+        this->handleQueueEvent(move(rq));
+    };
 
-    timerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-    addFd(timerFd_, false, EPOLLIN);
-
-    /* multi */
-    ::CURLM ** handle = (::CURLM **) &multi_;
-    handle_ = *handle;
-    ::curl_multi_setopt(handle_, CURLMOPT_SOCKETFUNCTION, socketCallback);
-    ::curl_multi_setopt(handle_, CURLMOPT_SOCKETDATA, this);
-    ::curl_multi_setopt(handle_, CURLMOPT_TIMERFUNCTION, timerCallback);
-    ::curl_multi_setopt(handle_, CURLMOPT_TIMERDATA, this);
+    addSource("queue", queue_);
 
     /* available connections */
     for (size_t i = 0; i < connectionStash_.size(); i++) {
+        connectionStash_[i].init(baseUrl);
+        connectionStash_[i].onDone = [&,i] (int result) {
+            // cerr << "connection " + to_string(i) + " onDone: "
+                 // << &connectionStash_[i] << endl;
+            handleHttpConnectionDone(connectionStash_[i], result);
+        };
+        addSource("socket" + to_string(i), connectionStash_[i]);
         avlConnections_[i] = &connectionStash_[i];
     }
-
-    /* kick start multi */
-    int runningHandles;
-    ::CURLMcode rc = ::curl_multi_socket_action(handle_,
-                                                CURL_SOCKET_TIMEOUT, 0, 
-                                                &runningHandles);
-    if (rc != ::CURLM_OK) {
-        throw ML::Exception("curl error " + to_string(rc));
-    }
-}
-
-HttpClient::
-HttpClient(HttpClient && other)
-    noexcept
-    : AsyncEventSource(move(other)),
-      baseUrl_(move(other.baseUrl_)),
-      fd_(other.fd_),
-      wakeup_(move(other.wakeup_)),
-      timerFd_(other.timerFd_),
-      connectionStash_(move(other.connectionStash_)),
-      avlConnections_(move(other.avlConnections_)),
-      nextAvail_(other.nextAvail_),
-      queue_(move(other.queue_))
-{
-    other.fd_ = -1;
-    other.timerFd_ = -1;
-
-    /* the move operator of Curl::Multi is dubious but our multi handle is not
-       supposed to be active at this point, therefore we do not need to move it */
-    ::CURLM ** handle = (::CURLM **) &multi_;
-    handle_ = *handle;
-    ::curl_multi_setopt(handle_, CURLMOPT_SOCKETFUNCTION, socketCallback);
-    ::curl_multi_setopt(handle_, CURLMOPT_SOCKETDATA, this);
-    ::curl_multi_setopt(handle_, CURLMOPT_TIMERFUNCTION, timerCallback);
-    ::curl_multi_setopt(handle_, CURLMOPT_TIMERDATA, this);
 }
 
 HttpClient::
 ~HttpClient()
 {
-    if (fd_ != -1) {
-        ::close(fd_);
+    // cerr << "~HttpClient: " << this << "\n";
+    shutdown();
+}
+
+void
+HttpClient::
+shutdown()
+{
+    if (connectionState_ == AsyncEventSource::CONNECTED) {
+        removeSource(&queue_);
+        for (size_t i = 0; i < connectionStash_.size(); i++) {
+            removeSource(&connectionStash_[i]);
+        }
+
+        queue_.waitConnectionState(AsyncEventSource::DISCONNECTED);
+        for (size_t i = 0; i < connectionStash_.size(); i++) {
+            connectionStash_[i].waitConnectionState(AsyncEventSource::DISCONNECTED);
+        }
     }
-    if (timerFd_ != -1) {
-        ::close(timerFd_);
-    }
+
+    MessageLoop::shutdown();
 }
 
 void
 HttpClient::
 enablePipelining()
 {
-    ::curl_multi_setopt(handle_, CURLMOPT_PIPELINING, 1);
-}
-
-HttpClient &
-HttpClient::
-operator = (HttpClient && other)
-    noexcept
-{
-    AsyncEventSource::operator = (other);
-    baseUrl_ = move(other.baseUrl_);
-    fd_ = other.fd_;
-    other.fd_ = -1;
-    wakeup_ = move(other.wakeup_);
-    timerFd_ = other.timerFd_;
-    other.timerFd_ = -1;
-    connectionStash_ = move(other.connectionStash_);
-    avlConnections_ = move(other.avlConnections_);
-    nextAvail_ = other.nextAvail_;
-    queue_ = move(other.queue_);
-
-    return *this;
+    throw ML::Exception("unimplemented");
+    // ::curl_multi_setopt(handle_, CURLMOPT_PIPELINING, 1);
 }
 
 void
 HttpClient::
-addFd(int fd, bool isMod, int flags)
-    const
+debug(bool debugOn)
 {
-    // if (isMod) {
-    //     cerr << "addFd: modding fd " + to_string(fd) + "\n";
-    // }
-    // else {
-    //     cerr << "addFd: adding fd " + to_string(fd) + "\n";
-    // }
-
-    ::epoll_event event;
-
-    ::memset(&event, 0, sizeof(event));
-
-    event.events = flags;
-    event.data.fd = fd;
-    int rc = ::epoll_ctl(fd_, isMod ? EPOLL_CTL_MOD : EPOLL_CTL_ADD,
-                         fd, &event);
-    if (rc == -1) {
-	if (errno != EBADF) {
-            throw ML::Exception(errno, "epoll_ctl");
-        }
-    }
+    debug_ = debugOn;
+    MessageLoop::debug(debugOn);
 }
 
-void
-HttpClient::
-removeFd(int fd)
-    const
-{
-    // cerr << "removeFd: removing fd " + to_string(fd) + "\n";
-    int rc = ::epoll_ctl(fd_, EPOLL_CTL_DEL, fd, nullptr);
-    if (rc == -1) {
-        // cerr << "removeFd: errno = " + to_string(errno) + "\n";
-        if (errno != EBADF) {
-            throw ML::Exception(errno, "epoll_ctl del");
-        }
-    }
-}
 
 bool
 HttpClient::
 enqueueRequest(const string & verb, const string & resource,
                const shared_ptr<HttpClientCallbacks> & callbacks,
-               const HttpRequest::Content & content,
+               const MimeContent & content,
                const RestParams & queryParams, const RestParams & headers,
                int timeout)
 {
     string url = baseUrl_ + resource + queryParams.uriEscaped();
-    queue_.push(HttpRequest(verb, url, callbacks,
-                            content, headers, timeout));
-    wakeup_.signal();
+    bool res = queue_.tryPush(HttpRequest(verb, url, callbacks,
+                                          content, headers, timeout));
 
-    return true;
-}
-
-int
-HttpClient::
-selectFd()
-    const
-{
-    return fd_;
-}
-
-bool
-HttpClient::
-processOne()
-{
-    static const int nEvents(1024);
-    ::epoll_event events[nEvents];
-
-    while (true) {
-        int res = ::epoll_wait(fd_, events, nEvents, 0);
-        // ::fprintf(stderr, "processing %d events\n", res);
-        if (res > 0) {
-            for (int i = 0; i < res; i++) {
-                handleEvent(events[i]);
-            }
-        }
-        else if (res == 0) {
-            break;
-        }
-        else if (res == -1) {
-            if (errno == EINTR) {
-                continue;
-            }
-            else {
-                throw ML::Exception(errno, "epoll_wait");
-            }
-        }
-    }
-
-    return false;
+    return res;
 }
 
 void
 HttpClient::
-handleEvent(const ::epoll_event & event)
+handleQueueEvent(HttpRequest && request)
 {
-    if (event.data.fd == wakeup_.fd()) {
-        handleWakeupEvent();
-    }
-    else if (event.data.fd == timerFd_) {
-        handleTimerEvent();
+    if (nextAvail_ < avlConnections_.size()) {
+        if (inThreadQueue_.size() > 0) {
+            cerr << "BAD: connections available while there are elements in the queue?\n";
+        }
+        HttpConnection * conn = getConnection();
+        conn->perform(move(request));
     }
     else {
-        handleMultiEvent(event);
+        // cerr << "enqueuing request in thread\n";
+        inThreadQueue_.emplace_back(move(request));
     }
 }
 
 void
 HttpClient::
-handleWakeupEvent()
+handleHttpConnectionDone(HttpConnection & connection, int result)
 {
-    wakeup_.read();
-    // cerr << "  wakeup event\n";
-
-    size_t numAvail = avlConnections_.size() - nextAvail_;
-    if (numAvail > 0) {
-        /* empty the queue of events on the wakeup fd */
-        bool retry(false);
-        while (retry) {
-            try {
-                JML_TRACE_EXCEPTIONS(false);
-                wakeup_.read();
-            }
-            catch (const ML::Exception & exc) {
-                retry = false;
-            }
-        }
-
-        vector<HttpRequest> requests = queue_.tryPopMulti(numAvail);
-        for (HttpRequest & request: requests) {
-            HttpConnection *conn = getConnection();
-            conn->request_ = move(request);
-            conn->perform(noSSLChecks, debug_);
-            multi_.add(&conn->easy_);
-        }
-    }
-}
-
-void
-HttpClient::
-handleTimerEvent()
-{
-    // cerr << "  timer event\n";
-    uint64_t misses;
-    ssize_t len = ::read(timerFd_, &misses, sizeof(misses));
-    if (len == -1) {
-        if (errno != EAGAIN) {
-            throw ML::Exception(errno, "read timerd");
-        }
-    }
-    int runningHandles;
-    ::CURLMcode rc = ::curl_multi_socket_action(handle_,
-                                                CURL_SOCKET_TIMEOUT, 0, 
-                                                &runningHandles);
-    if (rc != ::CURLM_OK) {
-        throw ML::Exception("curl error " + to_string(rc));
-    }
-}
-
-void
-HttpClient::
-handleMultiEvent(const ::epoll_event & event)
-{
-    // cerr << "  curl event\n";
-    int actionFlags(0);
-    if ((event.events & EPOLLIN) != 0) {
-        actionFlags |= CURL_CSELECT_IN;
-    }
-    if ((event.events & EPOLLOUT) != 0) {
-        actionFlags |= CURL_CSELECT_OUT;
-    }
-    
-    int runningHandles;
-    ::CURLMcode rc = ::curl_multi_socket_action(handle_, event.data.fd,
-                                                actionFlags,
-                                                &runningHandles);
-    if (rc != ::CURLM_OK) {
-        throw ML::Exception("curl error " + to_string(rc));
-    }
-
-    checkMultiInfos();
-}
-
-void
-HttpClient::
-checkMultiInfos()
-{
-    int remainingMsgs(0);
-    CURLMsg * msg;
-    // int count(0);
-    while ((msg = curl_multi_info_read(handle_, &remainingMsgs))) {
-        // count++;
-        // cerr << to_string(count) << " msg\n";
-        // cerr << "  remaining: " + to_string(remainingMsgs) << " msg\n";
-        if (msg->msg == CURLMSG_DONE) {
-            HttpConnection * conn(nullptr);
-            ::curl_easy_getinfo(msg->easy_handle,
-                                CURLINFO_PRIVATE, &conn);
-
-            shared_ptr<HttpClientCallbacks> & cbs = conn->request_.callbacks_;
-            cbs->onDone(conn->request_, translateError(msg->data.result));
-            conn->clear();
-            multi_.remove(&conn->easy_);
-            releaseConnection(conn);
-            wakeup_.signal();
-            // cerr << "* request done\n";
-        }
-        else {
-            cerr << "? not done\n";
-        }
-    }
-}
-
-int
-HttpClient::
-socketCallback(CURL *e, curl_socket_t s, int what, void *clientP, void *sockp)
-{
-    HttpClient *this_ = static_cast<HttpClient *>(clientP);
-
-    return this_->onCurlSocketEvent(e, s, what, sockp);
-}
-
-int
-HttpClient::
-onCurlSocketEvent(CURL *e, curl_socket_t fd, int what, void *sockp)
-{
-    // cerr << "onCurlSocketEvent: " + to_string(fd) + " what: " + to_string(what) + "\n";
-
-    if (what == CURL_POLL_REMOVE) {
-        // cerr << "remove fd\n";
-        ::curl_multi_assign(handle_, fd, nullptr);
-        removeFd(fd);
+    if (inThreadQueue_.size() > 0) {
+        // cerr << "emptying queue...\n";
+        connection.perform(move(inThreadQueue_.front()));
+        inThreadQueue_.pop_front();
     }
     else {
-        int flags(0);
-        if ((what & CURL_POLL_IN)) {
-            flags |= EPOLLIN;
-        }
-        if ((what & CURL_POLL_OUT)) {
-            flags |= EPOLLOUT;
-        }
-        addFd(fd, (sockp != nullptr), flags);
-        if (sockp == nullptr) {
-            ::curl_multi_assign(handle_, fd, this);
-        }
+        releaseConnection(&connection);
     }
-
-    return 0;
 }
 
-int
-HttpClient::
-timerCallback(CURLM *multi, long timeoutMs, void *clientP)
-{
-    HttpClient *this_ = static_cast<HttpClient *>(clientP);
-
-    return this_->onCurlTimerEvent(timeoutMs);
-}
-
-int
-HttpClient::
-onCurlTimerEvent(long timeoutMs)
-{
-    // cerr << "onCurlTimerEvent: timeout = " + to_string(timeoutMs) + "\n";
-
-    struct itimerspec timespec;
-    memset(&timespec, 0, sizeof(timespec));
-    if (timeoutMs > 0) {
-        timespec.it_value.tv_sec = timeoutMs / 1000;
-        timespec.it_value.tv_nsec = (timeoutMs % 1000) * 1000000;
-    }
-    int res = ::timerfd_settime(timerFd_, 0, &timespec, nullptr);
-    if (res == -1) {
-        throw ML::Exception(errno, "timerfd_settime");
-    }
-
-    if (timeoutMs < 1) {
-        // cerr << "* doing timeout\n";
-        int runningHandles;
-        ::CURLMcode rc = ::curl_multi_socket_action(handle_,
-                                                    CURL_SOCKET_TIMEOUT, 0, 
-                                                    &runningHandles);
-        if (rc != ::CURLM_OK) {
-            throw ML::Exception("curl error " + to_string(rc));
-        }
-        checkMultiInfos();
-    }
-
-    return 0;
-}
-
-HttpClient::
 HttpConnection *
 HttpClient::
 getConnection()
@@ -552,6 +664,8 @@ getConnection()
         conn = nullptr;
     }
 
+    // cerr << " returning conn: " << conn << "\n";
+
     return conn;
 }
 
@@ -563,156 +677,6 @@ releaseConnection(HttpConnection * oldConnection)
         nextAvail_--;
         avlConnections_[nextAvail_] = oldConnection;
     }
-}
-
-
-/* HTTPCLIENT::HTTPCONNECTION */
-
-HttpClient::
-HttpConnection::
-HttpConnection()
-    : onHeader_([&] (const char * data, size_t ofs1, size_t ofs2) {
-          return this->onCurlHeader(data, ofs1 * ofs2);
-      }),
-      onWrite_([&] (const char * data, size_t ofs1, size_t ofs2) {
-          return this->onCurlWrite(data, ofs1 * ofs2);
-      }),
-      onRead_([&] (char * data, size_t ofs1, size_t ofs2) {
-          return this->onCurlRead(data, ofs1 * ofs2);
-      }),
-      afterContinue_(false), uploadOffset_(0)
-{
-}
-
-void
-HttpClient::
-HttpConnection::
-perform(bool noSSLChecks, bool debug)
-{
-    // cerr << "* performRequest\n";
-
-    // cerr << "nbrRequests: " + to_string(nbrRequests_) + "\n";
-
-    afterContinue_ = false;
-
-    easy_.reset();
-    easy_.setOpt<curlopt::Url>(request_.url_);
-    // easy_.setOpt<curlopt::CustomRequest>(request_.verb_);
-
-    list<string> curlHeaders;
-    for (const auto & it: request_.headers_) {
-        curlHeaders.push_back(it.first + ": " + it.second);
-    }
-    if (request_.verb_ != "GET") {
-        const string & data = request_.content_.str;
-        if (request_.verb_ == "PUT") {
-            easy_.setOpt<curlopt::Upload>(true);
-            easy_.setOpt<curlopt::InfileSize>(data.size());
-        }
-        else if (request_.verb_ == "POST") {
-            easy_.setOpt<curlopt::Post>(true);
-            easy_.setOpt<curlopt::PostFields>(data);
-            easy_.setOpt<curlopt::PostFieldSize>(data.size());
-        }
-        curlHeaders.push_back("Content-Length: "
-                              + to_string(data.size()));
-        curlHeaders.push_back("Expect:");
-        curlHeaders.push_back("Transfer-Encoding:");
-        curlHeaders.push_back("Content-Type: "
-                              + request_.content_.contentType);
-    }
-    easy_.setOpt<curlopt::HttpHeader>(curlHeaders);
-
-    easy_.setOpt<curlopt::CustomRequest>(request_.verb_);
-    easy_.setOpt<curlopt::Private>(this);
-    easy_.setOpt<curlopt::HeaderFunction>(onHeader_);
-    easy_.setOpt<curlopt::WriteFunction>(onWrite_);
-    easy_.setOpt<curlopt::ReadFunction>(onRead_);
-    easy_.setOpt<curlopt::BufferSize>(65536);
-    if (request_.timeout_ != -1) {
-        easy_.setOpt<curlopt::Timeout>(request_.timeout_);
-    }
-    easy_.setOpt<curlopt::NoSignal>(true);
-    easy_.setOpt<curlopt::NoProgress>(true);
-    if (noSSLChecks) {
-        easy_.setOpt<curlopt::SslVerifyHost>(false);
-        easy_.setOpt<curlopt::SslVerifyPeer>(false);
-    }
-    if (debug) {
-        easy_.setOpt<curlopt::Verbose>(1L);
-    }
-}
-
-size_t
-HttpClient::
-HttpConnection::
-onCurlHeader(const char * data, size_t size)
-    noexcept
-{
-    // cerr << "onCurlHeader\n";
-    string headerLine(data, size);
-    if (headerLine.find("HTTP/1.1 100") == 0) {
-        afterContinue_ = true;
-    }
-    else if (afterContinue_) {
-        if (headerLine == "\r\n")
-            afterContinue_ = false;
-    }
-    else {
-        if (headerLine.find("HTTP/") == 0) {
-            size_t lineSize = headerLine.size();
-            size_t oldTokenIdx(0);
-            size_t tokenIdx = headerLine.find(" ");
-            if (tokenIdx == string::npos || tokenIdx >= lineSize) {
-                throw ML::Exception("malformed header");
-            }
-            string version = headerLine.substr(oldTokenIdx, tokenIdx);
-
-            oldTokenIdx = tokenIdx + 1;
-            tokenIdx = headerLine.find(" ", oldTokenIdx);
-            if (tokenIdx == string::npos || tokenIdx >= lineSize) {
-                throw ML::Exception("malformed header");
-            }
-            int code = stoi(headerLine.substr(oldTokenIdx, tokenIdx));
-
-            request_.callbacks_->onResponseStart(request_,
-                                                 move(version), code);
-        }
-        else {
-            request_.callbacks_->onHeader(request_, data, size);
-        }
-    }
-
-    return size;
-}
-
-size_t
-HttpClient::
-HttpConnection::
-onCurlWrite(const char * data, size_t size)
-    noexcept
-{
-    // cerr << "onCurlWrite\n";
-    request_.callbacks_->onData(request_, data, size);
-    return size;
-}
-
-size_t
-HttpClient::
-HttpConnection::
-onCurlRead(char * buffer, size_t bufferSize)
-    noexcept
-{
-    const string & data = request_.content_.str;
-    size_t chunkSize = data.size() - uploadOffset_;
-    if (chunkSize > bufferSize) {
-        chunkSize = bufferSize;
-    }
-    const char * chunkStart = data.c_str() + uploadOffset_;
-    copy(chunkStart, chunkStart + chunkSize, buffer);
-    uploadOffset_ += chunkSize;
-
-    return chunkSize;
 }
 
 
@@ -748,7 +712,7 @@ onData(const HttpRequest & rq, const char * data, size_t size)
 
 void
 HttpClientSimpleCallbacks::
-onDone(const HttpRequest & rq, HttpClientError error)
+onDone(const HttpRequest & rq, int error)
 {
     onResponse(rq, error, statusCode_, move(headers_), move(body_));
 }
@@ -756,7 +720,7 @@ onDone(const HttpRequest & rq, HttpClientError error)
 void
 HttpClientSimpleCallbacks::
 onResponse(const HttpRequest & rq,
-           HttpClientError error, int status,
+           int error, int status,
            string && headers, string && body)
 {
     if (onResponse_) {

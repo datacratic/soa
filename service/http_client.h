@@ -15,67 +15,189 @@
    Finally, it is based on the interface of HttpRestProxy.
 
    Caveat:
-   - no support for EPOLLONESHOT yet
+   - cannot be used with a multi-threaded loop yet
    - has not been tweaked for performance yet
    - since those require header interpretation, there is not support for
      cookies per se
 */
 
+
+/* TODO:
+   blockers:
+   - parser:
+     - needs better validation (header key size, ...)
+     - handling of multi-line headers
+   - SSL support
+   - connection timeout (Curl style)
+   - socket timeout
+   - auto disconnect (keep-alive)
+
+   nice to have:
+   - tunnelling
+   - chunked encoding
+ */
+
 #pragma once
 
-#include "sys/epoll.h"
-
+#include <deque>
 #include <string>
 #include <vector>
 
-#include <curlpp/Easy.hpp>
-#include <curlpp/Multi.hpp>
-#include <curlpp/Types.hpp>
-
-#include "jml/arch/wakeup_fd.h"
 #include "jml/utils/ring_buffer.h"
 
 #include "soa/jsoncpp/value.h"
-#include "soa/service/async_event_source.h"
+#include "soa/service/message_loop.h"
 #include "soa/service/http_header.h"
+#include "soa/service/typed_message_channel.h"
+#include "soa/service/tcp_socket.h"
 
 
 namespace Datacratic {
 
-struct MessageLoop;
-
 struct HttpClientCallbacks;
+
+/* MIME CONTENT */
+
+/** Structure used to hold content for a MIME transaction. */
+struct MimeContent {
+    MimeContent()
+        : data_(nullptr), size_(0), ownsContent_(false)
+    {
+    }
+
+    MimeContent(const std::string & str, const std::string & contentType,
+                bool copy = false)
+        : data_(str.c_str()), size_(str.size()), contentType_(contentType),
+          ownsContent_(copy)
+    {
+        if (copy) {
+            copy_ = str;
+            data_ = copy_.c_str();
+        }
+    }
+
+    MimeContent(const char * data, uint64_t size,
+                const std::string & contentType,
+                bool copy = false)
+        : data_(data), size_(size), contentType_(contentType),
+          ownsContent_(copy)
+    {
+        if (copy) {
+            copy_ = std::string(data_, size_);
+            data_ = copy_.c_str();
+        }
+    }
+
+    MimeContent(const Json::Value & content,
+                const std::string & contentType = "application/json")
+        : copy_(content.toString()),
+          data_(copy_.c_str()), size_(copy_.size()),
+          contentType_(contentType), ownsContent_(true)
+    {
+    }
+
+    MimeContent(std::string && str, const std::string & contentType)
+        : copy_(move(str)), data_(copy_.c_str()), size_(copy_.size()),
+          contentType_(contentType), ownsContent_(true)
+    {
+    }
+
+    MimeContent(MimeContent && other)
+        : copy_(move(other.copy_)), data_(other.data_), size_(other.size_),
+          contentType_(move(other.contentType_)),
+          ownsContent_(other.ownsContent_)
+    {
+        if (ownsContent_) {
+            data_ = copy_.c_str();
+        }
+    }
+
+    MimeContent(const MimeContent & other)
+        : copy_(other.copy_), data_(other.data_), size_(other.size_),
+          contentType_(other.contentType_), ownsContent_(other.ownsContent_)
+    {
+        if (ownsContent_) {
+            data_ = copy_.c_str();
+        }
+    }
+
+    const char * data()
+        const
+    {
+        return data_;
+    }
+
+    const uint64_t size()
+        const
+    {
+        return size_;
+    }
+
+    const std::string & contentType()
+        const
+    {
+        return contentType_;
+    }
+
+    bool isVoid()
+        const
+    {
+        return (data_ == nullptr);
+    }
+
+    void clear()
+    {
+        copy_.clear();
+        data_ = nullptr;
+        size_ = 0;
+        ownsContent_ = false;
+    }
+
+    MimeContent & operator = (const MimeContent & other)
+    {
+        copy_ = other.copy_;
+        if (ownsContent_) {
+            data_ = copy_.c_str();
+        }
+        else {
+            data_ = other.data_;
+        }
+        size_ = other.size_;
+        contentType_ = other.contentType_;
+        ownsContent_ = other.ownsContent_;
+
+        return *this;
+    }
+
+    MimeContent & operator = (MimeContent && other)
+    {
+        copy_ = move(other.copy_);
+        if (ownsContent_) {
+            data_ = copy_.c_str();
+        }
+        else {
+            data_ = other.data_;
+        }
+        size_ = other.size_;
+        contentType_ = move(other.contentType_);
+        ownsContent_ = other.ownsContent_;
+
+        return *this;
+    }
+
+private:
+    std::string copy_;
+    const char *data_;
+    uint64_t size_;
+    std::string contentType_;
+    bool ownsContent_;
+};
+
 
 /* HTTPREQUEST */
 
 /* Representation of an HTTP request. */
 struct HttpRequest {
-    /** Structure used to hold content for a POST request. */
-    struct Content {
-        Content() = default;
-
-        Content(const std::string & str,
-                const std::string & contentType = "")
-            : str(str), contentType(contentType)
-        {
-        }
-
-        Content(const char * data, uint64_t size,
-                const std::string & contentType = "")
-            : str(data, size), contentType(contentType)
-        {
-        }
-
-        Content(const Json::Value & content,
-                const std::string & contentType = "application/json")
-            : str(content.toString()), contentType(contentType)
-        {
-        }
-
-        std::string str;
-        std::string contentType;
-    };
-
     HttpRequest()
         : timeout_(-1)
     {
@@ -83,38 +205,150 @@ struct HttpRequest {
 
     HttpRequest(const std::string & verb, const std::string & url,
                 const std::shared_ptr<HttpClientCallbacks> & callbacks,
-                const Content & content, const RestParams & headers,
+                const MimeContent & content, const RestParams & headers,
                 int timeout = -1)
         noexcept
-        : verb_(verb), url_(url), callbacks_(callbacks),
-          content_(content), headers_(headers),
-          timeout_(timeout)
+        : verb_(verb), url_(url),
+          headers_(headers), content_(content),
+          callbacks_(callbacks), timeout_(timeout)
     {
+        makeRequestStr();
     }
 
     void clear()
     {
-        verb_ = "";
-        url_ = "";
-        callbacks_ = nullptr;
-        content_ = Content();
+        verb_.clear();
+        url_.clear();
         headers_ = RestParams();
+        content_.clear();
+        callbacks_ = nullptr;
         timeout_ = -1;
+        requestStr_.clear();
     }
+
+    const std::string & requestStr()
+        const
+    {
+        return requestStr_;
+    }
+
+    const MimeContent & content()
+        const
+    {
+        return content_;
+    }
+
+    HttpClientCallbacks & callbacks()
+        const
+    {
+        if (!callbacks_) {
+            throw ML::Exception("callbacks not set");
+        }
+
+        return *callbacks_;
+    }
+
+private:
+    void makeRequestStr() noexcept;
 
     std::string verb_;
     std::string url_;
-    std::shared_ptr<HttpClientCallbacks> callbacks_;
-    Content content_;
     RestParams headers_;
+    MimeContent content_;
+    std::shared_ptr<HttpClientCallbacks> callbacks_;
     int timeout_;
+    std::string requestStr_;
+};
+
+
+/* HTTP RESPONSE PARSER */
+
+struct HttpResponseParser {
+    typedef std::function<void (const std::string &,
+                                int)> OnResponseStart;
+    typedef std::function<void (const char *, size_t)> OnData;
+    typedef std::function<void ()> OnDone;
+
+    HttpResponseParser()
+        : state_(0), remainingBody_(0)
+    {}
+
+    void clear();
+
+    void feed(const char * data);
+    void feed(const char * data, size_t size);
+
+    uint64_t remainingBody() const
+    {
+        return remainingBody_;
+    }
+
+    OnResponseStart onResponseStart;
+    OnData onHeader;
+    OnData onData;
+    OnDone onDone;
+
+private:
+    int state_;
+    std::string buffer_;
+    uint64_t remainingBody_;
+};
+
+
+/* HTTP CONNECTION */
+
+struct HttpConnection : ClientTcpSocket {
+    typedef std::function<void (int)> OnDone;
+
+    static const uint64_t sendSize = 65536;
+
+    enum HttpState {
+        IDLE,
+        HEADERS,
+        BODY
+    };
+
+    HttpConnection();
+
+    HttpConnection(const HttpConnection & other) = delete;
+
+    ~HttpConnection();
+
+    void clear();
+    void perform(HttpRequest && request);
+
+    const HttpRequest & request() const
+    {
+        return request_;
+    }
+
+    OnDone onDone;
+
+private:
+    virtual void onConnectionResult(ConnectionResult result,
+                                    const std::vector<std::string> & msgs);
+    virtual void onWriteResult(int error,
+                               const std::string & written, size_t writtenSize);
+    virtual void onReceivedData(const char * data, size_t size);
+    virtual void onException(const std::exception_ptr & excPtr);
+
+    void onParserResponseStart(const std::string & httpVersion, int code);
+    void onParserHeader(const char * data, size_t size);
+    void onParserData(const char * data, size_t size);
+    void onParserDone();
+
+    void handleEndOfRq(int code);
+
+    HttpState state_;
+    HttpRequest request_;
+    HttpResponseParser parser_;
+    size_t uploadOffset_;
 };
 
 
 /* HTTPCLIENT */
 
-struct HttpClient : public AsyncEventSource {
-
+struct HttpClient : public MessageLoop {
     /* "baseUrl": scheme, hostname and port (scheme://hostname[:port]) that
        will be used as base for all requests
        "numParallels": number of requests that can be handled simultaneously
@@ -122,16 +356,21 @@ struct HttpClient : public AsyncEventSource {
        operations will be refused */
     HttpClient(const std::string & baseUrl,
                int numParallel = 4, size_t queueSize = 32);
-    HttpClient(HttpClient && other) noexcept;
+    HttpClient(HttpClient && other) = delete;
     HttpClient(const HttpClient & other) = delete;
 
     ~HttpClient();
+
+    void shutdown();
 
     /** SSL checks */
     bool noSSLChecks;
 
     /** Use with servers that support HTTP pipelining */
     void enablePipelining();
+
+    /** Enable outputting of debug information */
+    void debug(bool debugOn);
 
     /** Performs a POST request, with "resource" as the location of the
      *  resource on the server indicated in "baseUrl". Query parameters
@@ -146,18 +385,18 @@ struct HttpClient : public AsyncEventSource {
              int timeout = -1)
     {
         return enqueueRequest("GET", resource, callbacks,
-                              HttpRequest::Content(),
+                              MimeContent(),
                               queryParams, headers, timeout);
     }
 
     /** Performs a POST request, using similar parameters as get with the
-     * addition of "content" which defines the contents body and type.
+     * addition of "content", which defines the contents body and type.
      *
      *  Returns "true" when the request could successfully be enqueued.
      */
     bool post(const std::string & resource,
               const std::shared_ptr<HttpClientCallbacks> & callbacks,
-              const HttpRequest::Content & content = HttpRequest::Content(),
+              const MimeContent & content = MimeContent(),
               const RestParams & queryParams = RestParams(),
               const RestParams & headers = RestParams(),
               int timeout = -1)
@@ -172,7 +411,7 @@ struct HttpClient : public AsyncEventSource {
      */
     bool put(const std::string & resource,
              const std::shared_ptr<HttpClientCallbacks> & callbacks,
-             const HttpRequest::Content & content = HttpRequest::Content(),
+             const MimeContent & content = MimeContent(),
              const RestParams & queryParams = RestParams(),
              const RestParams & headers = RestParams(),
              int timeout = -1)
@@ -181,25 +420,27 @@ struct HttpClient : public AsyncEventSource {
                               queryParams, headers, timeout);
     }
 
-    HttpClient & operator = (HttpClient && other) noexcept;
+    HttpClient & operator = (HttpClient && other) = delete;
+    HttpClient & operator = (const HttpClient & other) = delete;
 
 private:
-    /* AsyncEventSource */
-    virtual int selectFd() const;
-    virtual bool processOne();
 
     /* Local */
     bool enqueueRequest(const std::string & verb,
                         const std::string & resource,
                         const std::shared_ptr<HttpClientCallbacks> & callbacks,
-                        const HttpRequest::Content & content,
+                        const MimeContent & content,
                         const RestParams & queryParams,
                         const RestParams & headers,
                         int timeout = -1);
 
+    void handleQueueEvent(HttpRequest && rq);
+
+    void handleHttpConnectionDone(HttpConnection & connection, int result);
+
+#if 0
     void handleEvents();
     void handleEvent(const ::epoll_event & event);
-    void handleWakeupEvent();
     void handleTimerEvent();
     void handleMultiEvent(const ::epoll_event & event);
 
@@ -214,81 +455,37 @@ private:
 
     void addFd(int fd, bool isMod, int flags) const;
     void removeFd(int fd) const;
-
-    struct HttpConnection {
-        HttpConnection();
-
-        HttpConnection(const HttpConnection & other) = delete;
-
-        void clear()
-        {
-            easy_.reset();
-            request_.clear();
-            afterContinue_ = false;
-            uploadOffset_ = 0;
-        }
-        void perform(bool noSSLChecks, bool debug);
-
-        /* header and body write callbacks */
-        curlpp::types::WriteFunctionFunctor onHeader_;
-        curlpp::types::WriteFunctionFunctor onWrite_;
-        size_t onCurlHeader(const char * data, size_t size) noexcept;
-        size_t onCurlWrite(const char * data, size_t size) noexcept;
-
-        /* body read callback */
-        curlpp::types::ReadFunctionFunctor onRead_;
-        size_t onCurlRead(char * buffer, size_t bufferSize) noexcept;
-
-        HttpRequest request_;
-
-        curlpp::Easy easy_;
-        // HttpClientResponse response_;
-        bool afterContinue_;
-        size_t uploadOffset_;
-
-        struct HttpConnection *next;
-    };
+#endif
 
     HttpConnection * getConnection();
     void releaseConnection(HttpConnection * connection);
 
     std::string baseUrl_;
 
-    int fd_;
-    ML::Wakeup_Fd wakeup_;
-    int timerFd_;
-
-    curlpp::Multi multi_;
-    ::CURLM * handle_;
+    bool debug_;
 
     std::vector<HttpConnection> connectionStash_;
     std::vector<HttpConnection *> avlConnections_;
     size_t nextAvail_;
 
-    ML::RingBufferSRMW<HttpRequest> queue_; /* queued requests */
+    TypedMessageSink<HttpRequest> queue_; /* queued requests */
+    std::deque<HttpRequest> inThreadQueue_; /* requests moved to the worker
+                                             * thread */
+
+    HttpConnection::OnDone onHttpConnectionDone_;
 };
 
-
-enum struct HttpClientError {
-    NONE,
-    UNKNOWN,
-    TIMEOUT,
-    HOST_NOT_FOUND,
-    COULD_NOT_CONNECT,
-};
-
-std::ostream & operator << (std::ostream & stream, HttpClientError error);
 
 /* HTTPCLIENTCALLBACKS */
 
 struct HttpClientCallbacks {
     typedef std::function<void (const HttpRequest &,
                                 const std::string &,
-                                int code)> OnResponseStart;
+                                int)> OnResponseStart;
     typedef std::function<void (const HttpRequest &,
-                                const char * data, size_t size)> OnData;
-    typedef std::function<void (const HttpRequest & rq,
-                                HttpClientError errorCode)> OnDone;
+                                const char *, size_t)> OnData;
+    typedef std::function<void (const HttpRequest &,
+                                int)> OnDone;
 
     HttpClientCallbacks(OnResponseStart onResponseStart = nullptr,
                         OnData onHeader = nullptr,
@@ -304,7 +501,7 @@ struct HttpClientCallbacks {
     {
     }
 
-    static const std::string & errorMessage(HttpClientError errorCode);
+    // static const std::string & errorMessage(HttpClientError errorCode);
 
     /* initiates a response */
     virtual void onResponseStart(const HttpRequest & rq,
@@ -322,7 +519,7 @@ struct HttpClientCallbacks {
     /* callback for operation completions, implying that no other call will
      * be performed for the same request */
     virtual void onDone(const HttpRequest & rq,
-                        HttpClientError errorCode);
+                        int errorCode);
 
 private:
     OnResponseStart onResponseStart_;
@@ -339,7 +536,7 @@ private:
 struct HttpClientSimpleCallbacks : public HttpClientCallbacks
 {
     typedef std::function<void (const HttpRequest &,  /* request */
-                                HttpClientError,      /* error code */
+                                int,      /* error code */
                                 int,                  /* status code */
                                 std::string &&,       /* headers */
                                 std::string &&)>      /* body */
@@ -353,10 +550,10 @@ struct HttpClientSimpleCallbacks : public HttpClientCallbacks
                           const char * data, size_t size);
     virtual void onData(const HttpRequest & rq,
                         const char * data, size_t size);
-    virtual void onDone(const HttpRequest & rq, HttpClientError errorCode);
+    virtual void onDone(const HttpRequest & rq, int errorCode);
 
     virtual void onResponse(const HttpRequest & rq,
-                            HttpClientError error,
+                            int error,
                             int status,
                             std::string && headers,
                             std::string && body);
