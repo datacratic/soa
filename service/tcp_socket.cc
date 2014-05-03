@@ -299,7 +299,7 @@ processOne()
 {
     struct epoll_event events[3];
 
-    try {    
+    try {
         int res = epoll_wait(epollFd_, events, sizeof(events), 0);
         if (res == -1) {
             throw ML::Exception(errno, "epoll_wait");

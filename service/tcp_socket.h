@@ -83,7 +83,10 @@ struct ClientTcpSocket : public AsyncEventSource
     bool write(const char * data, size_t size);
     bool write(std::string && data);
 
-    /* invoked when a write operation has been performed */
+    /* invoked when a write operation has been performed, where "written" is
+       the string that was sent "writtenSize" is the amount of bytes that was
+       sent. The latter is always equal to the length of the string with
+       error is 0. */
     virtual void onWriteResult(int error,
                                const std::string & written,
                                size_t writtenSize);
