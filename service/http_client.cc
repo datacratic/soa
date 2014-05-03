@@ -448,16 +448,17 @@ onWriteResult(int error, const string & written, size_t writtenSize)
                 state_ = IDLE;
             }
         }
+        else if (state_ == BODY) {
+            uploadOffset_ += writtenSize;
+        }
         else if (state_ != BODY) {
             throw ML::Exception("invalid state");
         }
         if (state_ == BODY) {
-            uploadOffset_ += writtenSize;
             uint64_t remaining = content.size() - uploadOffset_;
             uint64_t chunkSize = min(remaining, HttpConnection::sendSize);
             if (chunkSize == 0) {
                 state_ = IDLE;
-                uploadOffset_ = 0;
             }
             else {
                 write(content.data() + uploadOffset_, chunkSize);
@@ -602,7 +603,6 @@ debug(bool debugOn)
     debug_ = debugOn;
     MessageLoop::debug(debugOn);
 }
-
 
 bool
 HttpClient::
