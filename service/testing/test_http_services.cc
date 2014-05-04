@@ -23,6 +23,7 @@ HttpService::
 start(const string & address, int numThreads)
 {
     init(portToUse, address, numThreads);
+    waitListening();
 }
 
 shared_ptr<ConnectionHandler>
