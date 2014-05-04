@@ -246,10 +246,9 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     service.waitListening();
 
 #if 1
-    /* FIXME: this test does not work because the Datacratic router silently
-     * either drops packets to unreachable host or the arp timeout is very
-     * high */
-    /* request to bad ip */
+    /* request to bad ip
+       Note: if the ip resolution timeout is very high on the router, the
+       Watchdog timeout might trigger first */
     {
         string baseUrl("http://123.234.12.23");
         auto resp = doGetRequest(loop, baseUrl, "/");
@@ -259,10 +258,10 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     }
 #endif
 
-    /* FIXME: this test does not work because the Datacratic name service
-     * always returns something */
 #if 1
-    /* request to bad hostname */
+    /* request to bad hostname
+       Note: will fail when the name service returns a "default" value for all
+       non resolved hosts */
     {
         string baseUrl("http://somewhere.lost");
         auto resp = doGetRequest(loop, baseUrl, "/");
