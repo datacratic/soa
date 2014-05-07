@@ -62,9 +62,15 @@ AsyncModelBench(const string & baseUrl, int maxReqs, int concurrency,
             //     cerr << "reqs: "  + to_string(numReqs) + "\n";
             // }
         }
+        else {
+            numMissed++;
+        }
     }
 
     while (numResponses < maxReqs) {
+        // cerr << (" num Responses: " + to_string(numResponses)
+        //          + "; max reqs: " + to_string(maxReqs)
+        //          + "\n");
         int old(numResponses);
         ML::futex_wait(numResponses, old);
     }
@@ -72,6 +78,8 @@ AsyncModelBench(const string & baseUrl, int maxReqs, int concurrency,
 
     loop.removeSource(client.get());
     client->waitConnectionState(AsyncEventSource::DISCONNECTED);
+
+    cerr << "num misses: "  + to_string(numMissed) + "\n";
 }
 
 void
@@ -91,6 +99,7 @@ ThreadedModelBench(const string & baseUrl, int maxReqs, int concurrency,
     start = Date::now();
     int slice(maxReqs / concurrency);
     for (int i = 0; i < concurrency; i++) {
+        // cerr << "doing slice: "  + to_string(slice) + "\n";
         threads.emplace_back(threadFn, i, slice);
     }
     for (int i = 0; i < concurrency; i++) {
@@ -162,6 +171,7 @@ int main(int argc, char *argv[])
     }
 
     if (serveriface != "none") {
+        cerr << "launching server\n";
         service.portToUse = 20000;
 
         service.addResponse("GET", "/", 200, payload);
@@ -169,6 +179,7 @@ int main(int argc, char *argv[])
     }
 
     if (clientiface != "none") {
+        cerr << "launching client\n";
         if (maxReqs == 0) {
             throw ML::Exception("'max-reqs' must be specified");
         }
