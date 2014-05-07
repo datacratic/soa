@@ -28,14 +28,16 @@ ClientTcpSocket(OnConnectionResult onConnectionResult,
                 OnWriteResult onWriteResult,
                 OnReceivedData onReceivedData,
                 OnException onException,
-                size_t bufferSize)
+                size_t maxMessages,
+                size_t recvBufSize)
     : AsyncEventSource(),
       port_(-1),
       epollFd_(-1),
       socket_(-1),
+      recvBufSize_(recvBufSize),
       writeReady_(false),
       wakeup_(EFD_NONBLOCK | EFD_CLOEXEC),
-      threadBuffer_(bufferSize),
+      threadBuffer_(maxMessages),
       currentSent_(0),
       bytesSent_(0),
       remainingMsgs_(0),
@@ -555,6 +557,11 @@ handleConnectionResult()
     else if (result == ENETUNREACH) {
         connResult = HOST_UNKNOWN;
     }
+    else if (result == ECONNREFUSED
+             || result == EHOSTDOWN
+             || result == EHOSTUNREACH) {
+        connResult = COULD_NOT_CONNECT;
+    }
     else {
         throw ML::Exception("unhandled error:" + to_string(result));
     }
@@ -591,15 +598,20 @@ void
 ClientTcpSocket::
 handleReadReady()
 {
-    char buffer[16384];
+    char buffer[recvBufSize_];
     size_t remaining(sizeof(buffer));
 
     // cerr << "handleReadReady\n";
 
     while (1) {
         ssize_t s = ::read(socket_, buffer, remaining);
-        if (s == -1) {
+        if (s > 0) {
+            // ::fprintf(stderr, "read %ld bytes\n", s);
+            onReceivedData(buffer, s);
+        }
+        else if (s == -1) {
             if (errno == EWOULDBLOCK) {
+                // cerr << "done reading\n";
                 break;
             }
             else if (errno == EBADF || errno == EINVAL) {

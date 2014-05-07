@@ -61,7 +61,8 @@ struct ClientTcpSocket : public AsyncEventSource
                     OnWriteResult onWriteResult = nullptr,
                     OnReceivedData onReceivedData = nullptr,
                     OnException onException = nullptr,
-                    size_t bufferSize = 32);
+                    size_t maxMessages = 32,
+                    size_t recvBufSize = 16284);
 
     virtual ~ClientTcpSocket();
 
@@ -152,6 +153,8 @@ private:
 
     int epollFd_;
     int socket_;
+
+    size_t recvBufSize_;
 
     bool writeReady_;
 
