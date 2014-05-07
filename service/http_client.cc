@@ -522,9 +522,9 @@ HttpConnection::
 handleEndOfRq(int code)
 {
     // cerr << "handleEndOfRq: " << this << endl;
-    request_.callbacks().onDone(request_, 0);
+    request_.callbacks().onDone(request_, code);
     clear();
-    onDone(0);
+    onDone(code);
 }
 
 
@@ -544,9 +544,9 @@ HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
     init(1);
 
     queue_.onEvent = [&] (HttpRequest && rq) {
+        // cerr << "onEvent\n";
         this->handleQueueEvent(move(rq));
     };
-
     addSource("queue", queue_);
 
     /* available connections */
