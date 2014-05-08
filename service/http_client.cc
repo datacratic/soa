@@ -341,7 +341,7 @@ feed(const char * bufferData, size_t bufferSize)
 
 HttpConnection::
 HttpConnection()
-    : state_(IDLE)
+    : responseState_(IDLE)
 {
     // cerr << "HttpConnection(): " << this << "\n";
 
@@ -378,16 +378,16 @@ void
 HttpConnection::
 perform(HttpRequest && request)
 {
-    if (state_ != IDLE) {
+    // cerr << "perform: " << this << endl;
+
+    if (responseState_ != IDLE) {
         ::fprintf(stderr, "cannot process a request when state is not idle");
         abort();
     }
 
-    // cerr << "perform: " << this << endl;
-
     request_ = move(request);
 
-    state_ = HEADERS;
+    responseState_ = HEADERS;
     if (canSendMessages()) {
         write(request_.requestStr());
     }
@@ -416,26 +416,26 @@ onWriteResult(int error, const string & written, size_t writtenSize)
 {
     if (error == 0) {
         const MimeContent content = request_.content();
-        if (state_ == HEADERS) {
+        if (responseState_ == HEADERS) {
             if (content.size() > 0) {
-                state_ = BODY;
+                responseState_ = BODY;
                 uploadOffset_ = 0;
             }
             else {
-                state_ = IDLE;
+                responseState_ = IDLE;
             }
         }
-        else if (state_ == BODY) {
+        else if (responseState_ == BODY) {
             uploadOffset_ += writtenSize;
         }
-        else if (state_ != BODY) {
+        else if (responseState_ != BODY) {
             throw ML::Exception("invalid state");
         }
-        if (state_ == BODY) {
+        if (responseState_ == BODY) {
             uint64_t remaining = content.size() - uploadOffset_;
             uint64_t chunkSize = min(remaining, HttpConnection::sendSize);
             if (chunkSize == 0) {
-                state_ = IDLE;
+                responseState_ = IDLE;
             }
             else {
                 write(content.data() + uploadOffset_, chunkSize);

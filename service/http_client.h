@@ -339,7 +339,7 @@ private:
 
     void handleEndOfRq(int code);
 
-    HttpState state_;
+    HttpState responseState_;
     HttpRequest request_;
     HttpResponseParser parser_;
     size_t uploadOffset_;
