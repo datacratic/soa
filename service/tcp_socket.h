@@ -43,8 +43,6 @@ enum ClientTcpSocketState {
 
 /* CLIENT TCP SOCKET */
 
-/* TODO: handling of lost messages */
-
 struct ClientTcpSocket : public AsyncEventSource
 {
     typedef std::function<void(ConnectionResult, const std::vector<std::string> &)>
@@ -172,6 +170,11 @@ private:
     OnWriteResult onWriteResult_;
     OnReceivedData onReceivedData_;
     OnException onException_;
+
+    /* future parameters:
+       - writeMany: send multiple lines at once
+       - tcpNoDelay
+    */
 };
 
 } // namespace Datacratic
