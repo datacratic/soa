@@ -40,9 +40,9 @@ makeRequestStr()
     requestStr_ += "Host: "+ url.host();
     int port = url.port();
     if (port > 0) {
-        requestStr_ += ":" + to_string(port) + "\r\n";
+        requestStr_ += ":" + to_string(port);
     }
-    requestStr_ += "Accept: */*\r\n";
+    requestStr_ += "\r\nAccept: */*\r\n";
     for (const auto & header: headers_) {
         requestStr_ += header.first + ":" + header.second + "\r\n";
     }
