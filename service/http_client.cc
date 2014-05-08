@@ -20,29 +20,6 @@
 using namespace std;
 using namespace Datacratic;
 
-namespace {
-
-int
-antoi(const char * start, const char * end)
-{
-    const char * ptr = start;
-    int result(0);
-
-    while (ptr < end) {
-        if (isdigit(*ptr)) {
-            result = (result * 10) + int(*ptr) - 48;
-            ptr++;
-        }
-        else {
-            throw ML::Exception("expected digit");
-        }
-    }
-
-    return result;
-}
-
-}
-
 
 /* HTTP REQUEST */
 
@@ -239,7 +216,7 @@ feed(const char * bufferData, size_t bufferSize)
             }
 
             size_t codeEnd = ptr;
-            int code = antoi(data + codeStart, data + codeEnd);
+            int code = ML::antoi(data + codeStart, data + codeEnd);
 
             /* we skip the whole "reason" string */
             if (!skipToChar('\r', false)) {
@@ -293,7 +270,7 @@ feed(const char * bufferData, size_t bufferSize)
                 onHeader(data, ptr - 2);
                 if (ptr > 13) {
                     if (::strncasecmp(data, "Content-Length", 14) == 0) {
-                        remainingBody_ = antoi(data + 16, data + ptr - 2);
+                        remainingBody_ = ML::antoi(data + 16, data + ptr - 2);
                         // cerr << "body: " + to_string(remainingBody_) + "\n";
                     }
                 }
