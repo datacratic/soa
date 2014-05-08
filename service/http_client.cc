@@ -509,7 +509,7 @@ handleEndOfRq(int code)
 
 HttpClient::
 HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
-    : MessageLoop(),
+    : MessageLoop(1, 0, -1),
       noSSLChecks(false),
       baseUrl_(baseUrl),
       debug_(false),
@@ -518,8 +518,6 @@ HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
       nextAvail_(0),
       queue_(queueSize)
 {
-    init(1);
-
     queue_.onEvent = [&] (HttpRequest && rq) {
         // cerr << "onEvent\n";
         this->handleQueueEvent(move(rq));
