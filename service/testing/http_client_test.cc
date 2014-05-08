@@ -7,7 +7,6 @@
 #include <boost/test/unit_test.hpp>
 
 #include "jml/utils/testing/watchdog.h"
-#include "soa/service/message_loop.h"
 #include "soa/service/rest_proxy.h"
 #include "soa/service/http_client.h"
 
@@ -25,12 +24,14 @@ typedef tuple<int, int, string> ClientResponse;
 
 /* sync request helpers */
 ClientResponse
-doGetRequest(MessageLoop & loop,
-             const string & baseUrl, const string & resource,
+doGetRequest(const string & baseUrl, const string & resource,
              const RestParams & headers = RestParams(),
              int timeout = -1)
 {
     ClientResponse response;
+
+    HttpClient client(baseUrl);
+    client.start();
 
     int done(false);
     auto onResponse = [&] (const HttpRequest & rq,
@@ -48,15 +49,13 @@ doGetRequest(MessageLoop & loop,
         ML::futex_wake(done);
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
-    auto client = make_shared<HttpClient>(baseUrl);
-    loop.addSource("httpClient", client);
-    client->waitConnectionState(AsyncEventSource::CONNECTED);
+
     if (timeout == -1) {
-        client->get(resource, cbs, RestParams(), headers);
+        client.get(resource, cbs, RestParams(), headers);
     }
     else {
-        client->get(resource, cbs, RestParams(), headers,
-                    timeout);
+        client.get(resource, cbs, RestParams(), headers,
+                   timeout);
     }
 
     while (!done) {
@@ -64,21 +63,20 @@ doGetRequest(MessageLoop & loop,
         ML::futex_wait(done, oldDone);
     }
 
-    loop.removeSource(client.get());
-    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
-
     return response;
 }
 
 ClientResponse
-doUploadRequest(MessageLoop & loop,
-                bool isPut,
+doUploadRequest(bool isPut,
                 const string & baseUrl, const string & resource,
                 const string & body, const string & type)
 {
     ClientResponse response;
-    int done(false);
 
+    HttpClient client(baseUrl);
+    client.start();
+
+    int done(false);
     auto onResponse = [&] (const HttpRequest & rq,
                            int error,
                            int status,
@@ -94,16 +92,13 @@ doUploadRequest(MessageLoop & loop,
         ML::futex_wake(done);
     };
 
-    auto client = make_shared<HttpClient>(baseUrl);
-    loop.addSource("httpClient", client);
-    client->waitConnectionState(AsyncEventSource::CONNECTED);
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
     MimeContent content(body, type);
     if (isPut) {
-        client->put(resource, cbs, content);
+        client.put(resource, cbs, content);
     }
     else {
-        client->post(resource, cbs, content);
+        client.post(resource, cbs, content);
     }
 
     while (!done) {
@@ -111,9 +106,6 @@ doUploadRequest(MessageLoop & loop,
         ML::futex_wait(done, oldDone);
     }
     
-    loop.removeSource(client.get());
-    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
-
     return response;
 }
 
@@ -240,9 +232,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     service.addResponse("GET", "/coucou", 200, "coucou");
     service.start();
 
-    MessageLoop loop;
-    loop.start();
-
     service.waitListening();
 
 #if 1
@@ -251,7 +240,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
        Watchdog timeout might trigger first */
     {
         string baseUrl("http://123.234.12.23");
-        auto resp = doGetRequest(loop, baseUrl, "/");
+        auto resp = doGetRequest(baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
                           ConnectionResult::COULD_NOT_CONNECT);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
@@ -264,7 +253,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
        non resolved hosts */
     {
         string baseUrl("http://somewhere.lost");
-        auto resp = doGetRequest(loop, baseUrl, "/");
+        auto resp = doGetRequest(baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
                           ConnectionResult::HOST_UNKNOWN);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
@@ -274,7 +263,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     /* request with timeout */
     {
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
-        auto resp = doGetRequest(loop, baseUrl, "/timeout", {}, 1);
+        auto resp = doGetRequest(baseUrl, "/timeout", {}, 1);
         BOOST_CHECK_EQUAL(get<0>(resp),
                           ConnectionResult::TIMEOUT);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
@@ -284,7 +273,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     {
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
-        auto resp = doGetRequest(loop, baseUrl, "/nothing");
+        auto resp = doGetRequest(baseUrl, "/nothing");
         BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
         BOOST_CHECK_EQUAL(get<1>(resp), 404);
     }
@@ -293,7 +282,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     {
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
-        auto resp = doGetRequest(loop, baseUrl, "/coucou");
+        auto resp = doGetRequest(baseUrl, "/coucou");
         BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
         BOOST_CHECK_EQUAL(get<1>(resp), 200);
         BOOST_CHECK_EQUAL(get<2>(resp), "coucou");
@@ -302,7 +291,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     /* headers and cookies */
     {
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
-        auto resp = doGetRequest(loop, baseUrl, "/headers",
+        auto resp = doGetRequest(baseUrl, "/headers",
                                  {{"someheader", "somevalue"}});
         Json::Value expBody;
         expBody["accept"] = "*/*";
@@ -325,14 +314,11 @@ BOOST_AUTO_TEST_CASE( test_http_client_post )
 
     sleep (1);
 
-    MessageLoop loop;
-    loop.start();
-
     /* request to /coucou -> 200 + "coucou" */
     {
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
-        auto resp = doUploadRequest(loop, false, baseUrl, "/post-test",
+        auto resp = doUploadRequest(false, baseUrl, "/post-test",
                                     "post body", "application/x-nothing");
         BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
         BOOST_CHECK_EQUAL(get<1>(resp), 200);
@@ -355,16 +341,13 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
 
     sleep (1);
 
-    MessageLoop loop;
-    loop.start();
-
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
     string bigBody;
     for (int i = 0; i < 65535; i++) {
         bigBody += "this is one big body,";
     }
-    auto resp = doUploadRequest(loop, true, baseUrl, "/put-test",
+    auto resp = doUploadRequest(true, baseUrl, "/put-test",
                                 bigBody, "application/x-nothing");
     BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
     BOOST_CHECK_EQUAL(get<1>(resp), 200);
@@ -389,15 +372,11 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
     service.start();
     service.waitListening();
 
-    MessageLoop loop;
-    loop.start();
-
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
 
-    auto client = make_shared<HttpClient>(baseUrl);
-    auto & clientRef = *client.get();
-    loop.addSource("httpClient", client);
+    HttpClient client(baseUrl);
+    client.start();
 
     int maxReqs(10000), numReqs(0), missedReqs(0);
     int numResponses(0);
@@ -420,7 +399,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
 
     while (numReqs < maxReqs) {
-        if (clientRef.get("/", cbs)) {
+        if (client.get("/", cbs)) {
             numReqs++;
             // if ((numReqs & 0xff) == 0 || numReqs > 9980) {
             //     cerr << "requests performed: " + to_string(numReqs) + "\n";
@@ -439,9 +418,5 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
     }
 
     cerr << " disconnecting client\n";
-    loop.removeSource(client.get());
-    cerr << " removed source\n";
-    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
-    cerr << " done\n";
 }
 #endif
