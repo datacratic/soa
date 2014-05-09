@@ -119,17 +119,12 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     string body;
     bool done(false);
 
-    auto clearResult = [&] () {
-        statusLine.clear();
-        headers.clear();
-        body.clear();
-        done = true;
-    };
-
     HttpResponseParser parser;
     parser.onResponseStart = [&] (const string & httpVersion, int code) {
         cerr << "response start\n";
         statusLine = httpVersion + "/" + to_string(code);
+        headers.clear();
+        body.clear();
     };
     parser.onHeader = [&] (const char * data, size_t size) {
         // cerr << "header: " + string(data, size) + "\n";
@@ -141,11 +136,6 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     };
     parser.onDone = [&] () {
         done = true;
-    };
-
-    auto checkTrow = [&] (const string & data) {
-        BOOST_CHECK_THROW(parser.feed(data.c_str(), data.size()),
-                          ML::Exception);
     };
 
     /* status line */
@@ -193,8 +183,6 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(body, "0123456789");
     BOOST_CHECK_EQUAL(done, true);
 
-    clearResult();
-
     /* one full response and a partial one without body */
     parser.feed("HTTP/1.1 204 No content\r\n"
                 "MyHeader: my value1\r\n\r\nHTTP");
@@ -206,8 +194,6 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(done, true);
     BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
 
-    clearResult();
-
     parser.feed("/1.1 666 The number of the beast\r\n"
                 "Header: value\r\n\r\n");
     BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/666");
@@ -216,6 +202,21 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(body, "");
     BOOST_CHECK_EQUAL(done, true);
     BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
+
+    /* 2 full reponses with body */
+    const char * payload = ("HTTP/1.1 200 This is some blabla\r\n"
+                            "Header1: value1\r\n"
+                            "Header2: value2\r\n"
+                            "Content-Type: text/plain\r\n"
+                            "Content-Length: 10\r\n"
+                            "\r\n"
+                            "0123456789");
+    parser.feed(payload);
+    BOOST_CHECK_EQUAL(body, "0123456789");
+    BOOST_CHECK_EQUAL(done, true);
+    parser.feed(payload);
+    BOOST_CHECK_EQUAL(body, "0123456789");
+    BOOST_CHECK_EQUAL(done, true);
 }
 #endif
 
