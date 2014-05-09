@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -34,6 +35,7 @@ ClientTcpSocket(OnConnectionResult onConnectionResult,
       port_(-1),
       epollFd_(-1),
       socket_(-1),
+      noNagle_(false),
       recvBufSize_(recvBufSize),
       writeReady_(false),
       wakeup_(EFD_NONBLOCK | EFD_CLOEXEC),
@@ -109,6 +111,17 @@ waitState(ClientTcpSocketState state)
 
 void
 ClientTcpSocket::
+setUseNagle(bool useNagle)
+{
+    if (socket_ != -1) {
+        throw ML::Exception("socket already created");
+    }
+
+    noNagle_ = !useNagle;
+}
+
+void
+ClientTcpSocket::
 connect()
 {
     if (address_.empty()) {
@@ -124,12 +137,14 @@ connect()
     ML::futex_wake(state_);
 
     bool success(false);
+    int res;
 
-    socket_ = ::socket(AF_INET,
-                       SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
-    if (socket_ == -1) {
+    res = ::socket(AF_INET,
+                   SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (res == -1) {
         throw ML::Exception(errno, "socket");
     }
+    socket_ = res;
     // cerr << "socket created\n";
 
     auto cleanup = [&] () {
@@ -142,14 +157,24 @@ connect()
     };
     ML::Call_Guard guard(cleanup);
 
+    if (noNagle_) {
+        int flag = 1;
+        res = setsockopt(socket_,
+                         IPPROTO_TCP, TCP_NODELAY,
+                         (char *) &flag, sizeof(int));
+        if (res == -1) {
+            throw ML::Exception(errno, "setsockopt TCP_NODELAY");
+        }
+    }
+
     struct sockaddr_in addr;
     addr.sin_port = htons(port_);
     addr.sin_family = AF_INET;
 
     // cerr << " connecting to host: " + address_ + "\n";
-    int res = ::inet_aton(address_.c_str(), &addr.sin_addr);
+    res = ::inet_aton(address_.c_str(), &addr.sin_addr);
     if (res == 0) {
-        cerr << "host is not an ip\n";
+        // cerr << "host is not an ip\n";
         struct hostent hostentry;
         struct hostent * hostentryP;
         int hErrnoP;
@@ -536,13 +561,17 @@ void
 ClientTcpSocket::
 handleSocketEvent(const struct epoll_event & event)
 {
+    // cerr << "handleSocketEvent\n";
     if ((event.events & EPOLLOUT) != 0) {
+        // cerr << "  handleWriteReady\n";
         handleWriteReady();
     }
     if ((event.events & EPOLLIN) != 0) {
+        // cerr << "  handleReadReady\n";
         handleReadReady();
     }
     if ((event.events & EPOLLHUP) != 0) {
+        // cerr << "  handleDisconnection\n";
         handleDisconnection();
     }
     else {

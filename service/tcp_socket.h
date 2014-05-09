@@ -69,6 +69,9 @@ struct ClientTcpSocket : public AsyncEventSource
     void init(const Url & url);
     void init(const std::string & address, int port);
 
+    /* disable the Nagle algorithm (TCP_NODELAY) */
+    void setUseNagle(bool useNagle);
+
     /* initiate or restore a connection to the target service */
     void connect();
 
@@ -152,6 +155,8 @@ private:
     int epollFd_;
     int socket_;
 
+    bool noNagle_;
+
     size_t recvBufSize_;
 
     bool writeReady_;
@@ -173,7 +178,6 @@ private:
 
     /* future parameters:
        - writeMany: send multiple lines at once
-       - tcpNoDelay
     */
 };
 
