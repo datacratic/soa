@@ -638,10 +638,6 @@ handleReadReady()
             }
             throw ML::Exception(errno, "read");
         }
-        else {
-            // ::fprintf(stderr, "read %ld bytes\n", s);
-            onReceivedData(buffer, s);
-        }
     }
 
     if (remaining < sizeof(buffer)) {
