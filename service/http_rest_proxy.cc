@@ -40,7 +40,8 @@ perform(const std::string & verb,
         const Content & content,
         const RestParams & queryParams,
         const RestParams & headers,
-        double timeout) const
+        double timeout,
+        bool exceptions) const
 {
     string responseHeaders;
     string body;
@@ -154,7 +155,18 @@ perform(const std::string & verb,
 
         myRequest.setOpt<curlpp::options::HttpHeader>(curlHeaders);
 
-        myRequest.perform();
+        if (exceptions) {
+            myRequest.perform();
+        }
+        else {
+            CURLcode code = curl_easy_perform(myRequest.getHandle());
+            if (code != CURLE_OK) {
+                Response response;
+                response.errorCode_ = code;
+                response.errorMessage_ = curl_easy_strerror(code);
+                return response;
+            }
+        }
 
         Response response;
         response.body_ = body;

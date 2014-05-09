@@ -45,7 +45,7 @@ struct HttpRestProxy {
     /** The response of a request.  Has a return code and a body. */
     struct Response {
         Response()
-            : code_(0)
+            : code_(0), errorCode_(0)
         {
         }
 
@@ -79,6 +79,12 @@ struct HttpRestProxy {
         long code_;
         std::string body_;
         HttpHeader header_;
+
+        /// Error code for request, normally a CURL code, 0 is OK
+        int errorCode_;
+
+        /// Error string for an error request, empty is OK
+        std::string errorMessage_;
     };
 
     /** Add a cookie to the connection that comes in from the response. */
@@ -164,10 +170,11 @@ struct HttpRestProxy {
                   const Content & content = Content(),
                   const RestParams & queryParams = RestParams(),
                   const RestParams & headers = RestParams(),
-                  double timeout = -1) const
+                  double timeout = -1,
+                  bool exceptions = true) const
     {
         return perform("POST", resource, content, queryParams, headers,
-                       timeout);
+                       timeout, exceptions);
     }
 
     /** Perform a PUT request from end to end. */
@@ -175,20 +182,22 @@ struct HttpRestProxy {
                  const Content & content = Content(),
                  const RestParams & queryParams = RestParams(),
                  const RestParams & headers = RestParams(),
-                 double timeout = -1) const
+                 double timeout = -1,
+                 bool exceptions = true) const
     {
         return perform("PUT", resource, content, queryParams, headers,
-                       timeout);
+                       timeout, exceptions);
     }
 
     /** Perform a synchronous GET request from end to end. */
     Response get(const std::string & resource,
                  const RestParams & queryParams = RestParams(),
                  const RestParams & headers = RestParams(),
-                 double timeout = -1) const
+                 double timeout = -1,
+                 bool exceptions = true) const
     {
         return perform("GET", resource, Content(), queryParams, headers,
-                       timeout);
+                       timeout, exceptions);
     }
 
     /** Perform a synchronous request from end to end. */
@@ -197,7 +206,8 @@ struct HttpRestProxy {
                      const Content & content = Content(),
                      const RestParams & queryParams = RestParams(),
                      const RestParams & headers = RestParams(),
-                     double timeout = -1) const;
+                     double timeout = -1,
+                     bool exceptions = true) const;
 
     /** URI that will be automatically prepended to resources passed in to
         the perform() methods
