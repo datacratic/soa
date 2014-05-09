@@ -421,16 +421,27 @@ flush()
         cerr << "BAD: not ready for writing\n";
     }
 
-    // cerr << "flush1\n";
-    if (currentLine_.size() == 0) {
+    auto popLine = [&] {
+        bool result;
+
         // cerr << "fetching line\n";
         if (threadBuffer_.tryPop(currentLine_)) {
             // cerr << "fetched line\n";
             remainingMsgs_--;
             currentSent_ = 0;
+            result = true;
         }
         else {
             // cerr << "no line fetched\n";
+            result = false;
+        }
+
+        return result;
+    };
+
+    // cerr << "flush1\n";
+    if (currentLine_.size() == 0) {
+        if (!popLine()) {
             return;
         }
     }
@@ -449,15 +460,16 @@ flush()
         // cerr << " sending " << to_string(remaining) + " bytes\n";
         ssize_t len = ::write(socket_, data, remaining);
         // cerr << "write result: " + to_string(len) + "\n";
+        bool shorter = (len < remaining);
         if (len > 0) {
+            // cerr << "written + " + len + " to socket\n";
+
             currentSent_ += len;
             remaining -= len;
             bytesSent_ += len;
             if (remaining == 0) {
                 handleWriteResult(0, currentLine_, currentLine_.size());
-                if (threadBuffer_.tryPop(currentLine_)) {
-                    remainingMsgs_--;
-                    currentSent_ = 0;
+                if (popLine()) {
                     data = currentLine_.c_str();
                     remaining = currentLine_.size();
                 }
@@ -467,24 +479,30 @@ flush()
                 }
             }
         }
-        // else if (len == 0) {
-        //     done = true;
-        // }
-        else {
-            writeReady_ = false;
-            if (errno != EWOULDBLOCK) {
-                handleWriteResult(errno, currentLine_, currentSent_);
-                currentLine_ = "";
-                currentSent_ = 0;
-                if (errno == EPIPE) {
-                    handleDisconnection();
+        if (shorter) {
+            cerr << "shorter, errno = " + to_string(errno) + "\n";
+            if (!(errno == EINTR || errno == 0)) {
+                if (errno == EWOULDBLOCK) {
+                    writeReady_ = false;
                 }
                 else {
-                    cerr << "unhandled errno: "  + to_string(errno) + "\n";
+                    handleWriteResult(errno, currentLine_, currentSent_);
+                    currentLine_.clear();
+                    if (errno == EPIPE || errno == EBADF) {
+                        handleDisconnection();
+                    }
+                    else {
+                        /* This exception indicates a lack of code in the
+                           handling of errno. In a perfect world, it should
+                           never ever be thrown. */
+                        throw ML::Exception(errno, "unhandled write error");
+                    }
                 }
             }
         }
     }
+
+    // cerr << "flush end with writeReady = "  + to_string(writeReady_) + "\n";
 }
 
 void
