@@ -299,10 +299,12 @@ bool
 ClientTcpSocket::
 processOne()
 {
-    struct epoll_event events[3];
+    static const int nEvents(2);
+    struct epoll_event events[nEvents];
 
+    // cerr << "sizeof(events): " + to_string() + "\n";
     try {
-        int res = epoll_wait(epollFd_, events, sizeof(events), 0);
+        int res = epoll_wait(epollFd_, events, nEvents, 0);
         if (res == -1) {
             throw ML::Exception(errno, "epoll_wait");
         }
