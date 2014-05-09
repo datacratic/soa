@@ -659,7 +659,7 @@ releaseConnection(HttpConnection * oldConnection)
 
 HttpClientSimpleCallbacks::
 HttpClientSimpleCallbacks(const OnResponse & onResponse)
-    : onResponse_(onResponse)
+    : onResponse_(onResponse), statusCode_(0)
 {
 }
 
@@ -701,4 +701,7 @@ onResponse(const HttpRequest & rq,
     if (onResponse_) {
         onResponse_(rq, error, status, move(headers), move(body));
     }
+    statusCode_ = 0;
+    headers_.clear();
+    body_.clear();
 }
