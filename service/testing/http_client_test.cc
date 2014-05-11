@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     string statusLine;
     vector<string> headers;
     string body;
-    bool done(false);
+    bool done;
 
     HttpResponseParser parser;
     parser.onResponseStart = [&] (const string & httpVersion, int code) {
@@ -125,6 +125,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
         statusLine = httpVersion + "/" + to_string(code);
         headers.clear();
         body.clear();
+        done = false;
     };
     parser.onHeader = [&] (const char * data, size_t size) {
         // cerr << "header: " + string(data, size) + "\n";
@@ -171,10 +172,10 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(headers.size(), 3);
     BOOST_CHECK_EQUAL(headers[2], "Header3: Val3");
     parser.feed("Content-Length: 10\r\n\r");
+    parser.feed("\n");
     BOOST_CHECK_EQUAL(headers.size(), 4);
     BOOST_CHECK_EQUAL(headers[3], "Content-Length: 10");
     BOOST_CHECK_EQUAL(parser.remainingBody(), 10);
-    parser.feed("\n");
 
     /* body */
     parser.feed("0123");
