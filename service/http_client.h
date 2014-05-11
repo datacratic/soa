@@ -270,10 +270,12 @@ struct HttpResponseParser {
     typedef std::function<void ()> OnDone;
 
     HttpResponseParser()
-        : state_(0), remainingBody_(0)
-    {}
+        noexcept
+    {
+        clear();
+    }
 
-    void clear();
+    void clear() noexcept;
 
     void feed(const char * data);
     void feed(const char * data, size_t size);
@@ -289,8 +291,11 @@ struct HttpResponseParser {
     OnDone onDone;
 
 private:
+    void handleHeader(const char * data, size_t dataSize);
+
     int state_;
     std::string buffer_;
+
     uint64_t remainingBody_;
 };
 
@@ -339,9 +344,10 @@ private:
 
     void handleEndOfRq(int code);
 
+    HttpResponseParser parser_;
+
     HttpState responseState_;
     HttpRequest request_;
-    HttpResponseParser parser_;
     size_t uploadOffset_;
 };
 

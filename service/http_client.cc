@@ -124,6 +124,7 @@ onDone(const HttpRequest & rq, int errorCode)
 void
 HttpResponseParser::
 clear()
+    noexcept
 {
     state_ = 0;
     buffer_.resize(0);
@@ -182,7 +183,10 @@ feed(const char * bufferData, size_t bufferSize)
     //          + "; dataSize: " + to_string(dataSize) + "\n");
 
     while (true) {
-        if (dataSize == 0) {
+        if (ptr == dataSize) {
+            if (fromBuffer) {
+                buffer_.clear();
+            }
             return;
         }
         if (state_ == 0) {
@@ -190,14 +194,14 @@ feed(const char * bufferData, size_t bufferSize)
             // HTTP/1.1 200 OK
 
             /* sizeof("HTTP/1.1 200 ") */
-            if (dataSize < 16) {
+            if ((dataSize - ptr) < 16) {
                 if (!fromBuffer) {
-                    buffer_.append(data, dataSize);
+                    buffer_.assign(data + ptr, dataSize - ptr);
                 }
                 return;
             }
 
-            if (::memcmp(data, "HTTP/", 5) != 0) {
+            if (::memcmp(data + ptr, "HTTP/", 5) != 0) {
                 throw ML::Exception("version must start with 'HTTP/'");
             }
             ptr += 5;
@@ -221,15 +225,12 @@ feed(const char * bufferData, size_t bufferSize)
             /* we skip the whole "reason" string */
             if (!skipToChar('\r', false)) {
                 if (!fromBuffer) {
-                    buffer_.append(data, dataSize);
+                    buffer_.assign(data + ptr, dataSize - ptr);
                 }
                 return;
             }
             ptr++;
             if (ptr == dataSize) {
-                if (!fromBuffer) {
-                    buffer_.append(data, dataSize);
-                }
                 return;
             }
             if (data[ptr] != '\n') {
@@ -239,27 +240,26 @@ feed(const char * bufferData, size_t bufferSize)
             onResponseStart(string(data, versionEnd), code);
             state_ = 1;
 
-            dataSize -= ptr;
-            buffer_.assign(data + ptr, dataSize);
-            if (dataSize == 0) {
+            if (ptr == dataSize) {
+                buffer_.clear();
                 return;
             }
-            data = buffer_.c_str();
-            fromBuffer = true;
-            ptr = 0;
         }
         else if (state_ == 1) {
             while (data[ptr] != '\r') {
+                size_t headerPtr = ptr;
                 if (!skipToChar(':', true) || !skipToChar('\r', false)) {
-                    if (!fromBuffer) {
-                        buffer_.append(data, dataSize);
+                    if (headerPtr > 0 || !fromBuffer) {
+                        buffer_.assign(data + headerPtr,
+                                       dataSize - headerPtr);
                     }
                     return;
                 }
                 ptr++;
                 if (ptr == dataSize) {
-                    if (!fromBuffer) {
-                        buffer_.append(data, dataSize);
+                    if (headerPtr > 0 || !fromBuffer) {
+                        buffer_.assign(data + headerPtr,
+                                       dataSize - headerPtr);
                     }
                     return;
                 }
@@ -267,75 +267,98 @@ feed(const char * bufferData, size_t bufferSize)
                     throw ML::Exception("expected \\n");
                 }
                 ptr++;
-                onHeader(data, ptr - 2);
-                if (ptr > 13) {
-                    if (::strncasecmp(data, "Content-Length", 14) == 0) {
-                        remainingBody_ = ML::antoi(data + 16, data + ptr - 2);
-                        // cerr << "body: " + to_string(remainingBody_) + "\n";
-                    }
-                }
-                dataSize -= ptr;
-                // cerr << "dataSize: " + to_string(dataSize) + "\n";
-                buffer_.assign(data + ptr, dataSize);
-                // cerr << "buffer: /" + buffer_ + "/\n";
-                if (dataSize == 0) {
+                handleHeader(data + headerPtr, ptr - headerPtr - 2);
+                if (ptr == dataSize) {
                     // cerr << "returning\n";
+                    if (fromBuffer) {
+                        buffer_.clear();
+                    }
                     return;
                 }
-                data = buffer_.c_str();
-                fromBuffer = true;
-                ptr = 0;
             }
-            ptr++;
-            if (ptr == dataSize) {
-                buffer_.assign(data, dataSize);
+            if (ptr + 1 == dataSize) {
+                buffer_.assign(data + ptr, dataSize - ptr);
                 return;
             }
+            ptr++;
             if (data[ptr] != '\n') {
                 throw ML::Exception("expected \\n");
             }
             ptr++;
 
             if (remainingBody_ == 0) {
-                state_ = 0;
                 onDone();
+                state_ = 0;
             }
             else {
                 state_ = 2;
             }
 
-            dataSize -= ptr;
-            buffer_.assign(data + ptr, dataSize);
             if (dataSize == 0) {
+                if (fromBuffer) {
+                    buffer_.clear();
+                }
                 return;
             }
-            data = buffer_.c_str();
-            fromBuffer = true;
-            ptr = 0;
         }
         else if (state_ == 2) {
-            uint64_t chunkSize = min(dataSize, remainingBody_);
+            uint64_t chunkSize = min(dataSize - ptr, remainingBody_);
             // cerr << "toSend: " + to_string(chunkSize) + "\n";
             // cerr << "received body: /" + string(data, chunkSize) + "/\n";
-            onData(data, chunkSize);
-            dataSize -= chunkSize;
+            onData(data + ptr, chunkSize);
+            ptr += chunkSize;
             remainingBody_ -= chunkSize;
             if (remainingBody_ == 0) {
-                state_ = 0;
                 onDone();
-            }
-            buffer_.assign(data + chunkSize, dataSize);
-            if (dataSize > 0) {
-                data = buffer_.c_str();
-                fromBuffer = true;
-            }
-            else {
-                return;
+                state_ = 0;
             }
         }
     }
 }
 
+void
+HttpResponseParser::
+handleHeader(const char * data, size_t dataSize)
+{
+    size_t ptr(0);
+
+    auto skipToChar = [&] (char c) {
+        while (ptr < dataSize) {
+            if (data[ptr] == c)
+                return true;
+            ptr++;
+        }
+
+        return false;
+    };
+    auto skipChar = [&] (char c) {
+        while (ptr < dataSize && data[ptr] == c) {
+            ptr++;
+        }
+    };
+    auto matchString = [&] (const char * testString, size_t len) {
+        bool result;
+        if (dataSize >= (ptr + len)
+            && ::strncasecmp(data + ptr, testString, len) == 0) {
+            ptr += len;
+            result = true;
+        }
+        else {
+            result = false;
+        }
+        return result;
+    };
+
+    if (matchString("Content-Length", 14)) {
+        skipChar(' ');
+        skipToChar(':');
+        ptr++;
+        skipChar(' ');
+        remainingBody_ = ML::antoi(data + ptr, data + dataSize);
+    }
+
+    onHeader(data, dataSize);
+}
 
 /* HTTP CONNECTION */
 
@@ -370,8 +393,9 @@ void
 HttpConnection::
 clear()
 {
+    responseState_ = IDLE;
     request_.clear();
-    parser_.clear();
+    uploadOffset_ = 0;
 }
 
 void
@@ -499,6 +523,9 @@ HttpConnection::
 handleEndOfRq(int code)
 {
     // cerr << "handleEndOfRq: " << this << endl;
+    if (code != 0) {
+        requestClose();
+    }
     request_.callbacks().onDone(request_, code);
     clear();
     onDone(code);
