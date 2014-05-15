@@ -47,7 +47,7 @@ struct ClientTcpSocket : public AsyncEventSource
 {
     typedef std::function<void(ConnectionResult, const std::vector<std::string> &)>
         OnConnectionResult;
-    typedef std::function<void()> OnDisconnected;
+    typedef std::function<void(bool)> OnDisconnected;
     typedef std::function<void(int error,
                                const std::string & written,
                                size_t writtenSize)> OnWriteResult;
@@ -60,7 +60,7 @@ struct ClientTcpSocket : public AsyncEventSource
                     OnReceivedData onReceivedData = nullptr,
                     OnException onException = nullptr,
                     size_t maxMessages = 32,
-                    size_t recvBufSize = 16284);
+                    size_t recvBufSize = 65536);
 
     virtual ~ClientTcpSocket();
 
@@ -98,7 +98,7 @@ struct ClientTcpSocket : public AsyncEventSource
     void requestClose();
 
     /* invoked when the connection is closed */
-    virtual void onDisconnected();
+    virtual void onDisconnected(bool fromPeer);
 
     /* invoked when the data is available for reading */
     virtual void onReceivedData(const char * data, size_t size);
@@ -125,18 +125,33 @@ struct ClientTcpSocket : public AsyncEventSource
     virtual bool processOne();
 
 private:
-    void doClose();
-
     typedef std::function<void (struct epoll_event &)> EpollCallback;
 
-    void addFdOneShot(int fd, EpollCallback & cb, bool writerFd = false);
-    void restartFdOneShot(int fd, EpollCallback & cb, bool writerFd = false);
+
+    void addFdOneShot(int fd, EpollCallback & cb,
+                      bool readerFd, bool writerFd)
+    {
+        performAddFd(fd, cb, readerFd, writerFd, false);
+    }
+
+    void restartFdOneShot(int fd, EpollCallback & cb,
+                          bool readerFd, bool writerFd)
+    {
+        performAddFd(fd, cb, readerFd, writerFd, true);
+    }
+
+    void performAddFd(int fd, EpollCallback & cb,
+                      bool readerFd, bool writerFd,
+                      bool restart);
+
     void removeFd(int fd);
-    void close();
+    void closeFd();
+
+    void closeEpollFd();
 
     void handleSocketEvent(const struct epoll_event & event);
     void handleConnectionResult();
-    void handleDisconnection();
+    void handleDisconnection(bool fromPeer);
     void handleReadReady();
     void handleWriteReady();
     void handleWriteResult(int error,

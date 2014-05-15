@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 
 #include "googleurl/src/gurl.h"
+#include "jml/utils/exc_assert.h"
 #include "jml/utils/guard.h"
 #include "soa/types/url.h"
 
@@ -56,13 +57,18 @@ ClientTcpSocket(OnConnectionResult onConnectionResult,
     handleWakeupEventCb_ = [&] (const struct epoll_event & event) {
         this->handleWakeupEvent(event);
     };
-    addFdOneShot(wakeup_.fd(), handleWakeupEventCb_);
+    addFdOneShot(wakeup_.fd(), handleWakeupEventCb_, true, false);
 }
 
 ClientTcpSocket::
 ~ClientTcpSocket()
 {
-    close();
+    // cerr << "~ClientTcpSocket\n";
+    if (socket_ != -1) {
+        // cerr << "closing fd: " + to_string(socket_) + "\n";
+        closeFd();
+    }
+    closeEpollFd();
 }
 
 void
@@ -124,14 +130,11 @@ void
 ClientTcpSocket::
 connect()
 {
-    if (address_.empty()) {
-        throw ML::Exception("no address set");
-    }
-
-    if (state_ == ClientTcpSocketState::CONNECTING
-        || state_ == ClientTcpSocketState::CONNECTED) {
-        throw ML::Exception("connection already pending or established");
-    }
+    // cerr << "connect...\n";
+    ExcCheck(socket_ == -1, "socket is not closed");
+    ExcCheck(!address_.empty(), "no address set");
+    ExcCheck(!canSendMessages(),
+             "connection already pending or established");
 
     state_ = ClientTcpSocketState::CONNECTING;
     ML::futex_wake(state_);
@@ -214,7 +217,9 @@ connect()
     handleSocketEventCb_ = [&] (const struct epoll_event & event) {
         this->handleSocketEvent(event);
     };
-    addFdOneShot(socket_, handleSocketEventCb_, true);
+    addFdOneShot(socket_, handleSocketEventCb_,
+                 state_ == ClientTcpSocketState::CONNECTED,
+                 true);
 }
 
 void
@@ -228,10 +233,10 @@ onConnectionResult(ConnectionResult result, const vector<string> & msgs)
 
 void
 ClientTcpSocket::
-onDisconnected()
+onDisconnected(bool fromPeer)
 {
     if (onDisconnected_) {
-        onDisconnected_();
+        onDisconnected_(fromPeer);
     }
 }
 
@@ -314,8 +319,11 @@ requestClose()
 {
     if (canSendMessages()) {
         state_ = ClientTcpSocketState::DISCONNECTING;
-        wakeup_.signal();
         ML::futex_wake(state_);
+        wakeup_.signal();
+    }
+    else {
+        cerr << "already disconnected/ing\n";
     }
 }
 
@@ -348,7 +356,7 @@ processOne()
 
 void
 ClientTcpSocket::
-close()
+closeEpollFd()
 {
     if (epollFd_ == -1) 
         return;
@@ -361,38 +369,39 @@ close()
 
 void
 ClientTcpSocket::
-addFdOneShot(int fd, EpollCallback & cb, bool writerFd)
-{
-    struct epoll_event event;
-    event.events = EPOLLIN | EPOLLONESHOT;
-    if (writerFd) {
-        event.events |= EPOLLOUT;
-    }
-    event.data.ptr = &cb;
-
-    int res = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event);
-    if (res == -1)
-        throw ML::Exception(errno, "epoll_ctl ADD " + to_string(fd));
-}
-
-void
-ClientTcpSocket::
-restartFdOneShot(int fd, EpollCallback & cb, bool writerFd)
+performAddFd(int fd, EpollCallback & cb, bool readerFd, bool writerFd,
+             bool restart)
 {
     if (epollFd_ == -1)
         return;
     //cerr << Date::now().print(4) << "restarted " << fd << " one-shot" << endl;
 
     struct epoll_event event;
-    event.events = EPOLLIN | EPOLLONESHOT;
+    event.events = EPOLLONESHOT;
+    if (readerFd) {
+        event.events |= EPOLLIN;
+    }
     if (writerFd) {
         event.events |= EPOLLOUT;
     }
     event.data.ptr = &cb;
-    
-    int res = epoll_ctl(epollFd_, EPOLL_CTL_MOD, fd, &event);
-    if (res == -1)
-        throw ML::Exception(errno, "epoll_ctl MOD " + to_string(fd));
+
+    int operation = restart ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
+    int res = epoll_ctl(epollFd_, operation, fd, &event);
+    // cerr << (string("epoll_ctl:")
+    //          + " restart=" + to_string(restart)
+    //          + " fd=" + to_string(fd)
+    //          + " readerFd=" + to_string(readerFd)
+    //          + " writerFd=" + to_string(writerFd)
+    //          + "\n");
+    if (res == -1) {
+        string message = (string("epoll_ctl:")
+                          + " restart=" + to_string(restart)
+                          + " fd=" + to_string(fd)
+                          + " readerFd=" + to_string(readerFd)
+                          + " writerFd=" + to_string(writerFd));
+        throw ML::Exception(errno, message);
+    }
 }
 
 void
@@ -415,28 +424,28 @@ ClientTcpSocket::
 handleWakeupEvent(const struct epoll_event & event)
 {
     if ((event.events & EPOLLIN) != 0) {
+        eventfd_t val;
+        wakeup_.tryRead(val);
+        restartFdOneShot(wakeup_.fd(), handleWakeupEventCb_, true, false);
+
         if (writeReady_) {
-            eventfd_t val;
-            while (wakeup_.tryRead(val));
             // cerr << "flush from wakeup\n";
             flush();
+        }
+
+        if (state_ == ClientTcpSocketState::DISCONNECTING) {
+            if (remainingMsgs_ > 0 || currentLine_.size() > 0) {
+                // cerr << "postponing disconnection\n";
+                wakeup_.signal();
+            }
+            else {
+                // cerr << "immediate disconnection\n";
+                closeFd();
+            }
         }
     }
     else {
         throw ML::Exception("unhandled event");
-    }
-
-    if (state_ == ClientTcpSocketState::CONNECTED) {
-        restartFdOneShot(wakeup_.fd(), handleWakeupEventCb_);
-    }
-    else if (state_ == ClientTcpSocketState::DISCONNECTING) {
-        if (remainingMsgs_ > 0 || currentLine_.size() > 0) {
-            restartFdOneShot(wakeup_.fd(), handleWakeupEventCb_);
-            wakeup_.signal();
-        }
-        else {
-            doClose();
-        }
     }
 }
 
@@ -453,7 +462,7 @@ flush()
 
         // cerr << "fetching line\n";
         if (threadBuffer_.tryPop(currentLine_)) {
-            // cerr << "fetched line\n";
+            ExcAssert(remainingMsgs_ != 0);
             remainingMsgs_--;
             currentSent_ = 0;
             result = true;
@@ -477,20 +486,20 @@ flush()
     // }
 
     bool done(false);
-    size_t remaining(currentLine_.size() - currentSent_);
+    ssize_t remaining(currentLine_.size() - currentSent_);
     // cerr << "initial remaining: " + to_string(remaining) + " bytes\n";
     // cerr << "initial curentLine size: " + to_string(currentLine_.size()) + " bytes\n";
     // cerr << "initial currentSent_: " + to_string(currentSent_) + " bytes\n";
+
+    errno = 0;
 
     while (writeReady_ && !done) {
         const char * data = currentLine_.c_str() + currentSent_;
         // cerr << " sending " << to_string(remaining) + " bytes\n";
         ssize_t len = ::write(socket_, data, remaining);
-        // cerr << "write result: " + to_string(len) + "\n";
-        bool shorter = (len < remaining);
+        // ::fprintf(stderr, "write result: %ld, initial remaining: %ld,"
+        //           "  errno: %d\n", len, remaining, errno);
         if (len > 0) {
-            // cerr << "written + " + len + " to socket\n";
-
             currentSent_ += len;
             remaining -= len;
             bytesSent_ += len;
@@ -506,24 +515,22 @@ flush()
                 }
             }
         }
-        if (shorter) {
-            cerr << "shorter, errno = " + to_string(errno) + "\n";
-            if (!(errno == EINTR || errno == 0)) {
-                if (errno == EWOULDBLOCK) {
-                    writeReady_ = false;
+        else {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                writeReady_ = false;
+            }
+            else {
+                handleWriteResult(errno, currentLine_, currentSent_);
+                currentLine_.clear();
+                writeReady_ = false;
+                if (errno == EPIPE || errno == EBADF) {
+                    handleDisconnection(true);
                 }
                 else {
-                    handleWriteResult(errno, currentLine_, currentSent_);
-                    currentLine_.clear();
-                    if (errno == EPIPE || errno == EBADF) {
-                        handleDisconnection();
-                    }
-                    else {
-                        /* This exception indicates a lack of code in the
-                           handling of errno. In a perfect world, it should
-                           never ever be thrown. */
-                        throw ML::Exception(errno, "unhandled write error");
-                    }
+                    /* This exception indicates a lack of code in the
+                       handling of errno. In a perfect world, it should
+                       never ever be thrown. */
+                    throw ML::Exception(errno, "unhandled write error");
                 }
             }
         }
@@ -534,25 +541,32 @@ flush()
 
 void
 ClientTcpSocket::
-doClose()
+closeFd()
 {
-    if (state_ == ClientTcpSocketState::DISCONNECTED) {
-        cerr << "already closed\n";
+    // cerr << "closeFd...\n";
+    ExcCheck(!threadBuffer_.couldPop(),
+             "message queue not empty");
+    ExcCheck(state_ != ClientTcpSocketState::DISCONNECTED,
+             "already closed (state)");
+    ExcCheck(socket_ != -1, "already closed (socket)");
+
+    if (state_ != ClientTcpSocketState::DISCONNECTING) {
+        state_ = ClientTcpSocketState::DISCONNECTING;
+        ML::futex_wake(state_);
     }
-    state_ = ClientTcpSocketState::DISCONNECTING;
-    ML::futex_wake(state_);
+
     if (socket_ != -1) {
         try {
             removeFd(socket_);
         }
         catch(const ML::Exception & exc)
         {}
+        ::shutdown(socket_, SHUT_RDWR);
         ::close(socket_);
-        socket_ = -1;
+        // cerr << "socket " + to_string(socket_) + " now closed\n";
+        handleDisconnection(false);
+        // ::sleep(3.0);
     }
-
-    removeFd(wakeup_.fd());
-    ::close(wakeup_.fd());
 }
 
 /* fd events */
@@ -572,11 +586,13 @@ handleSocketEvent(const struct epoll_event & event)
     }
     if ((event.events & EPOLLHUP) != 0) {
         // cerr << "  handleDisconnection\n";
-        handleDisconnection();
+        handleDisconnection(true);
     }
     else {
         if (state_ != ClientTcpSocketState::DISCONNECTED) {
-            restartFdOneShot(socket_, handleSocketEventCb_, !writeReady_);
+            restartFdOneShot(socket_, handleSocketEventCb_,
+                             state_ == ClientTcpSocketState::CONNECTED,
+                             !writeReady_);
         }
     }
 }
@@ -615,7 +631,10 @@ handleConnectionResult()
         throw ML::Exception("unhandled error:" + to_string(result));
     }
 
-    if (connResult != SUCCESS) {
+    if (connResult == SUCCESS) {
+        errno = 0;
+    }
+    else {
         removeFd(socket_);
         ::close(socket_);
         socket_ = -1;
@@ -632,14 +651,18 @@ handleConnectionResult()
 
 void
 ClientTcpSocket::
-handleDisconnection()
+handleDisconnection(bool fromPeer)
 {
     if (state_ != ClientTcpSocketState::DISCONNECTED) {
-        removeFd(socket_);
-        onDisconnected();
+        if (fromPeer) {
+            removeFd(socket_);
+            ::close(socket_);
+        }
         socket_ = -1;
+        writeReady_ = false;
         state_ = ClientTcpSocketState::DISCONNECTED;
         ML::futex_wake(state_);
+        onDisconnected(fromPeer);
     }
 }
 
@@ -648,17 +671,16 @@ ClientTcpSocket::
 handleReadReady()
 {
     char buffer[recvBufSize_];
-    size_t remaining(sizeof(buffer));
 
     // cerr << "handleReadReady\n";
-
+    errno = 0;
     while (1) {
-        ssize_t s = ::read(socket_, buffer, remaining);
+        ssize_t s = ::read(socket_, buffer, recvBufSize_);
+        // ::fprintf(stderr, "read result: %ld, errno: %d\n", s, errno);
         if (s > 0) {
-            // ::fprintf(stderr, "read %ld bytes\n", s);
             onReceivedData(buffer, s);
         }
-        else if (s == -1) {
+        else {
             if (errno == EWOULDBLOCK) {
                 // cerr << "done reading\n";
                 break;
@@ -667,12 +689,13 @@ handleReadReady()
                 // cerr << "badf\n";
                 break;
             }
-            throw ML::Exception(errno, "read");
+            if (s == -1) {
+                throw ML::Exception(errno, "read");
+            }
+            else {
+                break;
+            }
         }
-    }
-
-    if (remaining < sizeof(buffer)) {
-        onReceivedData(buffer, sizeof(buffer) - remaining);
     }
 }
 

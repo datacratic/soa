@@ -267,7 +267,7 @@ struct HttpResponseParser {
     typedef std::function<void (const std::string &,
                                 int)> OnResponseStart;
     typedef std::function<void (const char *, size_t)> OnData;
-    typedef std::function<void ()> OnDone;
+    typedef std::function<void (bool)> OnDone;
 
     HttpResponseParser()
         noexcept
@@ -297,6 +297,7 @@ private:
     std::string buffer_;
 
     uint64_t remainingBody_;
+    bool requireClose_;
 };
 
 
@@ -330,8 +331,10 @@ struct HttpConnection : ClientTcpSocket {
     OnDone onDone;
 
 private:
+    /* tcp_socket overrides */
     virtual void onConnectionResult(ConnectionResult result,
                                     const std::vector<std::string> & msgs);
+    virtual void onDisconnected(bool fromPeer);
     virtual void onWriteResult(int error,
                                const std::string & written, size_t writtenSize);
     virtual void onReceivedData(const char * data, size_t size);
@@ -340,7 +343,7 @@ private:
     void onParserResponseStart(const std::string & httpVersion, int code);
     void onParserHeader(const char * data, size_t size);
     void onParserData(const char * data, size_t size);
-    void onParserDone();
+    void onParserDone(bool onClose);
 
     void handleEndOfRq(int code);
 
@@ -349,6 +352,10 @@ private:
     HttpState responseState_;
     HttpRequest request_;
     size_t uploadOffset_;
+
+    /* Connection: close */
+    bool requireClose_;
+    int lastCode_;
 };
 
 
@@ -366,8 +373,6 @@ struct HttpClient : public MessageLoop {
     HttpClient(const HttpClient & other) = delete;
 
     ~HttpClient();
-
-    void shutdown();
 
     /** SSL checks */
     bool noSSLChecks;
@@ -442,7 +447,7 @@ private:
 
     void handleQueueEvent(HttpRequest && rq);
 
-    void handleHttpConnectionDone(HttpConnection & connection, int result);
+    void handleHttpConnectionDone(HttpConnection * connection, int result);
 
 #if 0
     void handleEvents();
@@ -470,11 +475,10 @@ private:
 
     bool debug_;
 
-    std::vector<HttpConnection> connectionStash_;
     std::vector<HttpConnection *> avlConnections_;
     size_t nextAvail_;
 
-    TypedMessageSink<HttpRequest> queue_; /* queued requests */
+    std::shared_ptr<TypedMessageSink<HttpRequest>> queue_; /* queued requests */
     std::deque<HttpRequest> inThreadQueue_; /* requests moved to the worker
                                              * thread */
 

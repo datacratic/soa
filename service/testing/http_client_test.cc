@@ -118,6 +118,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     vector<string> headers;
     string body;
     bool done;
+    bool shouldClose;
 
     HttpResponseParser parser;
     parser.onResponseStart = [&] (const string & httpVersion, int code) {
@@ -125,6 +126,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
         statusLine = httpVersion + "/" + to_string(code);
         headers.clear();
         body.clear();
+        shouldClose = false;
         done = false;
     };
     parser.onHeader = [&] (const char * data, size_t size) {
@@ -135,7 +137,8 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
         // cerr << "data\n";
         body.append(data, size);
     };
-    parser.onDone = [&] () {
+    parser.onDone = [&] (bool doClose) {
+        shouldClose = doClose;
         done = true;
     };
 
@@ -196,12 +199,15 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
 
     parser.feed("/1.1 666 The number of the beast\r\n"
+                "Connection: close\r\n"
                 "Header: value\r\n\r\n");
     BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/666");
-    BOOST_CHECK_EQUAL(headers.size(), 1);
-    BOOST_CHECK_EQUAL(headers[0], "Header: value");
+    BOOST_CHECK_EQUAL(headers.size(), 2);
+    BOOST_CHECK_EQUAL(headers[0], "Connection: close");
+    BOOST_CHECK_EQUAL(headers[1], "Header: value");
     BOOST_CHECK_EQUAL(body, "");
     BOOST_CHECK_EQUAL(done, true);
+    BOOST_CHECK_EQUAL(shouldClose, true);
     BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
 
     /* 2 full reponses with body */
@@ -218,6 +224,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     parser.feed(payload);
     BOOST_CHECK_EQUAL(body, "0123456789");
     BOOST_CHECK_EQUAL(done, true);
+    BOOST_CHECK_EQUAL(shouldClose, false);
 }
 #endif
 
@@ -236,11 +243,12 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
 
     service.waitListening();
 
-#if 1
+#if 0
     /* request to bad ip
        Note: if the ip resolution timeout is very high on the router, the
        Watchdog timeout might trigger first */
     {
+        ::fprintf(stderr, "request to bad ip\n");
         string baseUrl("http://123.234.12.23");
         auto resp = doGetRequest(baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
@@ -249,11 +257,12 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     }
 #endif
 
-#if 1
+#if 0
     /* request to bad hostname
        Note: will fail when the name service returns a "default" value for all
        non resolved hosts */
     {
+        ::fprintf(stderr, "request to bad hostname\n");
         string baseUrl("http://somewhere.lost");
         auto resp = doGetRequest(baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
@@ -264,6 +273,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
 
     /* request with timeout */
     {
+        ::fprintf(stderr, "request with timeout\n");
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
         auto resp = doGetRequest(baseUrl, "/timeout", {}, 1);
         BOOST_CHECK_EQUAL(get<0>(resp),
@@ -271,8 +281,18 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
     }
 
+    /* request connection close  */
+    {
+        ::fprintf(stderr, "testing behaviour with connection: close\n");
+        string baseUrl("http://127.0.0.1:" + to_string(service.port()));
+        auto resp = doGetRequest(baseUrl, "/connection-close", {}, 1);
+        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
+        BOOST_CHECK_EQUAL(get<1>(resp), 204);
+    }
+
     /* request to /nothing -> 404 */
     {
+        ::fprintf(stderr, "request with 404\n");
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
         auto resp = doGetRequest(baseUrl, "/nothing");
@@ -282,6 +302,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
 
     /* request to /coucou -> 200 + "coucou" */
     {
+        ::fprintf(stderr, "request with 200\n");
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
         auto resp = doGetRequest(baseUrl, "/coucou");
@@ -361,11 +382,13 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
 #endif
 
 #if 1
-/* Ensures that all requests are correctly performed under load.
+/* Ensures that all requests are correctly performed under load, including
+   when "Connection: close" is encountered once in a while.
    Not a performance test. */
 BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
 {
     cerr << "stress_test\n";
+    const int mask = 0x3ff; /* mask to use for displaying counts */
     // ML::Watchdog watchdog(300);
     auto proxies = make_shared<ServiceProxies>();
     HttpGetService service(proxies);
@@ -377,48 +400,65 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
 
-    HttpClient client(baseUrl);
-    client.start();
+    auto doStressTest = [&] (int numParallel) {
+        ::fprintf(stderr, "stress test with %d parallel connections\n",
+                  numParallel);
+        HttpClient client(baseUrl, numParallel);
+        client.start();
 
-    int maxReqs(10000), numReqs(0), missedReqs(0);
-    int numResponses(0);
+        int maxReqs(30000), numReqs(0), missedReqs(0);
+        int numResponses(0);
 
-    auto onDone = [&] (const HttpRequest & rq,
-                       int errorCode, int status,
-                       string && headers, string && body) {
-        // cerr << "* onResponse " + to_string(numResponses) + "\n";
-        //          + ": " + to_string(get<1>(resp))
-        //          + "\n\n\n");
-        // cerr << "    body =\n/" + get<2>(resp) + "/\n";
-        numResponses++;
-        if ((numResponses & 0xff) == 0 || numResponses > 9980) {
-            ::fprintf(stderr, "responses: %d\n", numResponses);
-        }
-        if (numResponses == numReqs) {
-            ML::futex_wake(numResponses);
-        }
-    };
-    auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
-
-    while (numReqs < maxReqs) {
-        if (client.get("/", cbs)) {
-            numReqs++;
-            // if ((numReqs & 0xff) == 0 || numReqs > 9980) {
-            //     cerr << "requests performed: " + to_string(numReqs) + "\n";
+        auto onDone = [&] (const HttpRequest & rq,
+                           int errorCode, int status,
+                           string && headers, string && body) {
+            // cerr << "* onResponse " + to_string(numResponses) + "\n";
+            //          + ": " + to_string(get<1>(resp))
+            //          + "\n\n\n");
+            // cerr << "    body =\n/" + get<2>(resp) + "/\n";
+            numResponses++;
+            // if (numResponses == 29960) {
+            //     int secs = 10;
+            //     ::fprintf(stderr, "response 29960, sleeping %d secs."
+            //               " pid = %d\n", secs, getpid());
+            //     ML::sleep(secs);
             // }
-        }
-        else {
-            missedReqs++;
-        }
-    }
-    cerr << "performed all requests: " + to_string(maxReqs) + "\n";
-    cerr << " missedReqs: " + to_string(missedReqs) + "\n";
 
-    while (numResponses < maxReqs) {
-        int old(numResponses);
-        ML::futex_wait(numResponses, old);
-    }
+            // if ((numResponses & mask) == mask || numResponses >= (maxReqs - 50)) {
+            //     ::fprintf(stderr, "responses: %d\n", numResponses);
+            // }
+            if (numResponses == numReqs) {
+                ML::futex_wake(numResponses);
+            }
+        };
+        auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
 
-    cerr << " disconnecting client\n";
+        while (numReqs < maxReqs) {
+            const char * url = (((numReqs & 0xfff) == 0xfff)
+                                ? "/connection-close"
+                                : "/");
+            if (client.get(url, cbs)) {
+                numReqs++;
+                // if ((numReqs & mask) == 0 || numReqs == maxReqs) {
+                //     ::fprintf(stderr, "performed %d requests\n", numReqs);
+                // }
+            }
+            else {
+                missedReqs++;
+            }
+        }
+
+        ::fprintf(stderr, "all requests performed, awaiting responses...\n");
+        while (numResponses < maxReqs) {
+            int old(numResponses);
+            ML::futex_wait(numResponses, old);
+        }
+        ::fprintf(stderr, "performed %d requests; missed: %d\n",
+                  maxReqs, missedReqs);
+    };
+
+    doStressTest(1);
+    doStressTest(8);
+    doStressTest(128);
 }
 #endif

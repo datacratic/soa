@@ -129,6 +129,7 @@ clear()
     state_ = 0;
     buffer_.resize(0);
     remainingBody_ = 0;
+    requireClose_ = false;
 }
 
 void
@@ -287,8 +288,9 @@ feed(const char * bufferData, size_t bufferSize)
             ptr++;
 
             if (remainingBody_ == 0) {
-                onDone();
+                onDone(requireClose_);
                 state_ = 0;
+                requireClose_ = false;
             }
             else {
                 state_ = 2;
@@ -309,8 +311,9 @@ feed(const char * bufferData, size_t bufferSize)
             ptr += chunkSize;
             remainingBody_ -= chunkSize;
             if (remainingBody_ == 0) {
-                onDone();
+                onDone(requireClose_);
                 state_ = 0;
+                requireClose_ = false;
             }
         }
     }
@@ -349,7 +352,16 @@ handleHeader(const char * data, size_t dataSize)
         return result;
     };
 
-    if (matchString("Content-Length", 14)) {
+    if (matchString("Connection", 10)) {
+        skipChar(' ');
+        skipToChar(':');
+        ptr++;
+        skipChar(' ');
+        if (matchString("close", 5)) {
+            requireClose_ = true;
+        }
+    }
+    else if (matchString("Content-Length", 14)) {
         skipChar(' ');
         skipToChar(':');
         ptr++;
@@ -364,7 +376,7 @@ handleHeader(const char * data, size_t dataSize)
 
 HttpConnection::
 HttpConnection()
-    : responseState_(IDLE)
+    : responseState_(IDLE), requireClose_(false), lastCode_(0)
 {
     // cerr << "HttpConnection(): " << this << "\n";
 
@@ -378,8 +390,8 @@ HttpConnection()
     parser_.onData = [&] (const char * data, size_t size) {
         this->onParserData(data, size);
     };
-    parser_.onDone = [&] () {
-        this->onParserDone();
+    parser_.onDone = [&] (bool doClose) {
+        this->onParserDone(doClose);
     };
 }
 
@@ -396,6 +408,8 @@ clear()
     responseState_ = IDLE;
     request_.clear();
     uploadOffset_ = 0;
+    requireClose_ = false;
+    lastCode_ = 0;
 }
 
 void
@@ -424,7 +438,7 @@ void
 HttpConnection::
 onConnectionResult(ConnectionResult result, const vector<string> & msgs)
 {
-    // cerr << " onConnectionResult: " << this << "  " + to_string(result) + "\n";
+    // cerr << " onConnectionResult: " + to_string(result) + "\n";
     if (result == ConnectionResult::SUCCESS) {
         write(request_.requestStr());
     }
@@ -513,8 +527,9 @@ onParserData(const char * data, size_t size)
 
 void
 HttpConnection::
-onParserDone()
+onParserDone(bool doClose)
 {
+    requireClose_ |= doClose;
     handleEndOfRq(0);
 }
 
@@ -523,14 +538,36 @@ HttpConnection::
 handleEndOfRq(int code)
 {
     // cerr << "handleEndOfRq: " << this << endl;
-    if (code != 0) {
+    if (requireClose_) {
+        lastCode_ = code;
+        // cerr << "request close\n";
         requestClose();
     }
-    request_.callbacks().onDone(request_, code);
-    clear();
-    onDone(code);
+    else {
+        request_.callbacks().onDone(request_, code);
+        clear();
+        onDone(code);
+    }
 }
 
+void
+HttpConnection::
+onDisconnected(bool fromPeer)
+{
+    if (fromPeer) {
+        ;
+    }
+    else {
+        // cerr << "disconnected...\n";
+        if (!requireClose_) {
+            throw ML::Exception("inconsistency: closed not required!??");
+        }
+        requireClose_ = false;
+        request_.callbacks().onDone(request_, lastCode_);
+        clear();
+        onDone(lastCode_);
+    }
+}
 
 /* HTTPCLIENT */
 
@@ -540,27 +577,26 @@ HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
       noSSLChecks(false),
       baseUrl_(baseUrl),
       debug_(false),
-      connectionStash_(numParallel),
       avlConnections_(numParallel),
       nextAvail_(0),
-      queue_(queueSize)
+      queue_(make_shared<TypedMessageSink<HttpRequest>>(queueSize))
 {
-    queue_.onEvent = [&] (HttpRequest && rq) {
+    queue_->onEvent = [&] (HttpRequest && rq) {
         // cerr << "onEvent\n";
         this->handleQueueEvent(move(rq));
     };
-    addSource("queue", queue_);
+    addSourceRightAway("queue", queue_);
 
     /* available connections */
-    for (size_t i = 0; i < connectionStash_.size(); i++) {
-        connectionStash_[i].init(baseUrl);
-        connectionStash_[i].onDone = [&,i] (int result) {
-            // cerr << "connection " + to_string(i) + " onDone: "
-                 // << &connectionStash_[i] << endl;
-            handleHttpConnectionDone(connectionStash_[i], result);
+    for (size_t i = 0; i < numParallel; i++) {
+        HttpConnection * connPtr = new HttpConnection();
+        shared_ptr<HttpConnection> connection(connPtr);
+        connection->init(baseUrl);
+        connection->onDone = [&, connPtr] (int result) {
+            handleHttpConnectionDone(connPtr, result);
         };
-        addSource("socket" + to_string(i), connectionStash_[i]);
-        avlConnections_[i] = &connectionStash_[i];
+        addSourceRightAway("connection" + to_string(i), connection);
+        avlConnections_[i] = connPtr;
     }
 }
 
@@ -569,25 +605,6 @@ HttpClient::
 {
     // cerr << "~HttpClient: " << this << "\n";
     shutdown();
-}
-
-void
-HttpClient::
-shutdown()
-{
-    if (connectionState_ == AsyncEventSource::CONNECTED) {
-        removeSource(&queue_);
-        for (size_t i = 0; i < connectionStash_.size(); i++) {
-            removeSource(&connectionStash_[i]);
-        }
-
-        queue_.waitConnectionState(AsyncEventSource::DISCONNECTED);
-        for (size_t i = 0; i < connectionStash_.size(); i++) {
-            connectionStash_[i].waitConnectionState(AsyncEventSource::DISCONNECTED);
-        }
-    }
-
-    MessageLoop::shutdown();
 }
 
 void
@@ -615,8 +632,8 @@ enqueueRequest(const string & verb, const string & resource,
                int timeout)
 {
     string url = baseUrl_ + resource + queryParams.uriEscaped();
-    bool res = queue_.tryPush(HttpRequest(verb, url, callbacks,
-                                          content, headers, timeout));
+    bool res = queue_->tryPush(HttpRequest(verb, url, callbacks,
+                                           content, headers, timeout));
 
     return res;
 }
@@ -640,15 +657,15 @@ handleQueueEvent(HttpRequest && request)
 
 void
 HttpClient::
-handleHttpConnectionDone(HttpConnection & connection, int result)
+handleHttpConnectionDone(HttpConnection * connection, int result)
 {
     if (inThreadQueue_.size() > 0) {
         // cerr << "emptying queue...\n";
-        connection.perform(move(inThreadQueue_.front()));
+        connection->perform(move(inThreadQueue_.front()));
         inThreadQueue_.pop_front();
     }
     else {
-        releaseConnection(&connection);
+        releaseConnection(connection);
     }
 }
 
