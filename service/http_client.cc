@@ -376,7 +376,7 @@ handleHeader(const char * data, size_t dataSize)
 
 HttpConnection::
 HttpConnection()
-    : responseState_(IDLE), requireClose_(false), lastCode_(0)
+    : responseState_(IDLE), lastCode_(0), timeoutFd_(-1)
 {
     // cerr << "HttpConnection(): " << this << "\n";
 
@@ -393,12 +393,21 @@ HttpConnection()
     parser_.onDone = [&] (bool doClose) {
         this->onParserDone(doClose);
     };
+
+    handleTimeoutEventCb_ = [&] (const struct epoll_event & event) {
+        this->handleTimeoutEvent(event);
+    };
 }
 
 HttpConnection::
 ~HttpConnection()
 {
     // cerr << "~HttpConnection: " << this << "\n";
+    cancelRequestTimer();
+    if (responseState_ != IDLE) {
+        ::fprintf(stderr, "cannot process a request when state is not idle");
+        abort();
+    }
 }
 
 void
@@ -406,9 +415,9 @@ HttpConnection::
 clear()
 {
     responseState_ = IDLE;
+    requestEnded_ = false;
     request_.clear();
     uploadOffset_ = 0;
-    requireClose_ = false;
     lastCode_ = 0;
 }
 
@@ -428,6 +437,7 @@ perform(HttpRequest && request)
     responseState_ = HEADERS;
     if (canSendMessages()) {
         write(request_.requestStr());
+        armRequestTimer();
     }
     else {
         connect();
@@ -441,10 +451,11 @@ onConnectionResult(ConnectionResult result, const vector<string> & msgs)
     // cerr << " onConnectionResult: " + to_string(result) + "\n";
     if (result == ConnectionResult::SUCCESS) {
         write(request_.requestStr());
+        armRequestTimer();
     }
     else {
         cerr << " failure with result: "  + to_string(result) + "\n";
-        handleEndOfRq(result);
+        handleEndOfRq(result, true);
     }
 }
 
@@ -529,25 +540,41 @@ void
 HttpConnection::
 onParserDone(bool doClose)
 {
-    requireClose_ |= doClose;
-    handleEndOfRq(0);
+    handleEndOfRq(0, doClose);
 }
 
 void
 HttpConnection::
-handleEndOfRq(int code)
+handleEndOfRq(int code, bool requireClose)
 {
-    // cerr << "handleEndOfRq: " << this << endl;
-    if (requireClose_) {
-        lastCode_ = code;
-        // cerr << "request close\n";
-        requestClose();
+    if (requestEnded_) {
+        // cerr << "ignoring extraneous end of request\n";
+        ;
     }
     else {
-        request_.callbacks().onDone(request_, code);
-        clear();
-        onDone(code);
+        requestEnded_ = true;
+
+        // cerr << "handleEndOfRq: " << this << endl;
+        cancelRequestTimer();
+
+        if (requireClose) {
+            lastCode_ = code;
+            // cerr << "request close\n";
+            requestClose();
+        }
+        else {
+            finalizeEndOfRq(code);
+        }
     }
+}
+
+void
+HttpConnection::
+finalizeEndOfRq(int code)
+{
+    request_.callbacks().onDone(request_, code);
+    clear();
+    onDone(code);
 }
 
 void
@@ -559,15 +586,80 @@ onDisconnected(bool fromPeer)
     }
     else {
         // cerr << "disconnected...\n";
-        if (!requireClose_) {
-            throw ML::Exception("inconsistency: closed not required!??");
-        }
-        requireClose_ = false;
-        request_.callbacks().onDone(request_, lastCode_);
-        clear();
-        onDone(lastCode_);
+        finalizeEndOfRq(lastCode_);
     }
 }
+
+void
+HttpConnection::
+armRequestTimer()
+{
+    if (request_.timeout() > 0) {
+        if (timeoutFd_ == -1) {
+            timeoutFd_ = timerfd_create(CLOCK_MONOTONIC,
+                                        TFD_NONBLOCK | TFD_CLOEXEC);
+            if (timeoutFd_ == -1) {
+                throw ML::Exception(errno, "timerfd_create");
+            }
+            addFdOneShot(timeoutFd_, handleTimeoutEventCb_,
+                         true, false);
+            // cerr << "timer armed\n";
+        }
+        else {
+            restartFdOneShot(timeoutFd_, handleTimeoutEventCb_,
+                             true, false);
+            // cerr << "timer rearmed\n";
+        }
+
+        itimerspec spec;
+        ::memset(&spec, 0, sizeof(itimerspec));
+
+        spec.it_interval.tv_sec = 0;
+        spec.it_value.tv_sec = request_.timeout();
+        int res = timerfd_settime(timeoutFd_, 0, &spec, nullptr);
+        if (res == -1) {
+            throw ML::Exception(errno, "timerfd_settime");
+        }
+    }
+}
+
+void
+HttpConnection::
+cancelRequestTimer()
+{
+    // cerr << "cancel request timer " << this << "\n";
+    if (timeoutFd_ != -1) {
+        // cerr << "  was active\n";
+        removeFd(timeoutFd_);
+        ::close(timeoutFd_);
+        timeoutFd_ = -1;
+    }
+    // else {
+    //     cerr << "  was not active\n";
+    // }
+}
+
+void
+HttpConnection::
+handleTimeoutEvent(const ::epoll_event & event)
+{
+    if ((event.events & EPOLLIN) != 0) {
+        while (true) {
+            uint64_t expiries;
+            int res = ::read(timeoutFd_, &expiries, sizeof(expiries));
+            if (res == -1) {
+                if (errno == EAGAIN) {
+                    break;
+                }
+
+                throw ML::Exception(errno, "read");
+            }
+        }
+        // cerr << "ending request due to timeout\n";
+        handleEndOfRq(ConnectionResult::TIMEOUT, true);
+    }
+}
+
 
 /* HTTPCLIENT */
 

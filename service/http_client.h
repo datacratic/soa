@@ -199,14 +199,14 @@ private:
 /* Representation of an HTTP request. */
 struct HttpRequest {
     HttpRequest()
-        : timeout_(-1)
+        : timeout_(0)
     {
     }
 
     HttpRequest(const std::string & verb, const std::string & url,
                 const std::shared_ptr<HttpClientCallbacks> & callbacks,
                 const MimeContent & content, const RestParams & headers,
-                int timeout = -1)
+                int timeout = 0)
         noexcept
         : verb_(verb), url_(url),
           headers_(headers), content_(content),
@@ -222,7 +222,7 @@ struct HttpRequest {
         headers_ = RestParams();
         content_.clear();
         callbacks_ = nullptr;
-        timeout_ = -1;
+        timeout_ = 0;
         requestStr_.clear();
     }
 
@@ -246,6 +246,12 @@ struct HttpRequest {
         }
 
         return *callbacks_;
+    }
+
+    int timeout()
+        const
+    {
+        return timeout_;
     }
 
 private:
@@ -345,17 +351,26 @@ private:
     void onParserData(const char * data, size_t size);
     void onParserDone(bool onClose);
 
-    void handleEndOfRq(int code);
+    void handleEndOfRq(int code, bool requireClose);
+    void finalizeEndOfRq(int code);
 
     HttpResponseParser parser_;
 
     HttpState responseState_;
     HttpRequest request_;
+    bool requestEnded_;
     size_t uploadOffset_;
 
     /* Connection: close */
-    bool requireClose_;
     int lastCode_;
+
+    /* request timeouts */
+    void armRequestTimer();
+    void cancelRequestTimer();
+    void handleTimeoutEvent(const ::epoll_event & event);
+
+    EpollCallback handleTimeoutEventCb_;
+    int timeoutFd_;
 };
 
 

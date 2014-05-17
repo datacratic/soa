@@ -236,8 +236,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     auto proxies = make_shared<ServiceProxies>();
     HttpGetService service(proxies);
 
-    sleep (1);
-
     service.addResponse("GET", "/coucou", 200, "coucou");
     service.start();
 
@@ -285,7 +283,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     {
         ::fprintf(stderr, "testing behaviour with connection: close\n");
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
-        auto resp = doGetRequest(baseUrl, "/connection-close", {}, 1);
+        auto resp = doGetRequest(baseUrl, "/connection-close");
         BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::SUCCESS);
         BOOST_CHECK_EQUAL(get<1>(resp), 204);
     }
@@ -335,8 +333,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_post )
     HttpUploadService service(proxies);
     service.start();
 
-    sleep (1);
-
     /* request to /coucou -> 200 + "coucou" */
     {
         string baseUrl("http://127.0.0.1:"
@@ -361,8 +357,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     auto proxies = make_shared<ServiceProxies>();
     HttpUploadService service(proxies);
     service.start();
-
-    sleep (1);
 
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
