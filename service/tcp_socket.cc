@@ -33,28 +33,29 @@ ClientTcpSocket(OnConnectionResult onConnectionResult,
                 size_t maxMessages,
                 size_t recvBufSize)
     : AsyncEventSource(),
-      port_(-1),
       epollFd_(-1),
+      numFds_(0),
+      port_(-1),
       socket_(-1),
+      state_(ClientTcpSocketState::DISCONNECTED),
       noNagle_(false),
       recvBufSize_(recvBufSize),
       writeReady_(false),
-      wakeup_(EFD_NONBLOCK | EFD_CLOEXEC),
       threadBuffer_(maxMessages),
+      remainingMsgs_(0),
       currentSent_(0),
       bytesSent_(0),
-      remainingMsgs_(0),
-      state_(ClientTcpSocketState::DISCONNECTED),
       onConnectionResult_(onConnectionResult),
       onDisconnected_(onDisconnected),
       onReceivedData_(onReceivedData),
-      onException_(onException)
+      onException_(onException),
+      wakeup_(EFD_NONBLOCK | EFD_CLOEXEC)
 {
     epollFd_ = ::epoll_create(2);
     if (epollFd_ == -1)
         throw ML::Exception(errno, "epoll_create");
 
-    handleWakeupEventCb_ = [&] (const struct epoll_event & event) {
+    handleWakeupEventCb_ = [&] (const ::epoll_event & event) {
         this->handleWakeupEvent(event);
     };
     addFdOneShot(wakeup_.fd(), handleWakeupEventCb_, true, false);
@@ -214,7 +215,7 @@ connect()
     }
 
     success = true;
-    handleSocketEventCb_ = [&] (const struct epoll_event & event) {
+    handleSocketEventCb_ = [&] (const ::epoll_event & event) {
         this->handleSocketEvent(event);
     };
     addFdOneShot(socket_, handleSocketEventCb_,
@@ -332,12 +333,11 @@ bool
 ClientTcpSocket::
 processOne()
 {
-    static const int nEvents(2);
-    struct epoll_event events[nEvents];
+    struct epoll_event events[numFds_];
 
     // cerr << "sizeof(events): " + to_string() + "\n";
     try {
-        int res = epoll_wait(epollFd_, events, nEvents, 0);
+        int res = epoll_wait(epollFd_, events, numFds_, 0);
         if (res == -1) {
             throw ML::Exception(errno, "epoll_wait");
         }
@@ -402,6 +402,9 @@ performAddFd(int fd, EpollCallback & cb, bool readerFd, bool writerFd,
                           + " writerFd=" + to_string(writerFd));
         throw ML::Exception(errno, message);
     }
+    if (!restart) {
+        numFds_++;
+    }
 }
 
 void
@@ -415,13 +418,17 @@ removeFd(int fd)
     int res = epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, 0);
     if (res == -1)
         throw ML::Exception(errno, "epoll_ctl DEL " + to_string(fd));
+    if (numFds_ == 0) {
+        throw ML::Exception("inconsistent number of fds registered");
+    }
+    numFds_--;
 }
 
 /* wakeup events */
 
 void
 ClientTcpSocket::
-handleWakeupEvent(const struct epoll_event & event)
+handleWakeupEvent(const ::epoll_event & event)
 {
     if ((event.events & EPOLLIN) != 0) {
         eventfd_t val;
@@ -573,7 +580,7 @@ closeFd()
 
 void
 ClientTcpSocket::
-handleSocketEvent(const struct epoll_event & event)
+handleSocketEvent(const ::epoll_event & event)
 {
     // cerr << "handleSocketEvent\n";
     if ((event.events & EPOLLOUT) != 0) {

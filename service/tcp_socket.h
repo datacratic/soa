@@ -124,9 +124,8 @@ struct ClientTcpSocket : public AsyncEventSource
     { return epollFd_; }
     virtual bool processOne();
 
-private:
-    typedef std::function<void (struct epoll_event &)> EpollCallback;
-
+protected:
+    typedef std::function<void (const ::epoll_event &)> EpollCallback;
 
     void addFdOneShot(int fd, EpollCallback & cb,
                       bool readerFd, bool writerFd)
@@ -140,16 +139,23 @@ private:
         performAddFd(fd, cb, readerFd, writerFd, true);
     }
 
+    void removeFd(int fd);
+
+private:
+    /* epoll operations */
+    void closeEpollFd();
     void performAddFd(int fd, EpollCallback & cb,
                       bool readerFd, bool writerFd,
                       bool restart);
 
-    void removeFd(int fd);
+    int epollFd_;
+    size_t numFds_;
+
+    /* socket operations */
     void closeFd();
+    void flush();
 
-    void closeEpollFd();
-
-    void handleSocketEvent(const struct epoll_event & event);
+    void handleSocketEvent(const ::epoll_event & event);
     void handleConnectionResult();
     void handleDisconnection(bool fromPeer);
     void handleReadReady();
@@ -158,32 +164,21 @@ private:
                            const std::string & written, size_t writtenSize);
     void handleException();
 
-    void handleWakeupEvent(const struct epoll_event & event);
-    EpollCallback handleSocketEventCb_;
-    EpollCallback handleWakeupEventCb_;
-
-    void flush();
-
     std::string address_;
     int port_;
-
-    int epollFd_;
     int socket_;
-
+    int state_; /* ClientTcpSocketState */
     bool noNagle_;
-
     size_t recvBufSize_;
-
+    EpollCallback handleSocketEventCb_;
     bool writeReady_;
 
-    ML::Wakeup_Fd wakeup_;
     ML::RingBufferSRMW<std::string> threadBuffer_;
+    std::atomic<size_t> remainingMsgs_;
     std::string currentLine_;
     size_t currentSent_;
 
     size_t bytesSent_;
-    std::atomic<size_t> remainingMsgs_;
-    int state_; /* ClientTcpSocketState */
 
     OnConnectionResult onConnectionResult_;
     OnDisconnected onDisconnected_;
@@ -191,9 +186,11 @@ private:
     OnReceivedData onReceivedData_;
     OnException onException_;
 
-    /* future parameters:
-       - writeMany: send multiple lines at once
-    */
+    /* wakeup operations */
+    void handleWakeupEvent(const ::epoll_event & event);
+
+    ML::Wakeup_Fd wakeup_;
+    EpollCallback handleWakeupEventCb_;
 };
 
 } // namespace Datacratic
