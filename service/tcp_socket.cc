@@ -45,6 +45,8 @@ ClientTcpSocket(OnConnectionResult onConnectionResult,
       remainingMsgs_(0),
       currentSent_(0),
       bytesSent_(0),
+      msgsSent_(0),
+      msgsReceived_(0),
       onConnectionResult_(onConnectionResult),
       onDisconnected_(onDisconnected),
       onReceivedData_(onReceivedData),
@@ -511,6 +513,7 @@ flush()
             remaining -= len;
             bytesSent_ += len;
             if (remaining == 0) {
+                msgsSent_++;
                 handleWriteResult(0, currentLine_, currentLine_.size());
                 if (popLine()) {
                     data = currentLine_.c_str();
@@ -685,6 +688,7 @@ handleReadReady()
         ssize_t s = ::read(socket_, buffer, recvBufSize_);
         // ::fprintf(stderr, "read result: %ld, errno: %d\n", s, errno);
         if (s > 0) {
+            msgsReceived_++;
             onReceivedData(buffer, s);
         }
         else {

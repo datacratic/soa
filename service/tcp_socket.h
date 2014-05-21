@@ -16,6 +16,10 @@
 #include "async_event_source.h"
 
 
+/* TODO:
+   An exception should trigger the closing of the socket and the returning of
+   pending messages */
+
 namespace Datacratic {
 
 struct Url;
@@ -119,6 +123,12 @@ struct ClientTcpSocket : public AsyncEventSource
     size_t bytesSent() const
     { return bytesSent_; }
 
+    size_t msgsSent() const
+    { return msgsSent_; }
+
+    size_t msgsReceived() const
+    { return msgsReceived_; }
+
     /* AsyncEventSource interface */
     virtual int selectFd() const
     { return epollFd_; }
@@ -179,6 +189,8 @@ private:
     size_t currentSent_;
 
     size_t bytesSent_;
+    size_t msgsSent_;
+    size_t msgsReceived_;
 
     OnConnectionResult onConnectionResult_;
     OnDisconnected onDisconnected_;
