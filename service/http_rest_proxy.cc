@@ -282,14 +282,17 @@ putOrPost(const string & resource, const string & body, bool isPost)
                                                   const HttpRestProxy::Content&,
                                                   const RestParams&,
                                                   const RestParams&,
-                                                  double) const;
+                                                  double,
+                                                  bool) const;
 
     UploadFunc method = isPost ? &HttpRestProxy::post : &HttpRestProxy::put;
     pid_t tid = gettid();
     size_t retries;
     for (retries = 0; retries < maxRetries; retries++) {
         response = (this->*method)(resource, content, RestParams(),
-                                   headers, -1);
+                                   headers,
+                                   -1 /* timeout */,
+                                   true /* exceptions */);
         int code = response.code();
         if (code < 400) {
             break;
