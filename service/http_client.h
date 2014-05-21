@@ -298,6 +298,7 @@ struct HttpResponseParser {
 
 private:
     void handleHeader(const char * data, size_t dataSize);
+    void finalizeParsing();
 
     int state_;
     std::string buffer_;

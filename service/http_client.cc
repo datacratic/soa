@@ -161,7 +161,7 @@ clear()
     noexcept
 {
     state_ = 0;
-    buffer_.resize(0);
+    buffer_.clear();
     remainingBody_ = 0;
     requireClose_ = false;
 }
@@ -322,9 +322,7 @@ feed(const char * bufferData, size_t bufferSize)
             ptr++;
 
             if (remainingBody_ == 0) {
-                onDone(requireClose_);
-                state_ = 0;
-                requireClose_ = false;
+                finalizeParsing();
             }
             else {
                 state_ = 2;
@@ -345,9 +343,7 @@ feed(const char * bufferData, size_t bufferSize)
             ptr += chunkSize;
             remainingBody_ -= chunkSize;
             if (remainingBody_ == 0) {
-                onDone(requireClose_);
-                state_ = 0;
-                requireClose_ = false;
+                finalizeParsing();
             }
         }
     }
@@ -404,6 +400,14 @@ handleHeader(const char * data, size_t dataSize)
     }
 
     onHeader(data, dataSize);
+}
+
+void
+HttpResponseParser::
+finalizeParsing()
+{
+    onDone(requireClose_);
+    clear();
 }
 
 /* HTTP CONNECTION */
