@@ -526,7 +526,26 @@ struct HttpClientCallbacks {
     {
     }
 
-    // static const std::string & errorMessage(HttpClientError errorCode);
+    /* HttpClient interface */
+
+    /* initiates a response */
+    void startResponse(const HttpRequest & rq,
+                       const std::string & httpVersion,
+                       int code);
+
+    /* register header lines */
+    void feedHeader(const HttpRequest & rq,
+                        const char * data, size_t size);
+
+    /* feed one chunk body data */
+    void feedBodyData(const HttpRequest & rq,
+                      const char * data, size_t size);
+
+    /* declare the response to be finished */
+    void endResponse(const HttpRequest & rq, int errorCode);
+
+
+    /* Callbacks methods */
 
     /* initiates a response */
     virtual void onResponseStart(const HttpRequest & rq,

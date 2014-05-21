@@ -87,6 +87,40 @@ errorMessage(HttpClientError errorCode)
 
 void
 HttpClientCallbacks::
+startResponse(const HttpRequest & rq,
+              const std::string & httpVersion,
+              int code)
+{
+    // ::fprintf(stderr, "%p: startResponse\n", this);
+    onResponseStart(rq, httpVersion, code);
+}
+
+void
+HttpClientCallbacks::
+feedHeader(const HttpRequest & rq,
+               const char * data, size_t size)
+{
+    onHeader(rq, data, size);
+}
+
+void
+HttpClientCallbacks::
+feedBodyData(const HttpRequest & rq,
+             const char * data, size_t size)
+{
+    onData(rq, data, size);
+}
+
+void
+HttpClientCallbacks::
+endResponse(const HttpRequest & rq, int errorCode)
+{
+    // ::fprintf(stderr, "%p: endResponse\n", this);
+    onDone(rq, errorCode);
+}
+
+void
+HttpClientCallbacks::
 onResponseStart(const HttpRequest & rq,
                 const string & httpVersion, int code)
 {
@@ -514,10 +548,10 @@ onException(const exception_ptr & excPtr)
 
 void
 HttpConnection::
-onParserResponseStart(const std::string & httpVersion, int code)
+onParserResponseStart(const string & httpVersion, int code)
 {
     // cerr << "onParserResponseStart: " << this << endl;
-    request_.callbacks().onResponseStart(request_, httpVersion, code);
+    request_.callbacks().startResponse(request_, httpVersion, code);
 }
 
 void
@@ -525,7 +559,7 @@ HttpConnection::
 onParserHeader(const char * data, size_t size)
 {
     // cerr << "onParserHeader: " << this << endl;
-    request_.callbacks().onHeader(request_, data, size);
+    request_.callbacks().feedHeader(request_, data, size);
 }
 
 void
@@ -533,7 +567,7 @@ HttpConnection::
 onParserData(const char * data, size_t size)
 {
     // cerr << "onParserData: " << this << endl;
-    request_.callbacks().onData(request_, data, size);
+    request_.callbacks().feedBodyData(request_, data, size);
 }
 
 void
@@ -572,7 +606,7 @@ void
 HttpConnection::
 finalizeEndOfRq(int code)
 {
-    request_.callbacks().onDone(request_, code);
+    request_.callbacks().endResponse(request_, code);
     clear();
     onDone(code);
 }
