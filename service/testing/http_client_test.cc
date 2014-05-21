@@ -382,21 +382,20 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
 BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
 {
     cerr << "stress_test\n";
-    const int mask = 0x3ff; /* mask to use for displaying counts */
+    // const int mask = 0x3ff; /* mask to use for displaying counts */
     // ML::Watchdog watchdog(300);
     auto proxies = make_shared<ServiceProxies>();
-    HttpGetService service(proxies);
-
-    service.addResponse("GET", "/", 200, "coucou");
-    service.start();
-    service.waitListening();
-
-    string baseUrl("http://127.0.0.1:"
-                   + to_string(service.port()));
-
     auto doStressTest = [&] (int numParallel) {
         ::fprintf(stderr, "stress test with %d parallel connections\n",
                   numParallel);
+
+        HttpGetService service(proxies);
+        service.start();
+        service.waitListening();
+
+        string baseUrl("http://127.0.0.1:"
+                       + to_string(service.port()));
+
         HttpClient client(baseUrl, numParallel);
         client.start();
 
@@ -406,21 +405,31 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
         auto onDone = [&] (const HttpRequest & rq,
                            int errorCode, int status,
                            string && headers, string && body) {
-            // cerr << "* onResponse " + to_string(numResponses) + "\n";
-            //          + ": " + to_string(get<1>(resp))
-            //          + "\n\n\n");
-            // cerr << "    body =\n/" + get<2>(resp) + "/\n";
             numResponses++;
-            // if (numResponses == 29960) {
-            //     int secs = 10;
-            //     ::fprintf(stderr, "response 29960, sleeping %d secs."
-            //               " pid = %d\n", secs, getpid());
-            //     ML::sleep(secs);
-            // }
 
-            // if ((numResponses & mask) == mask || numResponses >= (maxReqs - 50)) {
-            //     ::fprintf(stderr, "responses: %d\n", numResponses);
-            // }
+            BOOST_CHECK_EQUAL(errorCode, 0);
+            BOOST_CHECK_EQUAL(status, 200);
+
+            int bodyNbr;
+            try {
+                bodyNbr = stoi(body);
+            }
+            catch (...) {
+                ::fprintf(stderr, "exception when parsing body: %s\n",
+                          body.c_str());
+                throw;
+            }
+
+            int lowerLimit = std::max(0, (numResponses - numParallel));
+            int upperLimit = std::min(maxReqs, (numResponses + numParallel));
+            if (bodyNbr < lowerLimit || bodyNbr > upperLimit) {
+                throw ML::Exception("number of returned server requests "
+                                    " is anomalous: %d is out of range"
+                                    " [%d,*%d,%d]",
+                                    bodyNbr, lowerLimit,
+                                    numResponses, upperLimit);
+            }
+
             if (numResponses == numReqs) {
                 ML::futex_wake(numResponses);
             }
@@ -428,9 +437,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
         auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
 
         while (numReqs < maxReqs) {
-            const char * url = (((numReqs & 0xfff) == 0xfff)
-                                ? "/connection-close"
-                                : "/");
+            const char * url = "/counter";
             if (client.get(url, cbs)) {
                 numReqs++;
                 // if ((numReqs & mask) == 0 || numReqs == maxReqs) {

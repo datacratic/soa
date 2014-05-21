@@ -61,14 +61,13 @@ handleHttpPayload(HttpTestConnHandler & handler,
                   const string & payload)
 {
     numReqs++;
-    // int localRq = numReqs;
-    // if ((localRq % 100) == 0) {
-    //     ::fprintf(stderr, "srv reqs: %d\n", localRq);
-    // }
     string key = header.verb + ":" + header.resource;
     if (header.resource == "/timeout") {
         sleep(3);
         handler.sendResponse(200, "Will time out", "text/plain");
+    }
+    else if (header.resource == "/counter") {
+        handler.sendResponse(200, to_string(numReqs), "text/plain");
     }
     else if (header.resource == "/headers") {
         string headersBody("{\n");

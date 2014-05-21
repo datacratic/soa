@@ -410,7 +410,7 @@ handleHeader(const char * data, size_t dataSize)
 
 HttpConnection::
 HttpConnection()
-    : responseState_(IDLE), lastCode_(0), timeoutFd_(-1)
+    : responseState_(IDLE), requestEnded_(false), lastCode_(0), timeoutFd_(-1)
 {
     // cerr << "HttpConnection(): " << this << "\n";
 
