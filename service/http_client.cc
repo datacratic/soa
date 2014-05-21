@@ -418,7 +418,7 @@ HttpConnection()
 {
     // cerr << "HttpConnection(): " << this << "\n";
 
-    parser_.onResponseStart = [&] (const std::string & httpVersion,
+    parser_.onResponseStart = [&] (const string & httpVersion,
                                    int code) {
         this->onParserResponseStart(httpVersion, code);
     };
@@ -443,7 +443,9 @@ HttpConnection::
     // cerr << "~HttpConnection: " << this << "\n";
     cancelRequestTimer();
     if (responseState_ != IDLE) {
-        ::fprintf(stderr, "cannot process a request when state is not idle");
+        ::fprintf(stderr,
+                  "destroying non-idle connection: %d",
+                  responseState_);
         abort();
     }
 }
@@ -466,8 +468,8 @@ perform(HttpRequest && request)
     // cerr << "perform: " << this << endl;
 
     if (responseState_ != IDLE) {
-        ::fprintf(stderr, "cannot process a request when state is not idle");
-        abort();
+        throw ML::Exception("%p: cannot process a request when state is not"
+                            " idle: %d", this, responseState_);
     }
 
     request_ = move(request);
@@ -554,7 +556,7 @@ void
 HttpConnection::
 onParserResponseStart(const string & httpVersion, int code)
 {
-    // cerr << "onParserResponseStart: " << this << endl;
+    // ::fprintf(stderr, "%p: onParserResponseStart\n", this);
     request_.callbacks().startResponse(request_, httpVersion, code);
 }
 
@@ -581,10 +583,16 @@ onParserDone(bool doClose)
     handleEndOfRq(0, doClose);
 }
 
+/* This method handles end of requests: callback invocation, timer
+ * cancellation etc. It may request the closing of the connection, in which
+ * case the HttpConnection will be ready for a new request only after
+ * finalizeEndOfRq is invoked. */
 void
 HttpConnection::
 handleEndOfRq(int code, bool requireClose)
 {
+    // ::fprintf(stderr, "%p: handleEndOfRq: %d, %d, %d\n",
+    //           this, code, requireClose, requestEnded_);
     if (requestEnded_) {
         // cerr << "ignoring extraneous end of request\n";
         ;
