@@ -36,7 +36,6 @@ makeRequestStr()
         requestStr_ += "?" + query;
     }
     requestStr_ += " HTTP/1.1\r\n";
-
     requestStr_ += "Host: "+ url.host();
     int port = url.port();
     if (port > 0) {
@@ -55,9 +54,19 @@ makeRequestStr()
 }
 
 
+#if 0
+/* HTTPCLIENTERROR */
+
+std::ostream &
+Datacratic::
+operator << (std::ostream & stream, HttpClientError error)
+{
+    return stream << HttpClientCallbacks::errorMessage(error);
+}
+
+
 /* HTTPCLIENTCALLBACKS */
 
-#if 0
 const string &
 HttpClientCallbacks::
 errorMessage(HttpClientError errorCode)
