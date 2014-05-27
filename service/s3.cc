@@ -1137,6 +1137,14 @@ forEachObject(const std::string & bucket,
 
     string marker = startAt;
     // bool firstIter = true;
+
+    int debugCount = 0;
+    string threadId;
+    {
+        stringstream ss;
+        ss << this_thread::get_id();
+        threadId = ss.str();
+    }
     do {
         //cerr << "Starting at " << marker << endl;
         
@@ -1147,6 +1155,17 @@ forEachObject(const std::string & bucket,
             queryParams.push_back({"delimiter", delimiter});
         if (marker != "")
             queryParams.push_back({"marker", marker});
+
+        ::fprintf(stderr,
+                  "S3 DEBUG: LISTING FILES \n"
+                  "thread id [%s]\n"
+                  "count     [%d]\n"
+                  "bucket    [%s]\n"
+                  "prefix    [%s]\n"
+                  "delimiter [%s]\n"
+                  "marker    [%s]\n",
+                  threadId.c_str(), ++debugCount, bucket.c_str(),
+                  prefix.c_str(), delimiter.c_str(), marker.c_str());
 
         auto listingResult = get(bucket, "/", 8192, "",
                                  {}, queryParams);
