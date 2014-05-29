@@ -546,7 +546,7 @@ headEscaped(const std::string & bucket,
             const std::string & subResource,
             const StrPairVector & headers,
             const StrPairVector & queryParams,
-            const bool & throwOn404) const
+            bool throwOn404) const
 {
     RequestParams request;
     request.verb = "HEAD";
@@ -1300,7 +1300,7 @@ S3Api::ObjectInfo
 S3Api::
 getObjectInfo(const std::string & bucket,
               const std::string & object,
-              const bool & fullInfo) const
+              bool fullInfo) const
 {
     if (fullInfo) {
         StrPairVector queryParams;
@@ -1350,7 +1350,7 @@ S3Api::ObjectInfo
 S3Api::
 tryGetObjectInfo(const std::string & bucket,
                  const std::string & object,
-                 const bool & fullInfo) const
+                 bool fullInfo) const
 {
     if (fullInfo) {
         StrPairVector queryParams;
@@ -1396,7 +1396,7 @@ tryGetObjectInfo(const std::string & bucket,
 
 S3Api::ObjectInfo
 S3Api::
-getObjectInfo(const std::string & uri, const bool & fullInfo) const
+getObjectInfo(const std::string & uri, bool fullInfo) const
 {
     string bucket, object;
     std::tie(bucket, object) = parseUri(uri);
@@ -1405,7 +1405,7 @@ getObjectInfo(const std::string & uri, const bool & fullInfo) const
 
 S3Api::ObjectInfo
 S3Api::
-tryGetObjectInfo(const std::string & uri, const bool & fullInfo) const
+tryGetObjectInfo(const std::string & uri, bool fullInfo) const
 {
     string bucket, object;
     std::tie(bucket, object) = parseUri(uri);

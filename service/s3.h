@@ -449,10 +449,10 @@ struct S3Api : public AwsApi {
     /** Does the object exist? */
     ObjectInfo tryGetObjectInfo(const std::string & bucket,
                                 const std::string & object,
-                                const bool & fullInfo = false) const;
+                                bool fullInfo = false) const;
 
     ObjectInfo tryGetObjectInfo(const std::string & uri,
-                                const bool & fullInfo = false) const;
+                                bool fullInfo = false) const;
 
 
     /** Return the ObjectInfo about the object.  Throws an exception if it
@@ -460,10 +460,10 @@ struct S3Api : public AwsApi {
     */
     ObjectInfo getObjectInfo(const std::string & bucket,
                              const std::string & object,
-                             const bool & fullInfo = false) const;
+                             bool fullInfo = false) const;
 
     ObjectInfo getObjectInfo(const std::string & uri,
-                             const bool & fullInfo = false) const;
+                             bool fullInfo = false) const;
 
     /** Erase the given object.  Throws an exception if it fails. */
     void eraseObject(const std::string & bucket,
@@ -558,7 +558,7 @@ struct S3Api : public AwsApi {
                          const std::string & subResource = "",
                          const StrPairVector & headers = StrPairVector(),
                          const StrPairVector & queryParams = StrPairVector(),
-                         const bool & throwOn404 = true) const;
+                         bool throwOn404 = true) const;
     /* get */
     Response getEscaped(const std::string & bucket,
                         const std::string & resource,
