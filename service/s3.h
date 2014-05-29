@@ -557,8 +557,7 @@ struct S3Api : public AwsApi {
                          const std::string & resource,
                          const std::string & subResource = "",
                          const StrPairVector & headers = StrPairVector(),
-                         const StrPairVector & queryParams = StrPairVector(),
-                         bool throwOn404 = true) const;
+                         const StrPairVector & queryParams = StrPairVector()) const;
     /* get */
     Response getEscaped(const std::string & bucket,
                         const std::string & resource,

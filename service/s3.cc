@@ -545,8 +545,7 @@ headEscaped(const std::string & bucket,
             const std::string & resource,
             const std::string & subResource,
             const StrPairVector & headers,
-            const StrPairVector & queryParams,
-            bool throwOn404) const
+            const StrPairVector & queryParams) const
 {
     RequestParams request;
     request.verb = "HEAD";
@@ -556,7 +555,7 @@ headEscaped(const std::string & bucket,
     request.headers = headers;
     request.queryParams = queryParams;
     request.date = Date::now().printRfc2616();
-    request.throwOn404 = throwOn404;
+    request.throwOn404 = false;
 
     return prepare(request).performSync();
 }
@@ -1334,8 +1333,7 @@ getObjectInfo(const std::string & bucket,
         return info;
     }
 
-    auto res = headEscaped(bucket, "/" + object, "", StrPairVector(),
-                           StrPairVector(), false);
+    auto res = headEscaped(bucket, "/" + object);
     if (res.code_ == 404) {
         throw ML::Exception("object " + object + " not found in bucket "
                             + bucket);
@@ -1383,8 +1381,7 @@ tryGetObjectInfo(const std::string & bucket,
         return info;
     }
 
-    auto res = headEscaped(bucket, "/" + object, "", StrPairVector(),
-                           StrPairVector(), false);
+    auto res = headEscaped(bucket, "/" + object);
     if (res.code_ == 404) {
         return ObjectInfo();
     }
