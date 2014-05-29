@@ -114,7 +114,7 @@ struct S3Api : public AwsApi {
     /** A set of parameters that specify a request. */
     struct RequestParams {
         RequestParams()
-            : downloadRange(0)
+            : downloadRange(0), throwOn404(true)
         {
         }
 
@@ -131,6 +131,8 @@ struct S3Api : public AwsApi {
 
         StrPairVector headers;
         StrPairVector queryParams;
+
+        bool throwOn404;
     };
 
     /** The response of a request.  Has a return code and a body. */
@@ -230,6 +232,7 @@ struct S3Api : public AwsApi {
         std::string uri;
         double bandwidthToServiceMbps;
         S3Api * owner;
+        bool throwOn404;
 
         /** Perform the request synchronously and return the result. */
         Response performSync() const;
@@ -396,6 +399,7 @@ struct S3Api : public AwsApi {
         {}
 
         ObjectInfo(tinyxml2::XMLNode * element);
+        ObjectInfo(const S3Api::Response & response);
 
         std::string key;
     };
@@ -444,18 +448,22 @@ struct S3Api : public AwsApi {
 
     /** Does the object exist? */
     ObjectInfo tryGetObjectInfo(const std::string & bucket,
-                                const std::string & object) const;
+                                const std::string & object,
+                                const bool & fullInfo = false) const;
 
-    ObjectInfo tryGetObjectInfo(const std::string & uri) const;
+    ObjectInfo tryGetObjectInfo(const std::string & uri,
+                                const bool & fullInfo = false) const;
 
 
     /** Return the ObjectInfo about the object.  Throws an exception if it
         doesn't exist.
     */
     ObjectInfo getObjectInfo(const std::string & bucket,
-                             const std::string & object) const;
+                             const std::string & object,
+                             const bool & fullInfo = false) const;
 
-    ObjectInfo getObjectInfo(const std::string & uri) const;
+    ObjectInfo getObjectInfo(const std::string & uri,
+                             const bool & fullInfo = false) const;
 
     /** Erase the given object.  Throws an exception if it fails. */
     void eraseObject(const std::string & bucket,
@@ -545,6 +553,12 @@ struct S3Api : public AwsApi {
 
     /** Pre-escaped versions of the above methods */
 
+    Response headEscaped(const std::string & bucket,
+                         const std::string & resource,
+                         const std::string & subResource = "",
+                         const StrPairVector & headers = StrPairVector(),
+                         const StrPairVector & queryParams = StrPairVector(),
+                         const bool & throwOn404 = true) const;
     /* get */
     Response getEscaped(const std::string & bucket,
                         const std::string & resource,
@@ -609,6 +623,7 @@ void registerS3Bucket(const std::string & bucketName,
                       double bandwidthToServiceMbps = S3Api::defaultBandwidthToServiceMbps,
                       const std::string & protocol = "http",
                       const std::string & serviceUri = "s3.amazonaws.com");
+
 
 /** S3 support for filter_ostream opens.  Register the bucket name here, and
     you can open it directly from s3.  Queries and iterates over all

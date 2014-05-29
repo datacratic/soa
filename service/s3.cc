@@ -323,6 +323,10 @@ performSync() const
         myRequest.setOpt<options::Timeout>(timeout);
         myRequest.setOpt<options::NoSignal>(1);
 
+        if (params.verb == "HEAD") {
+            myRequest.setOpt<options::NoBody>(true);
+        }
+
         // auto onData = [&] (char * data, size_t ofs1, size_t ofs2) {
         //     //cerr << "called onData for " << ofs1 << " " << ofs2 << endl;
         //     return 0;
@@ -439,6 +443,13 @@ performSync() const
             if (responseCode >= 500 and responseCode < 505) {
                 continue;
             }
+            else if(!throwOn404 and responseCode == 404){
+                Response response;
+                response.code_ = responseCode;
+                response.header_.parse(responseHeaders);
+                response.body_ = body;
+                return response;
+            }
             else {
                 throw ML::Exception("S3 error is unrecoverable");
             }
@@ -491,6 +502,7 @@ prepare(const RequestParams & request) const
     }
 
     SignedRequest result;
+    result.throwOn404 = request.throwOn404;
     result.params = request;
     result.bandwidthToServiceMbps = bandwidthToServiceMbps;
     result.owner = const_cast<S3Api *>(this);
@@ -525,6 +537,28 @@ prepare(const RequestParams & request) const
     //cerr << "result.auth = " << result.auth << endl;
 
     return result;
+}
+
+S3Api::Response
+S3Api::
+headEscaped(const std::string & bucket,
+            const std::string & resource,
+            const std::string & subResource,
+            const StrPairVector & headers,
+            const StrPairVector & queryParams,
+            const bool & throwOn404) const
+{
+    RequestParams request;
+    request.verb = "HEAD";
+    request.bucket = bucket;
+    request.resource = resource;
+    request.subResource = subResource;
+    request.headers = headers;
+    request.queryParams = queryParams;
+    request.date = Date::now().printRfc2616();
+    request.throwOn404 = throwOn404;
+
+    return prepare(request).performSync();
 }
 
 S3Api::Response
@@ -1121,6 +1155,20 @@ ObjectInfo(tinyxml2::XMLNode * element)
     exists = true;
 }
 
+S3Api::ObjectInfo::
+ObjectInfo(const S3Api::Response & response)
+{
+    exists = true;
+    lastModified = Date::parse(response.getHeader("last-modified"),
+            "%a, %e %b %Y %H:%M:%S %Z");
+    size = response.header_.contentLength;
+    etag = response.getHeader("etag");
+    storageClass = ""; // Not available in headers
+    ownerId = "";      // Not available in headers
+    ownerName = "";    // Not available in headers
+}
+
+
 void
 S3Api::
 forEachObject(const std::string & bucket,
@@ -1251,78 +1299,104 @@ forEachObject(const std::string & uriPrefix,
 S3Api::ObjectInfo
 S3Api::
 getObjectInfo(const std::string & bucket,
-              const std::string & object) const
+              const std::string & object,
+              const bool & fullInfo) const
 {
-    StrPairVector queryParams;
-    queryParams.push_back({"prefix", object});
+    if (fullInfo) {
+        StrPairVector queryParams;
+        queryParams.push_back({"prefix", object});
 
-    auto listingResult = getEscaped(bucket, "/", 8192, "", {}, queryParams);
+        auto listingResult = getEscaped(bucket, "/", 8192, "", {}, queryParams);
 
-    if (listingResult.code_ != 200) {
-        cerr << listingResult.bodyXmlStr() << endl;
+        if (listingResult.code_ !=200) {
+            cerr << listingResult.bodyXmlStr() << endl;
+            throw ML::Exception("error getting object");
+        }
+
+        auto listingResultXml = listingResult.bodyXml();
+
+        auto foundObject
+            = tinyxml2::XMLHandle(*listingResultXml)
+            .FirstChildElement("ListBucketResult")
+            .FirstChildElement("Contents")
+            .ToElement();
+
+        if (!foundObject)
+            throw ML::Exception("object " + object + " not found in bucket "
+                                + bucket);
+
+        ObjectInfo info(foundObject);
+
+        if(info.key != object){
+            throw ML::Exception("object " + object + " not found in bucket "
+                                + bucket);
+        }
+        return info;
+    }
+
+    auto res = headEscaped(bucket, "/" + object, "", StrPairVector(),
+                           StrPairVector(), false);
+    if (res.code_ == 404) {
+        throw ML::Exception("object " + object + " not found in bucket "
+                            + bucket);
+    }
+    if (res.code_ != 200) {
         throw ML::Exception("error getting object");
     }
-
-    auto listingResultXml = listingResult.bodyXml();
-
-    auto foundObject
-        = tinyxml2::XMLHandle(*listingResultXml)
-        .FirstChildElement("ListBucketResult")
-        .FirstChildElement("Contents")
-        .ToElement();
-
-    if (!foundObject)
-        throw ML::Exception("object " + object + " not found in bucket "
-                            + bucket);
-
-    ObjectInfo info(foundObject);
-
-    if(info.key != object){
-        throw ML::Exception("object " + object + " not found in bucket "
-                            + bucket);
-    }
-
-
-    return info;
+    return ObjectInfo(res);
 }
 
 S3Api::ObjectInfo
 S3Api::
 tryGetObjectInfo(const std::string & bucket,
-                 const std::string & object) const
+                 const std::string & object,
+                 const bool & fullInfo) const
 {
-    StrPairVector queryParams;
-    queryParams.push_back({"prefix", object});
+    if (fullInfo) {
+        StrPairVector queryParams;
+        queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
-    if (listingResult.code_ != 200) {
-        cerr << listingResult.bodyXmlStr() << endl;
-        throw ML::Exception("error getting object request: %d",
-                            listingResult.code_);
+        auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
+        if (listingResult.code_ != 200) {
+            cerr << listingResult.bodyXmlStr() << endl;
+            throw ML::Exception("error getting object request: %d",
+                                listingResult.code_);
+        }
+        cerr << listingResult.body() << endl;
+        auto listingResultXml = listingResult.bodyXml();
+
+        auto foundObject
+            = tinyxml2::XMLHandle(*listingResultXml)
+            .FirstChildElement("ListBucketResult")
+            .FirstChildElement("Contents")
+            .ToElement();
+
+        if (!foundObject)
+            return ObjectInfo();
+
+        ObjectInfo info(foundObject);
+
+        if(info.key != object){
+            return ObjectInfo();
+        }
+
+        return info;
     }
-    auto listingResultXml = listingResult.bodyXml();
 
-    auto foundObject
-        = tinyxml2::XMLHandle(*listingResultXml)
-        .FirstChildElement("ListBucketResult")
-        .FirstChildElement("Contents")
-        .ToElement();
-
-    if (!foundObject)
-        return ObjectInfo();
-
-    ObjectInfo info(foundObject);
-
-    if(info.key != object){
+    auto res = headEscaped(bucket, "/" + object, "", StrPairVector(),
+                           StrPairVector(), false);
+    if (res.code_ == 404) {
         return ObjectInfo();
     }
-
-    return info;
+    if (res.code_ != 200) {
+        throw ML::Exception("error getting object");
+    }
+    return ObjectInfo(res);
 }
 
 S3Api::ObjectInfo
 S3Api::
-getObjectInfo(const std::string & uri) const
+getObjectInfo(const std::string & uri, const bool & fullInfo) const
 {
     string bucket, object;
     std::tie(bucket, object) = parseUri(uri);
@@ -1331,11 +1405,11 @@ getObjectInfo(const std::string & uri) const
 
 S3Api::ObjectInfo
 S3Api::
-tryGetObjectInfo(const std::string & uri) const
+tryGetObjectInfo(const std::string & uri, const bool & fullInfo) const
 {
     string bucket, object;
     std::tie(bucket, object) = parseUri(uri);
-    return tryGetObjectInfo(bucket, object);
+    return tryGetObjectInfo(bucket, object, fullInfo);
 }
 
 void
@@ -1425,11 +1499,6 @@ download(const std::string & bucket,
 {
 
     ObjectInfo info = getObjectInfo(bucket, object);
-    if(info.storageClass == "GLACIER"){
-        throw ML::Exception("Cannot download [" + info.key + "] because its "
-            "storage class is [GLACIER]");
-    }
-
     size_t chunkSize = 128 * 1024 * 1024;  // 128MB probably good
 
     struct Part {
