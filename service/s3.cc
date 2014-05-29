@@ -443,14 +443,7 @@ performSync() const
             if (responseCode >= 500 and responseCode < 505) {
                 continue;
             }
-            else if(!throwOn404 and responseCode == 404){
-                Response response;
-                response.code_ = responseCode;
-                response.header_.parse(responseHeaders);
-                response.body_ = body;
-                return response;
-            }
-            else {
+            else if(throwOn404 or responseCode != 404){
                 throw ML::Exception("S3 error is unrecoverable");
             }
         }
