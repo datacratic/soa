@@ -1388,7 +1388,7 @@ getObjectInfo(const std::string & uri, bool fullInfo) const
 {
     string bucket, object;
     std::tie(bucket, object) = parseUri(uri);
-    return getObjectInfo(bucket, object);
+    return getObjectInfo(bucket, object, fullInfo);
 }
 
 S3Api::ObjectInfo
