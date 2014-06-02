@@ -272,6 +272,7 @@ performSync() const
 
         auto connection = owner->proxy.getConnection();
         curlpp::Easy & myRequest = *connection;
+        myRequest.reset();
 
         using namespace curlpp;
         using namespace curlpp::infos;
