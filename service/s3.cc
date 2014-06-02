@@ -305,16 +305,6 @@ performSync() const
         cerr << "timeout = " << timeout << endl;
 #endif
 
-#if 0
-        if (params.verb == "GET") ;
-        else if (params.verb == "POST") {
-            //myRequest.setOpt<Post>(true);
-        }
-        else if (params.verb == "PUT") {
-            myRequest.setOpt<options::Post>(true);
-        }
-        else throw ML::Exception("unknown verb " + params.verb);
-#endif
         //cerr << "!!!Setting params verb " << params.verb << endl;
         myRequest.setOpt<options::CustomRequest>(params.verb);
 
