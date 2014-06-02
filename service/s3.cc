@@ -1324,7 +1324,7 @@ getObjectInfo(const std::string & bucket,
         return info;
     }
 
-    auto res = headEscaped(bucket, "/" + object);
+    auto res = head(bucket, "/" + object);
     if (res.code_ == 404) {
         throw ML::Exception("object " + object + " not found in bucket "
                             + bucket);
@@ -1372,7 +1372,7 @@ tryGetObjectInfo(const std::string & bucket,
         return info;
     }
 
-    auto res = headEscaped(bucket, "/" + object);
+    auto res = head(bucket, "/" + object);
     if (res.code_ == 404) {
         return ObjectInfo();
     }

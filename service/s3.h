@@ -247,6 +247,18 @@ struct S3Api : public AwsApi {
         in place. */
     static std::string s3EscapeResource(const std::string & resource);
 
+    /** Perform a HEAD request from end to end. */
+    Response head(const std::string & bucket,
+                  const std::string & resource,
+                  const std::string & subResource = "",
+                  const StrPairVector & headers = StrPairVector(),
+                  const StrPairVector & queryParams = StrPairVector())
+        const
+    {
+        return headEscaped(bucket, s3EscapeResource(resource), subResource,
+                           headers, queryParams);
+    }
+
     /** Perform a GET request from end to end. */
     Response get(const std::string & bucket,
                  const std::string & resource,
@@ -552,11 +564,13 @@ struct S3Api : public AwsApi {
 
     /** Pre-escaped versions of the above methods */
 
+    /* head */
     Response headEscaped(const std::string & bucket,
                          const std::string & resource,
                          const std::string & subResource = "",
                          const StrPairVector & headers = StrPairVector(),
                          const StrPairVector & queryParams = StrPairVector()) const;
+
     /* get */
     Response getEscaped(const std::string & bucket,
                         const std::string & resource,
