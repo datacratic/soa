@@ -405,7 +405,7 @@ performSync() const
         curlpp::InfoGetter::get(myRequest, CURLINFO_RESPONSE_CODE,
                                 responseCode);
 
-        if (responseCode >= 300) {
+        if (responseCode >= 300 && responseCode != 404) {
             string message("S3 operation failed with HTTP code "
                            + to_string(responseCode) + "\n"
                            + params.verb + " " + uri + "\n");
@@ -443,7 +443,7 @@ performSync() const
             if (responseCode >= 500 and responseCode < 505) {
                 continue;
             }
-            else if(throwOn404 or responseCode != 404){
+            else {
                 throw ML::Exception("S3 error is unrecoverable");
             }
         }
@@ -495,7 +495,6 @@ prepare(const RequestParams & request) const
     }
 
     SignedRequest result;
-    result.throwOn404 = request.throwOn404;
     result.params = request;
     result.bandwidthToServiceMbps = bandwidthToServiceMbps;
     result.owner = const_cast<S3Api *>(this);
@@ -548,7 +547,6 @@ headEscaped(const std::string & bucket,
     request.headers = headers;
     request.queryParams = queryParams;
     request.date = Date::now().printRfc2616();
-    request.throwOn404 = false;
 
     return prepare(request).performSync();
 }

@@ -114,7 +114,7 @@ struct S3Api : public AwsApi {
     /** A set of parameters that specify a request. */
     struct RequestParams {
         RequestParams()
-            : downloadRange(0), throwOn404(true)
+            : downloadRange(0)
         {
         }
 
@@ -131,8 +131,6 @@ struct S3Api : public AwsApi {
 
         StrPairVector headers;
         StrPairVector queryParams;
-
-        bool throwOn404;
     };
 
     /** The response of a request.  Has a return code and a body. */
@@ -232,7 +230,6 @@ struct S3Api : public AwsApi {
         std::string uri;
         double bandwidthToServiceMbps;
         S3Api * owner;
-        bool throwOn404;
 
         /** Perform the request synchronously and return the result. */
         Response performSync() const;
