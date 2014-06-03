@@ -314,8 +314,9 @@ performSync() const
         myRequest.setOpt<options::Timeout>(timeout);
         myRequest.setOpt<options::NoSignal>(1);
 
-        if (params.verb == "HEAD") {
-            myRequest.setOpt<options::NoBody>(true);
+        bool noBody = (params.verb == "HEAD");
+        if (noBody) {
+            myRequest.setOpt<options::NoBody>(noBody);
         }
 
         // auto onData = [&] (char * data, size_t ofs1, size_t ofs2) {
@@ -448,7 +449,7 @@ performSync() const
 
         Response response;
         response.code_ = responseCode;
-        response.header_.parse(responseHeaders);
+        response.header_.parse(responseHeaders, !noBody);
         body.append(responseBody);
         response.body_ = body;
 
@@ -1289,7 +1290,7 @@ getObjectInfo(const std::string & bucket,
 
         auto listingResult = getEscaped(bucket, "/", 8192, "", {}, queryParams);
 
-        if (listingResult.code_ !=200) {
+        if (listingResult.code_ != 200) {
             cerr << listingResult.bodyXmlStr() << endl;
             throw ML::Exception("error getting object");
         }
@@ -1342,7 +1343,6 @@ tryGetObjectInfo(const std::string & bucket,
             throw ML::Exception("error getting object request: %d",
                                 listingResult.code_);
         }
-        cerr << listingResult.body() << endl;
         auto listingResultXml = listingResult.bodyXml();
 
         auto foundObject
