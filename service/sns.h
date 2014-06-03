@@ -82,29 +82,36 @@ struct SnsApiWrapper {
 
 struct MockSnsApiWrapper : SnsApiWrapper {
 
-    int cacheSize;
-    std::queue<std::string> queue;
+    private:
+        int cacheSize;
 
-    MockSnsApiWrapper(int cacheSize = 0) : cacheSize(cacheSize){}
+    public:
+        std::queue<std::string> queue;
 
-    void init(const std::string & accessKeyId,
-              const std::string & accessKey,
-              const std::string & fdefaultTopicArn) {}
-
-    std::string
-    publish(const std::string & message,
-            int timeout = 10,
-            const std::string & subject = "") {
-        if (queue.size() == cacheSize) {
-            queue.pop();
+        MockSnsApiWrapper(int cacheSize = 0) : cacheSize(cacheSize){
+            if (cacheSize < 0) {
+                throw ML::Exception("Cache size cannot be below 0");
+            }
         }
-        queue.push(message);
-        return "";
-    }
 
-    MockSnsApiWrapper(const std::string & accessKeyId,
-                      const std::string & accessKey,
-                      const std::string & defaultTopicArn) = delete;
+        void init(const std::string & accessKeyId,
+                  const std::string & accessKey,
+                  const std::string & fdefaultTopicArn) {}
+
+        std::string
+        publish(const std::string & message,
+                int timeout = 10,
+                const std::string & subject = "") {
+            while (queue.size() >= cacheSize) {
+                queue.pop();
+            }
+            queue.push(message);
+            return "";
+        }
+
+        MockSnsApiWrapper(const std::string & accessKeyId,
+                          const std::string & accessKey,
+                          const std::string & defaultTopicArn) = delete;
 
 };
 } // namespace Datacratic
