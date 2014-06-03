@@ -461,9 +461,21 @@ struct S3Api : public AwsApi {
     ObjectInfo tryGetObjectInfo(const std::string & bucket,
                                 const std::string & object,
                                 bool fullInfo = false) const;
+    ObjectInfo tryGetObjectInfo(const char * bucket, const char * object,
+                                bool fullInfo = false)
+        const
+    {
+        return tryGetObjectInfo(std::string(bucket), std::string(object), fullInfo);
+    }
 
     ObjectInfo tryGetObjectInfo(const std::string & uri,
                                 bool fullInfo = false) const;
+    ObjectInfo tryGetObjectInfo(const char * uri,
+                                bool fullInfo = false)
+        const
+    {
+        return tryGetObjectInfo(std::string(uri), fullInfo);
+    }
 
 
     /** Return the ObjectInfo about the object.  Throws an exception if it
@@ -472,9 +484,22 @@ struct S3Api : public AwsApi {
     ObjectInfo getObjectInfo(const std::string & bucket,
                              const std::string & object,
                              bool fullInfo = false) const;
+    ObjectInfo getObjectInfo(const char * bucket, const char * object,
+                             bool fullInfo = false)
+        const
+    {
+        return getObjectInfo(std::string(bucket), std::string(object),
+                             fullInfo);
+    }
 
     ObjectInfo getObjectInfo(const std::string & uri,
                              bool fullInfo = false) const;
+    ObjectInfo getObjectInfo(const char * uri,
+                             bool fullInfo = false)
+        const
+    {
+        return getObjectInfo(std::string(uri), fullInfo);
+    }
 
     /** Erase the given object.  Throws an exception if it fails. */
     void eraseObject(const std::string & bucket,
