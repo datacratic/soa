@@ -52,7 +52,7 @@ struct SnsApi : public AwsBasicApi {
  */
 struct ISnsApiWrapper {
     protected:
-        SnsApiWrapperInterface();
+        ISnsApiWrapper();
         SnsApi api;
         std::string defaultTopicArn;
 
@@ -83,6 +83,8 @@ struct SnsApiWrapper : ISnsApiWrapper {
 };
 
 struct MockSnsApiWrapper : ISnsApiWrapper {
+
+    MockSnsApiWrapper();
     MockSnsApiWrapper(const std::string & accessKeyId,
                       const std::string & accessKey,
                       const std::string & defaultTopicArn) {}
