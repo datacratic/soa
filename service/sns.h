@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <queue>
 #include "aws.h"
 #include "http_rest_proxy.h"
 
@@ -81,7 +82,11 @@ struct SnsApiWrapper {
 
 struct MockSnsApiWrapper : SnsApiWrapper {
 
-    MockSnsApiWrapper(){}
+    int cacheSize;
+    std::queue<std::string> queue;
+
+    MockSnsApiWrapper(int cacheSize = 0) : cacheSize(cacheSize){}
+
     void init(const std::string & accessKeyId,
               const std::string & accessKey,
               const std::string & fdefaultTopicArn) {}
@@ -90,6 +95,10 @@ struct MockSnsApiWrapper : SnsApiWrapper {
     publish(const std::string & message,
             int timeout = 10,
             const std::string & subject = "") {
+        if (queue.size() == cacheSize) {
+            queue.pop();
+        }
+        queue.push(message);
         return "";
     }
 
