@@ -47,5 +47,55 @@ struct SnsApi : public AwsBasicApi {
             const std::string & subject = "");
 };
 
+/**
+ * Wraps SnsApi in order to use the same topic arn on each publish
+ */
+struct ISnsApiWrapper {
+    protected:
+        SnsApiWrapperInterface();
+        SnsApi api;
+        std::string defaultTopicArn;
 
+    public:
+        virtual void init(const std::string & accessKeyId,
+                          const std::string & accessKey,
+                          const std::string & fdefaultTopicArn) {
+            api.init(accessKeyId, accessKey);
+            this->defaultTopicArn = defaultTopicArn;
+        }
+
+        virtual std::string
+        publish(const std::string & message,
+                int timeout = 10,
+                const std::string & subject = "") {
+            return api.publish(defaultTopicArn, message, timeout, subject);
+        }
+};
+
+struct SnsApiWrapper : ISnsApiWrapper {
+    SnsApiWrapper(const std::string & accessKeyId,
+                  const std::string & accessKey,
+                  const std::string & defaultTopicArn) {
+        api.init(accessKeyId, accessKey);
+        this->defaultTopicArn = defaultTopicArn;
+    }
+        //: SnsApiWrapperInterface(accessKeyId, accessKey, defaultTopicArn){}
+};
+
+struct MockSnsApiWrapper : ISnsApiWrapper {
+    MockSnsApiWrapper(const std::string & accessKeyId,
+                      const std::string & accessKey,
+                      const std::string & defaultTopicArn) {}
+
+    void init(const std::string & accessKeyId,
+              const std::string & accessKey,
+              const std::string & fdefaultTopicArn) {}
+
+    std::string
+    publish(const std::string & message,
+            int timeout = 10,
+            const std::string & subject = "") {
+        return "";
+    }
+};
 } // namespace Datacratic
