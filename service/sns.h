@@ -102,6 +102,9 @@ struct MockSnsApiWrapper : SnsApiWrapper {
         publish(const std::string & message,
                 int timeout = 10,
                 const std::string & subject = "") {
+            if (cacheSize == 0) {
+                return "";
+            }
             while (queue.size() >= cacheSize) {
                 queue.pop();
             }
