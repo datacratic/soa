@@ -50,16 +50,23 @@ struct SnsApi : public AwsBasicApi {
 /**
  * Wraps SnsApi in order to use the same topic arn on each publish
  */
-struct ISnsApiWrapper {
+struct SnsApiWrapper {
     protected:
-        ISnsApiWrapper();
         SnsApi api;
         std::string defaultTopicArn;
+        SnsApiWrapper(){}
 
     public:
+        SnsApiWrapper(const std::string & accessKeyId,
+                      const std::string & accessKey,
+                      const std::string & defaultTopicArn) {
+            api.init(accessKeyId, accessKey);
+            this->defaultTopicArn = defaultTopicArn;
+        }
+
         virtual void init(const std::string & accessKeyId,
                           const std::string & accessKey,
-                          const std::string & fdefaultTopicArn) {
+                          const std::string & defaultTopicArn) {
             api.init(accessKeyId, accessKey);
             this->defaultTopicArn = defaultTopicArn;
         }
@@ -72,23 +79,9 @@ struct ISnsApiWrapper {
         }
 };
 
-struct SnsApiWrapper : ISnsApiWrapper {
-    SnsApiWrapper(const std::string & accessKeyId,
-                  const std::string & accessKey,
-                  const std::string & defaultTopicArn) {
-        api.init(accessKeyId, accessKey);
-        this->defaultTopicArn = defaultTopicArn;
-    }
-        //: SnsApiWrapperInterface(accessKeyId, accessKey, defaultTopicArn){}
-};
+struct MockSnsApiWrapper : SnsApiWrapper {
 
-struct MockSnsApiWrapper : ISnsApiWrapper {
-
-    MockSnsApiWrapper();
-    MockSnsApiWrapper(const std::string & accessKeyId,
-                      const std::string & accessKey,
-                      const std::string & defaultTopicArn) {}
-
+    MockSnsApiWrapper(){}
     void init(const std::string & accessKeyId,
               const std::string & accessKey,
               const std::string & fdefaultTopicArn) {}
@@ -99,5 +92,10 @@ struct MockSnsApiWrapper : ISnsApiWrapper {
             const std::string & subject = "") {
         return "";
     }
+
+    MockSnsApiWrapper(const std::string & accessKeyId,
+                      const std::string & accessKey,
+                      const std::string & defaultTopicArn) = delete;
+
 };
 } // namespace Datacratic
