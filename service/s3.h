@@ -24,6 +24,27 @@ namespace Datacratic {
 
 
 /*****************************************************************************/
+/* S3 OBJECTINFO TYPES                                                       */
+/*****************************************************************************/
+
+/* This enum contains the list of attributes that can be queried via the
+ * S3Api::getObjectInfo functions */
+
+enum S3ObjectInfoTypes {
+    LASTMODIFIED  = 1 << 0,
+    SIZE          = 1 << 1,
+    ETAG          = 1 << 2,
+
+    STORAGECLASS  = 1 << 3,
+    OWNERID       = 1 << 4,
+    OWNERNAME     = 1 << 5,
+
+    SHORT_INFO = LASTMODIFIED | SIZE | ETAG,
+    FULL_INFO = SHORT_INFO | STORAGECLASS | OWNERID | OWNERNAME
+};
+
+
+/*****************************************************************************/
 /* S3 API                                                                    */
 /*****************************************************************************/
 
@@ -460,22 +481,9 @@ struct S3Api : public AwsApi {
     /** Does the object exist? */
     ObjectInfo tryGetObjectInfo(const std::string & bucket,
                                 const std::string & object,
-                                bool fullInfo = false) const;
-    ObjectInfo tryGetObjectInfo(const char * bucket, const char * object,
-                                bool fullInfo = false)
-        const
-    {
-        return tryGetObjectInfo(std::string(bucket), std::string(object), fullInfo);
-    }
-
+                                S3ObjectInfoTypes infos = SHORT_INFO) const;
     ObjectInfo tryGetObjectInfo(const std::string & uri,
-                                bool fullInfo = false) const;
-    ObjectInfo tryGetObjectInfo(const char * uri,
-                                bool fullInfo = false)
-        const
-    {
-        return tryGetObjectInfo(std::string(uri), fullInfo);
-    }
+                                S3ObjectInfoTypes infos = SHORT_INFO) const;
 
 
     /** Return the ObjectInfo about the object.  Throws an exception if it
@@ -483,23 +491,9 @@ struct S3Api : public AwsApi {
     */
     ObjectInfo getObjectInfo(const std::string & bucket,
                              const std::string & object,
-                             bool fullInfo = false) const;
-    ObjectInfo getObjectInfo(const char * bucket, const char * object,
-                             bool fullInfo = false)
-        const
-    {
-        return getObjectInfo(std::string(bucket), std::string(object),
-                             fullInfo);
-    }
-
+                             S3ObjectInfoTypes infos = SHORT_INFO) const;
     ObjectInfo getObjectInfo(const std::string & uri,
-                             bool fullInfo = false) const;
-    ObjectInfo getObjectInfo(const char * uri,
-                             bool fullInfo = false)
-        const
-    {
-        return getObjectInfo(std::string(uri), fullInfo);
-    }
+                             S3ObjectInfoTypes infos = SHORT_INFO) const;
 
     /** Erase the given object.  Throws an exception if it fails. */
     void eraseObject(const std::string & bucket,

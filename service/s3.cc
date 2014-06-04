@@ -1280,11 +1280,12 @@ forEachObject(const std::string & uriPrefix,
 
 S3Api::ObjectInfo
 S3Api::
-getObjectInfo(const std::string & bucket,
-              const std::string & object,
-              bool fullInfo) const
+getObjectInfo(const std::string & bucket, const std::string & object,
+              S3ObjectInfoTypes infos)
+    const
 {
-    if (fullInfo) {
+    if ((infos & S3ObjectInfoTypes::FULL_INFO)
+        == S3ObjectInfoTypes::FULL_INFO) {
         StrPairVector queryParams;
         queryParams.push_back({"prefix", object});
 
@@ -1331,9 +1332,11 @@ S3Api::ObjectInfo
 S3Api::
 tryGetObjectInfo(const std::string & bucket,
                  const std::string & object,
-                 bool fullInfo) const
+                 S3ObjectInfoTypes infos)
+    const
 {
-    if (fullInfo) {
+    if ((infos & S3ObjectInfoTypes::FULL_INFO)
+        == S3ObjectInfoTypes::FULL_INFO) {
         StrPairVector queryParams;
         queryParams.push_back({"prefix", object});
 
@@ -1356,7 +1359,7 @@ tryGetObjectInfo(const std::string & bucket,
 
         ObjectInfo info(foundObject);
 
-        if(info.key != object){
+        if (info.key != object) {
             return ObjectInfo();
         }
 
@@ -1375,20 +1378,22 @@ tryGetObjectInfo(const std::string & bucket,
 
 S3Api::ObjectInfo
 S3Api::
-getObjectInfo(const std::string & uri, bool fullInfo) const
+getObjectInfo(const std::string & uri, S3ObjectInfoTypes infos)
+    const
 {
     string bucket, object;
     std::tie(bucket, object) = parseUri(uri);
-    return getObjectInfo(bucket, object, fullInfo);
+    return getObjectInfo(bucket, object, infos);
 }
 
 S3Api::ObjectInfo
 S3Api::
-tryGetObjectInfo(const std::string & uri, bool fullInfo) const
+tryGetObjectInfo(const std::string & uri, S3ObjectInfoTypes infos)
+    const
 {
     string bucket, object;
     std::tie(bucket, object) = parseUri(uri);
-    return tryGetObjectInfo(bucket, object, fullInfo);
+    return tryGetObjectInfo(bucket, object, infos);
 }
 
 void
