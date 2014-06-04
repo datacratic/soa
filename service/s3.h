@@ -625,6 +625,16 @@ struct S3Api : public AwsApi {
     //easy handle for v8 wrapping
     void setDefaultBandwidthToServiceMbps(double mpbs);
 
+private:
+    ObjectInfo tryGetObjectInfoShort(const std::string & bucket,
+                                     const std::string & object) const;
+    ObjectInfo tryGetObjectInfoFull(const std::string & bucket,
+                                    const std::string & object) const;
+    ObjectInfo getObjectInfoShort(const std::string & bucket,
+                                  const std::string & object) const;
+    ObjectInfo getObjectInfoFull(const std::string & bucket,
+                                 const std::string & object) const;
+
     // Used to pool connections to the S3 service
     static HttpRestProxy proxy;
 

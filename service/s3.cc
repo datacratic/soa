@@ -1284,39 +1284,53 @@ getObjectInfo(const std::string & bucket, const std::string & object,
               S3ObjectInfoTypes infos)
     const
 {
-    if ((infos & S3ObjectInfoTypes::FULL_INFO)
-        == S3ObjectInfoTypes::FULL_INFO) {
-        StrPairVector queryParams;
-        queryParams.push_back({"prefix", object});
+    return ((infos & S3ObjectInfoTypes::FULL_INFO)
+            == S3ObjectInfoTypes::FULL_INFO
+            ? getObjectInfoFull(bucket, object)
+            : getObjectInfoShort(bucket, object));
+}
 
-        auto listingResult = getEscaped(bucket, "/", 8192, "", {}, queryParams);
+S3Api::ObjectInfo
+S3Api::
+getObjectInfoFull(const std::string & bucket, const std::string & object)
+    const
+{
+    StrPairVector queryParams;
+    queryParams.push_back({"prefix", object});
 
-        if (listingResult.code_ != 200) {
-            cerr << listingResult.bodyXmlStr() << endl;
-            throw ML::Exception("error getting object");
-        }
+    auto listingResult = getEscaped(bucket, "/", 8192, "", {}, queryParams);
 
-        auto listingResultXml = listingResult.bodyXml();
-
-        auto foundObject
-            = tinyxml2::XMLHandle(*listingResultXml)
-            .FirstChildElement("ListBucketResult")
-            .FirstChildElement("Contents")
-            .ToElement();
-
-        if (!foundObject)
-            throw ML::Exception("object " + object + " not found in bucket "
-                                + bucket);
-
-        ObjectInfo info(foundObject);
-
-        if(info.key != object){
-            throw ML::Exception("object " + object + " not found in bucket "
-                                + bucket);
-        }
-        return info;
+    if (listingResult.code_ != 200) {
+        cerr << listingResult.bodyXmlStr() << endl;
+        throw ML::Exception("error getting object");
     }
 
+    auto listingResultXml = listingResult.bodyXml();
+
+    auto foundObject
+        = tinyxml2::XMLHandle(*listingResultXml)
+        .FirstChildElement("ListBucketResult")
+        .FirstChildElement("Contents")
+        .ToElement();
+
+    if (!foundObject)
+        throw ML::Exception("object " + object + " not found in bucket "
+                            + bucket);
+
+    ObjectInfo info(foundObject);
+
+    if(info.key != object){
+        throw ML::Exception("object " + object + " not found in bucket "
+                            + bucket);
+    }
+    return info;
+}
+
+S3Api::ObjectInfo
+S3Api::
+getObjectInfoShort(const std::string & bucket, const std::string & object)
+    const
+{
     auto res = head(bucket, "/" + object);
     if (res.code_ == 404) {
         throw ML::Exception("object " + object + " not found in bucket "
@@ -1335,37 +1349,51 @@ tryGetObjectInfo(const std::string & bucket,
                  S3ObjectInfoTypes infos)
     const
 {
-    if ((infos & S3ObjectInfoTypes::FULL_INFO)
-        == S3ObjectInfoTypes::FULL_INFO) {
-        StrPairVector queryParams;
-        queryParams.push_back({"prefix", object});
+    return ((infos & S3ObjectInfoTypes::FULL_INFO)
+            == S3ObjectInfoTypes::FULL_INFO
+            ? tryGetObjectInfoFull(bucket, object)
+            : tryGetObjectInfoShort(bucket, object));
+}
 
-        auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
-        if (listingResult.code_ != 200) {
-            cerr << listingResult.bodyXmlStr() << endl;
-            throw ML::Exception("error getting object request: %d",
-                                listingResult.code_);
-        }
-        auto listingResultXml = listingResult.bodyXml();
+S3Api::ObjectInfo
+S3Api::
+tryGetObjectInfoFull(const std::string & bucket, const std::string & object)
+    const
+{
+    StrPairVector queryParams;
+    queryParams.push_back({"prefix", object});
 
-        auto foundObject
-            = tinyxml2::XMLHandle(*listingResultXml)
-            .FirstChildElement("ListBucketResult")
-            .FirstChildElement("Contents")
-            .ToElement();
+    auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
+    if (listingResult.code_ != 200) {
+        cerr << listingResult.bodyXmlStr() << endl;
+        throw ML::Exception("error getting object request: %d",
+                            listingResult.code_);
+    }
+    auto listingResultXml = listingResult.bodyXml();
 
-        if (!foundObject)
-            return ObjectInfo();
+    auto foundObject
+        = tinyxml2::XMLHandle(*listingResultXml)
+        .FirstChildElement("ListBucketResult")
+        .FirstChildElement("Contents")
+        .ToElement();
 
-        ObjectInfo info(foundObject);
+    if (!foundObject)
+        return ObjectInfo();
 
-        if (info.key != object) {
-            return ObjectInfo();
-        }
+    ObjectInfo info(foundObject);
 
-        return info;
+    if (info.key != object) {
+        return ObjectInfo();
     }
 
+    return info;
+}
+
+S3Api::ObjectInfo
+S3Api::
+tryGetObjectInfoShort(const std::string & bucket, const std::string & object)
+    const
+{
     auto res = head(bucket, "/" + object);
     if (res.code_ == 404) {
         return ObjectInfo();
@@ -1373,6 +1401,7 @@ tryGetObjectInfo(const std::string & bucket,
     if (res.code_ != 200) {
         throw ML::Exception("error getting object");
     }
+
     return ObjectInfo(res);
 }
 
