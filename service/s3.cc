@@ -1284,8 +1284,7 @@ getObjectInfo(const std::string & bucket, const std::string & object,
               S3ObjectInfoTypes infos)
     const
 {
-    return ((infos & S3ObjectInfoTypes::FULL_INFO)
-            == S3ObjectInfoTypes::FULL_INFO
+    return ((infos & int(S3ObjectInfoTypes::FULL_EXTRAS)) != 0
             ? getObjectInfoFull(bucket, object)
             : getObjectInfoShort(bucket, object));
 }
@@ -1349,8 +1348,7 @@ tryGetObjectInfo(const std::string & bucket,
                  S3ObjectInfoTypes infos)
     const
 {
-    return ((infos & S3ObjectInfoTypes::FULL_INFO)
-            == S3ObjectInfoTypes::FULL_INFO
+    return ((infos & int(S3ObjectInfoTypes::FULL_EXTRAS)) != 0
             ? tryGetObjectInfoFull(bucket, object)
             : tryGetObjectInfoShort(bucket, object));
 }
