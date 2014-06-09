@@ -537,7 +537,8 @@ runEventThread(int threadNum, int numThreads)
         lock.release();
     }
 
-    // bool forceInSlice = false;
+    //bool forceInSlice = false;
+    bool pollAllThreads = false;
 
     bool wasBusy = false;
     Date sleepStart = Date::now();
@@ -565,6 +566,13 @@ runEventThread(int threadNum, int numThreads)
                 wasBusy = isBusy;
             }
 
+            continue;
+        }
+
+        // Epoll waiting, all threads doing it
+        if (pollAllThreads) {
+            handleEvents(100000, 4, handleEvent,
+                         beforeSleep, afterSleep);
             continue;
         }
 
@@ -596,7 +604,7 @@ runEventThread(int threadNum, int numThreads)
         }
 
         // Are we in our timeslice?
-        if (/* forceInSlice
+        if (/*forceInSlice
                || */(fracms >= myStartUs && fracms < myEndUs)) {
             // Yes... then sleep in epoll_wait...
             int usToWait = myEndUs - fracms;
