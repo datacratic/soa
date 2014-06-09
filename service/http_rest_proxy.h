@@ -166,16 +166,20 @@ struct HttpRestProxy {
         std::string contentMd5;
     };
 
+    /// Callback function for when data is received
+    typedef std::function<bool (std::string)> OnData;
+
     /** Perform a POST request from end to end. */
     Response post(const std::string & resource,
                   const Content & content = Content(),
                   const RestParams & queryParams = RestParams(),
                   const RestParams & headers = RestParams(),
                   double timeout = -1,
-                  bool exceptions = true) const
+                  bool exceptions = true,
+                 OnData onData = nullptr) const
     {
         return perform("POST", resource, content, queryParams, headers,
-                       timeout, exceptions);
+                       timeout, exceptions, onData);
     }
 
     /** Perform a PUT request from end to end. */
@@ -184,10 +188,11 @@ struct HttpRestProxy {
                  const RestParams & queryParams = RestParams(),
                  const RestParams & headers = RestParams(),
                  double timeout = -1,
-                 bool exceptions = true) const
+                 bool exceptions = true,
+                 OnData onData = nullptr) const
     {
         return perform("PUT", resource, content, queryParams, headers,
-                       timeout, exceptions);
+                       timeout, exceptions, onData);
     }
 
     /** Perform a synchronous GET request from end to end. */
@@ -195,10 +200,11 @@ struct HttpRestProxy {
                  const RestParams & queryParams = RestParams(),
                  const RestParams & headers = RestParams(),
                  double timeout = -1,
-                 bool exceptions = true) const
+                 bool exceptions = true,
+                 OnData onData = nullptr) const
     {
         return perform("GET", resource, Content(), queryParams, headers,
-                       timeout, exceptions);
+                       timeout, exceptions, onData);
     }
 
     /** Perform a synchronous request from end to end. */
@@ -208,7 +214,8 @@ struct HttpRestProxy {
                      const RestParams & queryParams = RestParams(),
                      const RestParams & headers = RestParams(),
                      double timeout = -1,
-                     bool exceptions = true) const;
+                     bool exceptions = true,
+                     OnData onData = nullptr) const;
 
     /** URI that will be automatically prepended to resources passed in to
         the perform() methods
