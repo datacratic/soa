@@ -22,6 +22,10 @@
 
 namespace Datacratic {
 
+/* S3 GLOBAL STATS */
+
+int s3NumActiveThreads();
+
 
 /*****************************************************************************/
 /* S3 OBJECTINFO TYPES                                                       */

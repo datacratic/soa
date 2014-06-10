@@ -50,6 +50,12 @@ using namespace Datacratic;
 
 namespace {
 
+
+/* s3 global stats */
+
+atomic<int> numActiveThreads(0);
+
+
 /* S3URLFSHANDLER */
 
 struct S3UrlFsHandler : public UrlFsHandler {
@@ -126,6 +132,14 @@ struct AtInit {
 
 
 namespace Datacratic {
+
+
+int
+s3NumActiveThreads()
+{
+    return numActiveThreads.load();
+}
+
 
 std::string
 S3Api::
@@ -1083,12 +1097,16 @@ upload(const char * data,
 
     auto doPartThread = [&] ()
         {
+            numActiveThreads++;
+
             for (;;) {
                 if (currentPart >= parts.size()) break;
                 int partToDo = __sync_fetch_and_add(&currentPart, 1);
                 if (partToDo >= parts.size()) break;
                 doPart(partToDo);
             }
+
+            numActiveThreads--;
         };
 
     if (numInParallel == -1)
@@ -1573,12 +1591,16 @@ download(const std::string & bucket,
 
     auto doPartThread = [&] ()
         {
+            numActiveThreads++;
+
             for (;;) {
                 if (currentPart >= parts.size()) break;
                 int partToDo = __sync_fetch_and_add(&currentPart, 1);
                 if (partToDo >= parts.size()) break;
                 doPart(partToDo);
             }
+
+            numActiveThreads--;
         };
 
     boost::thread_group tg;
@@ -1824,6 +1846,8 @@ struct StreamingDownloadSource {
             uint64_t start = 0;
             unsigned int prevChunkNbr = 0;
 
+            numActiveThreads++;
+
             try {
                 for (int loop = 0;; loop++) {
                     /* number of the chunk that we need to process */
@@ -1875,6 +1899,8 @@ struct StreamingDownloadSource {
             catch (...) {
                 lastExc = current_exception();
             }
+
+            numActiveThreads--;
         }
 
         size_t getChunkSize(unsigned int chunkNbr)
@@ -2139,6 +2165,8 @@ struct StreamingUploadSource {
 
         void runThread()
         {
+            numActiveThreads++;
+
             while (!shutdown) {
                 Chunk chunk;
                 if (chunks.tryPop(chunk, 0.01)) {
@@ -2178,6 +2206,8 @@ struct StreamingUploadSource {
                     }
                 }
             }
+
+            numActiveThreads--;
         }
     };
 
