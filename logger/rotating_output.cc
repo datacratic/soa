@@ -203,7 +203,9 @@ RotatingOutputAdaptor::
 openSubordinate(Date currentPeriodStart)
 {
     currentFilename = filenameFor(currentPeriodStart, filenamePattern);
-    logger.replace(loggerFactory(currentFilename));
+    auto newSub = loggerFactory(currentFilename);
+    ::fprintf(stderr, "opened new sub: %p\n", newSub);
+    logger.replace(newSub);
 }
 
 

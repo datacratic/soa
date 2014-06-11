@@ -11,6 +11,7 @@
 
 #define GC_LOCK_DEBUG 0
 
+#include "jml/arch/backtrace.h"
 #include "jml/utils/exc_assert.h"
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/thread_specific.h"
@@ -282,6 +283,13 @@ public:
     void lockShared(GcInfo::PerThreadInfo * info = 0,
                     RunDefer runDefer = RD_YES)
     {
+
+        std::stringstream ss;
+        ss << "<<<<< lockShared string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
+
         ThreadGcInfoEntry & entry = getEntry(info);
 
         entry.lockShared(runDefer);
@@ -298,6 +306,11 @@ public:
     void unlockShared(GcInfo::PerThreadInfo * info = 0, 
                       RunDefer runDefer = RD_YES)
     {
+        std::stringstream ss;
+        ss << "<<<<< unlockShared string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
         ThreadGcInfoEntry & entry = getEntry(info);
 
         entry.unlockShared(runDefer);
@@ -343,6 +356,11 @@ public:
     void lockSpeculative(GcInfo::PerThreadInfo * info = 0,
                          RunDefer runDefer = RD_YES)
     {
+        std::stringstream ss;
+        ss << "<<<<< lockSpeculative string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
         ThreadGcInfoEntry & entry = getEntry(info); 
 
         entry.lockSpeculative(runDefer);
@@ -351,6 +369,11 @@ public:
     void unlockSpeculative(GcInfo::PerThreadInfo * info = 0,
                            RunDefer runDefer = RD_YES)
     {
+        std::stringstream ss;
+        ss << "<<<<< unlockSpeculative string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
         ThreadGcInfoEntry & entry = getEntry(info);
 
         entry.unlockSpeculative(runDefer);
@@ -387,6 +410,12 @@ public:
 
     void lockExclusive(GcInfo::PerThreadInfo * info = 0)
     {
+        std::stringstream ss;
+        ss << "<<<<< lockExclusive string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
+
         ThreadGcInfoEntry & entry = getEntry(info);
 
         entry.lockExclusive();
@@ -401,6 +430,11 @@ public:
 
     void unlockExclusive(GcInfo::PerThreadInfo * info = 0)
     {
+        std::stringstream ss;
+        ss << "<<<<< unlockExclusive string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
         ThreadGcInfoEntry & entry = getEntry(info);
 
         entry.unlockExclusive();

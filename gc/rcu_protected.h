@@ -19,8 +19,13 @@ struct RcuLocked {
     RcuLocked(T * ptr = 0, GcLock * lock = 0)
         : ptr(ptr), lock(lock)
     {
-        if (lock)
+        if (lock) {
+            std::stringstream ss;
+            ss << "<<<<< constructor string stream\n";
+            ML::backtrace(ss);
+            std::cerr << ss.str() << std::endl;
             lock->lockShared();
+        }
     }
 
     /// Transfer from another lock
@@ -28,6 +33,10 @@ struct RcuLocked {
     RcuLocked(T * ptr, RcuLocked<T2> && other)
         : ptr(ptr), lock(other.lock)
     {
+        std::stringstream ss;
+        ss << "<<<<< move constructor string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
         other.lock = 0;
     }
 
@@ -36,6 +45,10 @@ struct RcuLocked {
     RcuLocked(T * ptr, const RcuLocked<T2> & other)
         : ptr(ptr), lock(other.lock)
     {
+        std::stringstream ss;
+        ss << "<<<<< copy constructor string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
         if (lock)
             lock->lockShared();
     }
@@ -44,12 +57,22 @@ struct RcuLocked {
     RcuLocked(RcuLocked<T2> && other)
         : ptr(other.ptr), lock(other.lock)
     {
+        std::stringstream ss;
+        ss << "<<<<< move constructor string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
         other.lock = 0;
     }
 
     RcuLocked & operator = (RcuLocked && other)
     {
         unlock();
+
+        std::stringstream ss;
+        ss << "<<<<< move = op string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
         lock = other.lock;
         ptr = other.ptr;
         return *this;
@@ -59,6 +82,12 @@ struct RcuLocked {
     RcuLocked & operator = (RcuLocked<T2> && other)
     {
         unlock();
+
+        std::stringstream ss;
+        ss << "<<<<< move = op2 string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+
         lock = other.lock;
         ptr = other.ptr;
         return *this;
@@ -71,6 +100,11 @@ struct RcuLocked {
 
     void unlock()
     {
+        std::stringstream ss;
+        ss << "<<<<< unlock string stream\n";
+        ML::backtrace(ss);
+        std::cerr << ss.str() << std::endl;
+        
         if (lock) {
             lock->unlockShared();
             lock = 0;

@@ -347,6 +347,7 @@ CloudOutput::createSink(const string & uri, bool append)
         backupDir_(backupDir),bucket_(bucket), accessKeyId_(accessKeyId), 
         accessKey_(accessKey)
 {
+    cerr << "<<<<<<<<<<<<< new rotating cloud output " << this << endl;
 }
 
 
@@ -367,7 +368,9 @@ open(const std::string & filenamePattern,
 RotatingCloudOutput::
 ~RotatingCloudOutput()
 {
+    cerr << "<<<<<<<<<<<<< destroying cloud output " << this << endl;
     close();
+    cerr << "<<<<<<<<<<<<< destroyed cloud output " << this << endl;
 }
 
 CloudOutput *
