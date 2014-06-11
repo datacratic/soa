@@ -1098,6 +1098,7 @@ upload(const char * data,
     auto doPartThread = [&] ()
         {
             numActiveThreads++;
+            cerr << "<<<<<<< upload part threads ++\n";
 
             for (;;) {
                 if (currentPart >= parts.size()) break;
@@ -1106,6 +1107,8 @@ upload(const char * data,
                 doPart(partToDo);
             }
 
+
+            cerr << "<<<<<<< upload part threads --\n";
             numActiveThreads--;
         };
 
@@ -1591,6 +1594,7 @@ download(const std::string & bucket,
 
     auto doPartThread = [&] ()
         {
+            cerr << "<<<<<<< download part threads ++\n";
             numActiveThreads++;
 
             for (;;) {
@@ -1600,6 +1604,7 @@ download(const std::string & bucket,
                 doPart(partToDo);
             }
 
+            cerr << "<<<<<<< download part threads --\n";
             numActiveThreads--;
         };
 
@@ -1846,6 +1851,8 @@ struct StreamingDownloadSource {
             uint64_t start = 0;
             unsigned int prevChunkNbr = 0;
 
+            cerr << "<<<<<<< multi download part threads ++\n";
+
             numActiveThreads++;
 
             try {
@@ -1900,6 +1907,7 @@ struct StreamingDownloadSource {
                 lastExc = current_exception();
             }
 
+            cerr << "<<<<<<< multi download part threads --\n";
             numActiveThreads--;
         }
 
@@ -2082,12 +2090,16 @@ struct StreamingUploadSource {
             for (unsigned i = 0;  i < 8;  ++i)
                 tg.create_thread(boost::bind<void>(&Impl::runThread, this));
             current.init(0, chunkSize, 0);
+
+            cerr << "<<<<<<< created 8 threads\n";
         }
 
         void stop()
         {
+            cerr << "<<<<<<< joining 8 threads\n";
             shutdown = true;
             tg.join_all();
+            cerr << "<<<<<<< joined 8 threads\n";
         }
 
         std::streamsize write(const char_type* s, std::streamsize n)
@@ -2165,6 +2177,7 @@ struct StreamingUploadSource {
 
         void runThread()
         {
+            cerr << "<<<<<<< multiupload part threads ++\n";
             numActiveThreads++;
 
             while (!shutdown) {
@@ -2207,6 +2220,7 @@ struct StreamingUploadSource {
                 }
             }
 
+            cerr << "<<<<<<< multiupload part threads --\n";
             numActiveThreads--;
         }
     };

@@ -4,6 +4,7 @@
 
 */
 
+#include "soa/service/s3.h"
 #include "rotating_output.h"
 #include "jml/arch/futex.h"
 
@@ -80,11 +81,15 @@ performRotation()
     rotateSubordinate(currentPeriodStart);
 }
 
+int numRotatingThreads(0);
+
 void
 RotatingOutput::
 runRotateThread()
 {
     openSubordinate(currentPeriodStart);
+
+    numRotatingThreads++;
 
     up_ = true;
     futex_wake(up_);
@@ -105,6 +110,8 @@ runRotateThread()
     cerr << "rfo shutdown acknowledged" << endl;
 
     closeSubordinate();
+
+    numRotatingThreads--;
 
     cerr << "file closed" << endl;
 }
@@ -180,6 +187,9 @@ rotateSubordinate(Date currentPeriodStart)
 
     if (onBeforeLogRotation)
         onBeforeLogRotation(oldFilename, newFilename);
+
+    cerr << "<<<<<<<< rotating cloud open s3 threads: " +
+        to_string(s3NumActiveThreads()) + "\n";
 
     // We don't close, as calling openSubordinate() will automatically close
     // the old one once it's not in use anymore

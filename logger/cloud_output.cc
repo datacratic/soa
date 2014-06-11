@@ -113,6 +113,7 @@ void
 CloudSink::
 open(const std::string & uri, bool append, bool disambiguate)
 {
+    ::fprintf(stderr, "1 closing cloud stream %p\n", &cloudStream);
     cloudStream.close();
     string disambUri(uri);
     if(disambiguate)
@@ -122,6 +123,7 @@ open(const std::string & uri, bool append, bool disambiguate)
 
     currentUri = disambUri;
 
+    ::fprintf(stderr, "opening cloud stream %p to url %s\n", &cloudStream, disambUri.c_str());
     cloudStream.open(disambUri, std::ios_base::out |
                           (append ? std::ios_base::app : std::ios::openmode()));
 
@@ -141,6 +143,7 @@ void
 CloudSink::
 close()
 {
+    ::fprintf(stderr, "2 closing cloud stream %p\n", &cloudStream);
     cloudStream.close();
     fileStream.close();
     fs::path filePath(backupDir_ + currentUri.substr(5));
@@ -368,9 +371,9 @@ open(const std::string & filenamePattern,
 RotatingCloudOutput::
 ~RotatingCloudOutput()
 {
-    cerr << "<<<<<<<<<<<<< destroying cloud output " << this << endl;
+    cerr << "<<<<<<<<<<<<< destroying rotating cloud output " << this << endl;
     close();
-    cerr << "<<<<<<<<<<<<< destroyed cloud output " << this << endl;
+    cerr << "<<<<<<<<<<<<< destroyed rotating cloud output " << this << endl;
 }
 
 CloudOutput *
@@ -418,6 +421,7 @@ CloudOutput::
       accessKeyId_(accessKeyId),accessKey_(accessKey)
 {
 
+    ::fprintf(stderr, "<<<<<< constructing CloudOutput %p\n", this);
     if( !fs::exists(backupDir))
         fs::create_directory(backupDir);
 
@@ -429,6 +433,7 @@ CloudOutput::
 CloudOutput::
 ~CloudOutput()
 {
+    ::fprintf(stderr, "<<<<<< destroying CloudOutput %p\n", this);
 }
 
 } // namespace Datacratic
