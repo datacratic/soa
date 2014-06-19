@@ -122,11 +122,8 @@ open(const std::string & uri, bool append, bool disambiguate)
 
     currentUri = disambUri;
 
-    string compression = "";
-    int level = -1;
-    cloudStream.open(disambUri, std::ios_base::out |
-                     (append ? std::ios_base::app : std::ios::openmode()),
-                     compression, level, numThreads_);
+    cloudStream.open(disambUri, numThreads_, std::ios_base::out |
+                     (append ? std::ios_base::app : std::ios::openmode()));
 
     // Get the file name from the s3 uri. We want to preserve the path since
     // if we only get the filename we could overwrite files with the same name
