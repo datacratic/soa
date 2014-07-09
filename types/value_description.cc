@@ -12,6 +12,7 @@
 #include "jml/arch/demangle.h"
 #endif
 #include "jml/utils/exc_assert.h"
+#include "jml/utils/guard.h"
 #include "value_description.h"
 
 using namespace std;
@@ -77,7 +78,27 @@ registerValueDescription(const std::type_info & type,
 {
     std::unique_lock<std::recursive_mutex> guard(registryMutex);
 
+    static int recursion = 0;
+    ++recursion;
+    ML::Call_Guard cleanup([&] () { --recursion; });
+    
     std::shared_ptr<ValueDescription> desc(createFn());
+
+    //cerr << "registering " << desc->typeName << " (or " << type.name() << ")"
+    //     << endl;
+
+    if (registry.count(desc->typeName) || registry.count(type.name())) {
+        // Must be recursive initialization... nothing to do
+        cerr << "reinitialization of " << desc->typeName
+             << " with recursion " << recursion << endl;
+        return;
+        cerr << "WARNING: losing value description "
+             << desc->typeName << " (or " << type.name() << ")"
+             << registry.count(desc->typeName) << " "
+             << registry.count(type.name()) << endl;
+        throw ML::Exception("attempt to re-register type " + desc->typeName);
+    }
+
     ExcAssert(desc);
     registry[desc->typeName] = desc;
     registry[type.name()] = desc;

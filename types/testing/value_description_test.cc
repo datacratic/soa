@@ -23,6 +23,8 @@ using namespace std;
 using namespace ML;
 using namespace Datacratic;
 
+#if 0
+
 /* ensures that signed integers < (1 << 32 - 1) are serialized as integers */
 BOOST_AUTO_TEST_CASE( test_default_description_print_id_32 )
 {
@@ -358,6 +360,8 @@ S2Description::S2Description()
     addField("val2", &S2::val2, "second value");
 }
 
+#endif
+
 struct RecursiveStructure {
     std::map<std::string, std::shared_ptr<RecursiveStructure> > elements;
     std::vector<std::shared_ptr<RecursiveStructure> > vec;
@@ -404,6 +408,7 @@ BOOST_AUTO_TEST_CASE( test_recursive_description )
     BOOST_CHECK_EQUAL(j, j2);
 }
 
+#if 0
 BOOST_AUTO_TEST_CASE( test_date_value_description )
 {
     auto desc = DefaultDescription<Date>();
@@ -488,3 +493,5 @@ BOOST_AUTO_TEST_CASE( test_date_value_description_validation )
     BOOST_CHECK_EQUAL(numChildValidations, 1);
     BOOST_CHECK_EQUAL(numParentValidations, 1);
 }
+
+#endif

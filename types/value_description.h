@@ -1599,6 +1599,9 @@ template<typename Key, typename Value>
 void
 initializeDefaultDescription(DefaultDescription<std::map<Key, Value> > & desc)
 {
+    if (desc.inner)
+        return;  // already initialized
+    ExcAssert(!desc.inner);
     desc = std::move(DefaultDescription<std::map<Key, Value> >());
 }
 
@@ -1876,6 +1879,21 @@ inline Json::Value jsonEncode(const char * str)
     return str;
 }
 
+/** A bool with a default value given in its parameter so that
+    the default parameter will do the right thing.
+*/
+template<bool Val>
+struct DefaultBool {
+    DefaultBool(bool val = Val)
+        : value(val)
+    {
+    }
+
+    bool value;
+
+    operator bool () const { return value; }
+};
+
 } // namespace Datacratic
 
 
@@ -1889,8 +1907,11 @@ inline Json::Value jsonEncode(const char * str)
         Name();                                                 \
                                                                 \
         Name(const Datacratic::ConstructOnly &)                 \
+            : constructed(false)                                \
         {                                                       \
         }                                                       \
+                                                                \
+        Datacratic::DefaultBool<true> constructed;              \
     };                                                          \
                                                                 \
     inline Name *                                               \
@@ -1907,8 +1928,11 @@ inline Json::Value jsonEncode(const char * str)
                                                                 \
     inline void initializeDefaultDescription(Name & desc)       \
     {                                                           \
+        if (desc.constructed)                                   \
+            return;                                             \
         Name newDesc;                                           \
         desc = std::move(newDesc);                              \
+        ExcAssert(desc.constructed);                            \
     }                                                           \
     
 #define CREATE_STRUCTURE_DESCRIPTION(Type)                      \
