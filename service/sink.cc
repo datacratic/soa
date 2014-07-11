@@ -109,7 +109,7 @@ void
 AsyncFdOutputSink::
 onDisconnected(bool fromPeer, const vector<string> & msgs)
 {
-    cerr << "onDisconnected\n";
+    // cerr << "onDisconnected\n";
     if (fromPeer) {
         if (onHangup_) {
             onHangup_();

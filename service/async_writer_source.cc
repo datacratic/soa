@@ -264,7 +264,7 @@ AsyncWriterSource::
 requestClose()
 {
     if (canSendMessages()) {
-        cerr << "requesting close\n";
+        // cerr << "requesting close\n";
         closing_ = true;
         wakeup_.signal();
     }
