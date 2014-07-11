@@ -129,7 +129,7 @@ BOOST_AUTO_TEST_CASE( test_asyncfdoutputsink_many_msgs )
         sprintf(buffer, "%.4x\n", i);
         string message = basemsg + string(buffer, 4);
         while (sink.state == OutputSink::OPEN
-               && !sink.write(move(message))) {
+               && !sink.write(string(message))) {
             cerr << "retrying at " + to_string(i) << endl;
         }
 
