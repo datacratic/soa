@@ -271,7 +271,7 @@ requestClose()
         wakeup_.signal();
     }
     else {
-        cerr << "already disconnected/ing\n";
+        cerr << "already closed/ing\n";
     }
 }
 
@@ -309,8 +309,7 @@ handleWakeupEvent(const ::epoll_event & event)
 {
     if ((event.events & EPOLLIN) != 0) {
         eventfd_t val;
-        wakeup_.tryRead(val);
-        restartFdOneShot(wakeup_.fd(), handleWakeupEventCb_, true, false);
+        while (wakeup_.tryRead(val));
 
         if (writeReady_) {
             // cerr << "flush from wakeup\n";
@@ -319,13 +318,19 @@ handleWakeupEvent(const ::epoll_event & event)
 
         if (closing_) {
             if (remainingMsgs_ > 0 || currentLine_.size() > 0) {
-                // cerr << "postponing disconnection\n";
+                // cerr << "postponing closing\n";
                 wakeup_.signal();
             }
             else {
-                // cerr << "immediate disconnection\n";
-                closeFd();
+                // cerr << "immediate closing\n";
+                if (fd_ != -1) {
+                    closeFd();
+                }
             }
+        }
+
+        if (fd_ != -1) {
+            restartFdOneShot(wakeup_.fd(), handleWakeupEventCb_, true, false);
         }
     }
     else {
