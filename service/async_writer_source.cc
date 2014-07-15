@@ -169,7 +169,7 @@ handleReadReady()
 {
     char buffer[recvBufSize_];
 
-    cerr << "handleReadReady\n";
+    // cerr << "handleReadReady\n";
     errno = 0;
     while (1) {
         ssize_t s = ::read(fd_, buffer, recvBufSize_);
@@ -474,8 +474,7 @@ handleDisconnection(bool fromPeer)
         fd_ = -1;
         writeReady_ = false;
 
-        vector<string> lostMessages
-            = threadBuffer_.tryPopMulti(remainingMsgs_);
+        vector<string> lostMessages = emptyMessageQueue();
         onDisconnected(fromPeer, lostMessages);
     }
 }

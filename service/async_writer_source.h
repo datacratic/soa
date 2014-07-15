@@ -118,6 +118,16 @@ protected:
 
     void removeFd(int fd);
 
+    /* Return and remove all the messages enqueued for writing. */
+    std::vector<std::string> emptyMessageQueue()
+    {
+        std::vector<std::string> messages
+            = threadBuffer_.tryPopMulti(remainingMsgs_);
+        remainingMsgs_ -= messages.size();
+
+        return messages;
+    }
+
 private:
     void performAddFd(int fd, EpollCallback & cb,
                       bool readerFd, bool writerFd,
