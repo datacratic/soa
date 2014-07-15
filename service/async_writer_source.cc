@@ -25,13 +25,13 @@ AsyncWriterSource(const OnDisconnected & onDisconnected,
                   const OnReceivedData & onReceivedData,
                   const OnException & onException,
                   size_t maxMessages,
-                  size_t recvBufSize)
+                  size_t readBufferSize)
     : AsyncEventSource(),
       epollFd_(-1),
       numFds_(0),
       fd_(-1),
       closing_(false),
-      recvBufSize_(recvBufSize),
+      readBufferSize_(readBufferSize),
       writeReady_(false),
       threadBuffer_(maxMessages),
       remainingMsgs_(0),
@@ -167,12 +167,12 @@ void
 AsyncWriterSource::
 handleReadReady()
 {
-    char buffer[recvBufSize_];
+    char buffer[readBufferSize_];
 
     // cerr << "handleReadReady\n";
     errno = 0;
     while (1) {
-        ssize_t s = ::read(fd_, buffer, recvBufSize_);
+        ssize_t s = ::read(fd_, buffer, readBufferSize_);
         // ::fprintf(stderr, "read result: %ld, errno: %d\n", s, errno);
         if (s > 0) {
             msgsReceived_++;

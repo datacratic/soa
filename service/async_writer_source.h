@@ -18,27 +18,40 @@
 
 namespace Datacratic {
 
-/* ASYNC WRITER SOURCE */
+/****************************************************************************/
+/* ASYNC WRITER SOURCE                                                      */
+/****************************************************************************/
 
 /* A base class enabling the asynchronous and buffered writing of data to a
  * file descriptor. */
 
 struct AsyncWriterSource : public AsyncEventSource
 {
+    /* type of callback used when a pipe or socket has been disconnected */
     typedef std::function<void(bool,
                                const std::vector<std::string> & msgs)> OnDisconnected;
+
+    /* type of callback invoked when a string or a message has been written to
+       the file descriptor */
     typedef std::function<void(int error,
                                const std::string & written,
                                size_t writtenSize)> OnWriteResult;
+
+    /* type of callback invoked when data has been read from the file
+       descriptor */
     typedef std::function<void(const char *, size_t)> OnReceivedData;
+
+    /* type of callback invoked whenever an uncaught exception occurs */
     typedef std::function<void(const std::exception_ptr &)> OnException;
 
     AsyncWriterSource(const OnDisconnected & onDisconnected,
                       const OnWriteResult & onWriteResult,
                       const OnReceivedData & onReceivedData,
                       const OnException & onException,
+                      /* size of the message queue */
                       size_t maxMessages,
-                      size_t recvBufSize);
+                      /* size of the read/receive buffer */
+                      size_t readBufferSize);
     virtual ~AsyncWriterSource();
 
     /* AsyncEventSource interface */
@@ -46,25 +59,25 @@ struct AsyncWriterSource : public AsyncEventSource
     { return epollFd_; }
     virtual bool processOne();
 
-    /* enqueue "data" for sending to the service, once the fd becomes
-       available for writing */
+    /* enqueue "data" for writing, provided the file descriptor is open or
+     * being opened, or throws */
     bool write(const std::string & data);
     bool write(const char * data, size_t size);
     bool write(std::string && data);
 
-    /* we are ready to accept messages for sending */
+    /* returns whether we are ready to accept messages for sending */
     bool canSendMessages() const;
 
     /* invoked when a write operation has been performed, where "written" is
-       the string that was sent "writtenSize" is the amount of bytes that was
-       sent. The latter is always equal to the length of the string with
-       error is 0. */
+       the string that was sent, "writtenSize" is the amount of bytes from it
+       that was sent; the latter is always equal to the length of the string
+       when error is 0 */
     virtual void onWriteResult(int error,
                                const std::string & written,
                                size_t writtenSize);
 
-    /* close the connection as soon as all bytes have been sent and
-     * received */
+    /* close the file descriptor as soon as all bytes have been sent and
+     * received, implying that "write" will never be invoked anymore */
     void requestClose();
 
     /* invoked when the connection is closed */
@@ -92,33 +105,42 @@ struct AsyncWriterSource : public AsyncEventSource
     { return msgsReceived_; }
 
 protected:
-    /* writer file descriptor */
+    /* set the "main" file descriptor, for which onWriteResult, onReceivedData
+     * and the onDisconnected callbacks are invoked automatically */
     void setFd(int fd);
     int getFd()
         const
     {
         return fd_;
     }
+
+    /* close the "main" file descriptor and take care of the surrounding
+       operations */
     virtual void closeFd();
 
-    /* epoll operations */
+    /* type of callback invoked whenever an epoll event is reported for a
+     * file descriptor */
     typedef std::function<void (const ::epoll_event &)> EpollCallback;
 
+    /* register a file descriptor into the internal epoll queue and an
+       associated callback, for reading and/or writing */
     void addFdOneShot(int fd, EpollCallback & cb,
                       bool readerFd, bool writerFd)
     {
         performAddFd(fd, cb, readerFd, writerFd, false);
     }
 
+    /* rearm a file descriptor in the epoll queue */
     void restartFdOneShot(int fd, EpollCallback & cb,
                           bool readerFd, bool writerFd)
     {
         performAddFd(fd, cb, readerFd, writerFd, true);
     }
 
+    /* remove a file descriptor from the internal epoll queue */
     void removeFd(int fd);
 
-    /* Return and remove all the messages enqueued for writing. */
+    /* return and remove all the messages enqueued for writing */
     std::vector<std::string> emptyMessageQueue()
     {
         std::vector<std::string> messages
@@ -155,7 +177,7 @@ private:
 
     int fd_;
     bool closing_;
-    size_t recvBufSize_;
+    size_t readBufferSize_;
     EpollCallback handleFdEventCb_;
     bool writeReady_;
 
