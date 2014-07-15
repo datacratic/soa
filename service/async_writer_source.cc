@@ -160,7 +160,7 @@ AsyncWriterSource::
 canSendMessages()
     const
 {
-    return fd_ != -1;
+    return !closing_ && fd_ != -1;
 }
 
 void
