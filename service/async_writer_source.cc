@@ -135,16 +135,18 @@ bool
 AsyncWriterSource::
 write(string && data)
 {
+    ExcAssert(!closing_);
+
     bool result(true);
 
     if (canSendMessages()) {
         if (threadBuffer_.tryPush(move(data))) {
             remainingMsgs_++;
-            wakeup_.signal();
         }
         else {
             result = false;
         }
+        wakeup_.signal();
     }
     else {
         throw ML::Exception("cannot write while not connected");
