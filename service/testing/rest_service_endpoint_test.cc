@@ -8,22 +8,20 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
-#include <boost/test/unit_test.hpp>
-#include <boost/make_shared.hpp>
-#include "soa/service/named_endpoint.h"
-#include "soa/service/message_loop.h"
-#include "soa/service/rest_service_endpoint.h"
-#include "soa/service/rest_proxy.h"
 #include <sys/socket.h>
+#include <atomic>
+#include <thread>
+#include <boost/test/unit_test.hpp>
+
 #include "jml/utils/guard.h"
 #include "jml/arch/exception_handler.h"
 #include "jml/utils/testing/watchdog.h"
-#include "jml/utils/testing/fd_exhauster.h"
-#include "jml/utils/vector_utils.h"
 #include "jml/arch/timers.h"
-#include <thread>
-#include "soa/service/zmq_utils.h"
+#include "soa/service/http_client.h"
+#include "soa/service/rest_service_endpoint.h"
+#include "soa/service/rest_proxy.h"
 #include "soa/service/testing/zookeeper_temporary_server.h"
+#include "soa/utils/benchmarks.h"
 
 
 using namespace std;
@@ -68,6 +66,7 @@ struct EchoService : public ServiceBase, public RestServiceEndpoint {
     }
 };
 
+#if 0
 BOOST_AUTO_TEST_CASE( test_named_endpoint )
 {
     ZooKeeper::TemporaryServer zookeeper;
@@ -175,3 +174,113 @@ BOOST_AUTO_TEST_CASE( test_named_endpoint )
 
     service.shutdown();
 }
+#endif
+
+#if 1
+BOOST_AUTO_TEST_CASE( bench_named_endpoint )
+{
+    static const int totalPings(1000);
+
+    Benchmarks bm;
+
+    
+    ZooKeeper::TemporaryServer zookeeper;
+    zookeeper.start();
+
+    auto proxies = make_shared<ServiceProxies>();
+    proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()));
+
+    EchoService service(proxies, "echo");
+    auto addr = service.bindTcp();
+    cerr << "echo service is listening on " << addr.first << " and "
+         << addr.second << endl;
+
+    service.start();
+
+    proxies->config->dump(cerr);
+
+    int numPings;
+    atomic<int> numOutstandings;
+
+#if 0
+    /* ZMQ test */
+    {
+        RestProxy proxy(proxies->zmqContext);
+        proxy.init(proxies->config, "echo");
+        proxy.start();
+
+        shared_ptr<Benchmark> zmqBm(new Benchmark(bm, "zmq-threads"));
+
+        for (numPings = 0; numPings < totalPings; numPings++) {
+            auto onResponse = [&] (exception_ptr ptr,
+                                   int responseCode,
+                                   string body) {
+                ExcAssertEqual(responseCode, 200);
+                numOutstandings--;
+            };
+            proxy.push(onResponse,
+                       "POST", "/echo", {}, to_string(numPings));
+            numOutstandings++;
+        }
+
+        while (numOutstandings > 0) {
+            ML::sleep(0.1);
+        }
+        zmqBm.reset();
+
+        proxy.shutdown();
+    }
+#endif
+
+    /* HTTP test */
+    {
+        Json::Value value = proxies->config->getJson("echo/http/tcp");
+        string echoUrl = value[0]["httpUri"].asString();
+        if (echoUrl.empty()) {
+            throw ML::Exception("no service url");
+        }
+        cerr << "  service url: "  + echoUrl + "\n";
+
+        MessageLoop loop;
+
+        loop.start();
+
+        auto client = make_shared<HttpClient>(echoUrl);
+        loop.addSource("client", client);
+        client->waitConnectionState(AsyncEventSource::CONNECTED);
+
+        auto onResponse = [&] (const HttpRequest & rq,
+                               HttpClientError error,
+                               int status,
+                               string && headers,
+                               string && body) {
+            ExcAssertEqual(status, 200);
+            numOutstandings--;
+        };
+        auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
+        
+        shared_ptr<Benchmark> httpBm(new Benchmark(bm, "http-threads"));
+        string bodyType("text/plain");
+        for (numPings = 0; numPings < totalPings; numPings++) {
+            string body = to_string(numPings);
+            HttpRequest::Content content(body, bodyType);
+            client->post("/echo", cbs, content);
+            numOutstandings++;
+        }
+
+        while (numOutstandings > 0) {
+            ML::sleep(0.1);
+        }
+        httpBm.reset();
+    
+        loop.removeSource(client.get());
+        client->waitConnectionState(AsyncEventSource::DISCONNECTED);
+    }
+
+    bm.dumpTotals();
+
+    cerr << "finished requests" << endl;
+
+    service.shutdown();
+}
+#endif
