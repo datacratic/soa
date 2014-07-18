@@ -101,9 +101,6 @@ struct AsyncWriterSource : public AsyncEventSource
     size_t msgsSent() const
     { return msgsSent_; }
 
-    size_t msgsReceived() const
-    { return msgsReceived_; }
-
 protected:
     /* set the "main" file descriptor, for which onWriteResult, onReceivedData
      * and the onDisconnected callbacks are invoked automatically */
@@ -189,7 +186,6 @@ private:
     uint64_t bytesSent_;
     uint64_t bytesReceived_;
     size_t msgsSent_;
-    size_t msgsReceived_;
 
     ML::Wakeup_Fd wakeup_;
     EpollCallback handleWakeupEventCb_;

@@ -39,7 +39,6 @@ AsyncWriterSource(const OnDisconnected & onDisconnected,
       bytesSent_(0),
       bytesReceived_(0),
       msgsSent_(0),
-      msgsReceived_(0),
       wakeup_(EFD_NONBLOCK | EFD_CLOEXEC),
       onDisconnected_(onDisconnected),
       onReceivedData_(onReceivedData),
@@ -175,7 +174,6 @@ handleReadReady()
         ssize_t s = ::read(fd_, buffer, readBufferSize_);
         // ::fprintf(stderr, "read result: %ld, errno: %d\n", s, errno);
         if (s > 0) {
-            msgsReceived_++;
             bytesReceived_ += s;
             onReceivedData(buffer, s);
         }
@@ -258,6 +256,9 @@ onException(const exception_ptr & excPtr)
 {
     if (onException_) {
         onException(excPtr);
+    }
+    else {
+        rethrow_exception(excPtr);
     }
 }
 
