@@ -94,11 +94,7 @@ closeFd()
              "message queue not empty");
     ExcCheck(fd_ != -1, "already closed (fd)");
 
-    try {
-        removeFd(fd_);
-    }
-    catch(const ML::Exception & exc)
-    {}
+    removeFd(fd_);
     ::close(fd_);
     // cerr << "fd " + to_string(fd_) + " now closed\n";
     handleDisconnection(false);
