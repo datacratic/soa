@@ -327,7 +327,7 @@ handleWakeupEvent(const ::epoll_event & event)
         }
 
         if (fd_ != -1) {
-            restartFdOneShot(wakeup_.fd(), handleWakeupEventCb_, true, false);
+            restartFdOneShot(wakeup_.fd(), true, false);
         }
     }
     else {
@@ -452,9 +452,7 @@ handleFdEvent(const ::epoll_event & event)
     }
 
     if (fd_ != -1) {
-        restartFdOneShot(fd_, handleFdEventCb_,
-                         true,
-                         !writeReady_);
+        restartFdOneShot(fd_, true, !writeReady_);
     }
 }
 
@@ -480,9 +478,18 @@ handleDisconnection(bool fromPeer)
 
 void
 AsyncWriterSource::
-performAddFd(int fd, EpollCallback & cb,
-             bool readerFd, bool writerFd,
-             bool restart)
+registerFdCallback(int fd, const EpollCallback & cb)
+{
+    if (fdCallbacks_.find(fd) != fdCallbacks_.end()) {
+        throw ML::Exception("callback already registered for fd");
+    }
+
+    fdCallbacks_.insert({fd, cb});
+}
+
+void
+AsyncWriterSource::
+performAddFd(int fd, bool readerFd, bool writerFd, bool restart)
 {
     if (epollFd_ == -1)
         return;
@@ -496,6 +503,8 @@ performAddFd(int fd, EpollCallback & cb,
     if (writerFd) {
         event.events |= EPOLLOUT;
     }
+
+    EpollCallback & cb = fdCallbacks_.at(fd);
     event.data.ptr = &cb;
 
     int operation = restart ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
@@ -523,6 +532,11 @@ void
 AsyncWriterSource::
 removeFd(int fd)
 {
+    if (fdCallbacks_.find(fd) == fdCallbacks_.end()) {
+        throw ML::Exception("callback not registered for fd");
+    }
+    fdCallbacks_.erase(fd);
+
     if (epollFd_ == -1)
         return;
     //cerr << Date::now().print(4) << "removed " << fd << endl;

@@ -102,8 +102,9 @@ struct AsyncWriterSource : public AsyncEventSource
     { return msgsSent_; }
 
 protected:
-    /* set the "main" file descriptor, for which onWriteResult, onReceivedData
-     * and the onDisconnected callbacks are invoked automatically */
+    /* set the "main" file descriptor, for which epoll events are monitored
+     * and the onWriteResult, onReceivedData and onDisconnected callbacks are
+     * invoked automatically */
     void setFd(int fd);
     int getFd()
         const
@@ -121,17 +122,17 @@ protected:
 
     /* register a file descriptor into the internal epoll queue and an
        associated callback, for reading and/or writing */
-    void addFdOneShot(int fd, EpollCallback & cb,
+    void addFdOneShot(int fd, const EpollCallback & cb,
                       bool readerFd, bool writerFd)
     {
-        performAddFd(fd, cb, readerFd, writerFd, false);
+        registerFdCallback(fd, cb);
+        performAddFd(fd, readerFd, writerFd, false);
     }
 
     /* rearm a file descriptor in the epoll queue */
-    void restartFdOneShot(int fd, EpollCallback & cb,
-                          bool readerFd, bool writerFd)
+    void restartFdOneShot(int fd, bool readerFd, bool writerFd)
     {
-        performAddFd(fd, cb, readerFd, writerFd, true);
+        performAddFd(fd, readerFd, writerFd, true);
     }
 
     /* remove a file descriptor from the internal epoll queue */
@@ -148,9 +149,9 @@ protected:
     }
 
 private:
-    void performAddFd(int fd, EpollCallback & cb,
-                      bool readerFd, bool writerFd,
-                      bool restart);
+    void performAddFd(int fd, bool readerFd, bool writerFd, bool restart);
+    void registerFdCallback(int fd, const EpollCallback & cb);
+    std::map<int, EpollCallback> fdCallbacks_;
 
     /* epoll operations */
     void closeEpollFd();
