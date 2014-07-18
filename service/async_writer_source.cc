@@ -61,9 +61,7 @@ AsyncWriterSource(const OnDisconnected & onDisconnected,
 AsyncWriterSource::
 ~AsyncWriterSource()
 {
-    // cerr << "~AsyncWriterSource\n";
     if (fd_ != -1) {
-        // cerr << "closing fd: " + to_string(fd_) + "\n";
         closeFd();
     }
     closeEpollFd();
@@ -89,14 +87,12 @@ void
 AsyncWriterSource::
 closeFd()
 {
-    // cerr << "closeFd...\n";
     ExcCheck(!threadBuffer_.couldPop(),
              "message queue not empty");
     ExcCheck(fd_ != -1, "already closed (fd)");
 
     removeFd(fd_);
     ::close(fd_);
-    // cerr << "fd " + to_string(fd_) + " now closed\n";
     handleDisconnection(false);
     fd_ = -1;
 }
@@ -164,22 +160,18 @@ handleReadReady()
 {
     char buffer[readBufferSize_];
 
-    // cerr << "handleReadReady\n";
     errno = 0;
     while (1) {
         ssize_t s = ::read(fd_, buffer, readBufferSize_);
-        // ::fprintf(stderr, "read result: %ld, errno: %d\n", s, errno);
         if (s > 0) {
             bytesReceived_ += s;
             onReceivedData(buffer, s);
         }
         else {
             if (errno == EWOULDBLOCK) {
-                // cerr << "done reading\n";
                 break;
             }
             else if (errno == EBADF || errno == EINVAL) {
-                // cerr << "badf\n";
                 break;
             }
             if (s == -1) {
@@ -197,9 +189,7 @@ AsyncWriterSource::
 handleWriteReady()
 {
     writeReady_ = true;
-    // cerr << "flush from write ready\n";
     flush();
-    // }
 }
 
 void
@@ -263,12 +253,11 @@ AsyncWriterSource::
 requestClose()
 {
     if (canSendMessages()) {
-        // cerr << "requesting close\n";
         closing_ = true;
         wakeup_.signal();
     }
     else {
-        cerr << "already closed/ing\n";
+        throw ML::Exception("already closed/ing\n");
     }
 }
 
@@ -279,7 +268,6 @@ processOne()
 {
     struct epoll_event events[numFds_];
 
-    // cerr << "sizeof(events): " + to_string() + "\n";
     try {
         int res = epoll_wait(epollFd_, events, numFds_, 0);
         if (res == -1) {
@@ -309,17 +297,14 @@ handleWakeupEvent(const ::epoll_event & event)
         while (wakeup_.tryRead(val));
 
         if (writeReady_) {
-            // cerr << "flush from wakeup\n";
             flush();
         }
 
         if (closing_) {
             if (remainingMsgs_ > 0 || currentLine_.size() > 0) {
-                // cerr << "postponing closing\n";
                 wakeup_.signal();
             }
             else {
-                // cerr << "immediate closing\n";
                 if (fd_ != -1) {
                     closeFd();
                 }
@@ -339,9 +324,7 @@ void
 AsyncWriterSource::
 flush()
 {
-    if (!writeReady_) {
-        cerr << "BAD: not ready for writing\n";
-    }
+    ExcAssert(writeReady_);
 
     auto popLine = [&] {
         bool result;
@@ -358,37 +341,26 @@ flush()
             result = true;
         }
         else {
-            // cerr << "no line fetched\n";
             result = false;
         }
 
         return result;
     };
 
-    // cerr << "flush1\n";
     if (currentLine_.size() == 0) {
         if (!popLine()) {
             return;
         }
     }
-    // else {
-    //     cerr << "has current line\n";
-    // }
 
     bool done(false);
     ssize_t remaining(currentLine_.size() - currentSent_);
-    // cerr << "initial remaining: " + to_string(remaining) + " bytes\n";
-    // cerr << "initial curentLine size: " + to_string(currentLine_.size()) + " bytes\n";
-    // cerr << "initial currentSent_: " + to_string(currentSent_) + " bytes\n";
 
     errno = 0;
 
     while (writeReady_ && !done) {
         const char * data = currentLine_.c_str() + currentSent_;
-        // cerr << " sending " << to_string(remaining) + " bytes\n";
         ssize_t len = ::write(fd_, data, remaining);
-        // ::fprintf(stderr, "write result: %ld, remaining: %ld,"
-        //           "  errno: %d\n", len, remaining, errno);
         if (len > 0) {
             currentSent_ += len;
             remaining -= len;
@@ -427,8 +399,6 @@ flush()
             }
         }
     }
-
-    // cerr << "flush end with writeReady = "  + to_string(writeReady_) + "\n";
 }
 
 /* fd events */
@@ -437,17 +407,13 @@ void
 AsyncWriterSource::
 handleFdEvent(const ::epoll_event & event)
 {
-    // cerr << "handleFdEvent\n";
     if ((event.events & EPOLLOUT) != 0) {
-        // cerr << "  handleWriteReady\n";
         handleWriteReady();
     }
     if ((event.events & EPOLLIN) != 0) {
-        // cerr << "  handleReadReady\n";
         handleReadReady();
     }
     if ((event.events & EPOLLHUP) != 0) {
-        // cerr << "  handleDisconnection\n";
         handleDisconnection(true);
     }
 
@@ -460,7 +426,6 @@ void
 AsyncWriterSource::
 handleDisconnection(bool fromPeer)
 {
-    // cerr << "handleDisconnection: " + to_string(fd_) + "\n";
     if (fd_ != -1) {
         if (fromPeer) {
             removeFd(fd_);
@@ -493,7 +458,6 @@ performAddFd(int fd, bool readerFd, bool writerFd, bool restart)
 {
     if (epollFd_ == -1)
         return;
-    //cerr << Date::now().print(4) << "restarted " << fd << " one-shot" << endl;
 
     struct epoll_event event;
     event.events = EPOLLONESHOT;
@@ -509,12 +473,6 @@ performAddFd(int fd, bool readerFd, bool writerFd, bool restart)
 
     int operation = restart ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
     int res = epoll_ctl(epollFd_, operation, fd, &event);
-    // cerr << (string("epoll_ctl:")
-    //          + " restart=" + to_string(restart)
-    //          + " fd=" + to_string(fd)
-    //          + " readerFd=" + to_string(readerFd)
-    //          + " writerFd=" + to_string(writerFd)
-    //          + "\n");
     if (res == -1) {
         string message = (string("epoll_ctl:")
                           + " restart=" + to_string(restart)
@@ -539,9 +497,7 @@ removeFd(int fd)
 
     if (epollFd_ == -1)
         return;
-    //cerr << Date::now().print(4) << "removed " << fd << endl;
 
-    // ::fprintf(stderr, "epoll_ctl: remove fd=%d\n", fd);
     int res = epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, 0);
     if (res == -1)
         throw ML::Exception(errno, "epoll_ctl DEL " + to_string(fd));
