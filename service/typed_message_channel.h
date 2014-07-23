@@ -165,7 +165,7 @@ struct TypedMessageQueue: public AsyncEventSource
             return false;
         }
 
-        queue_.emplace(move(message));
+        queue_.emplace(std::move(message));
         if (!pending_) {
             pending_ = true;
             wakeup_.signal();
@@ -187,7 +187,7 @@ struct TypedMessageQueue: public AsyncEventSource
         messages.reserve(number);
 
         for (size_t i = 0; i < number; i++) {
-            messages.emplace_back(move(queue_.front()));
+            messages.emplace_back(std::move(queue_.front()));
             queue_.pop();
         }
 
