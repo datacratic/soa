@@ -726,14 +726,8 @@ HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
       debug_(false),
       avlConnections_(numParallel),
       nextAvail_(0),
-      queue_(make_shared<TypedMessageSink<HttpRequest>>(queueSize))
+      queue_([&]() { this->handleQueueEvent(); }, queueSize)
 {
-    queue_->onEvent = [&] (HttpRequest && rq) {
-        // cerr << "onEvent\n";
-        this->handleQueueEvent(move(rq));
-    };
-    addSourceRightAway("queue", queue_);
-
     /* available connections */
     for (size_t i = 0; i < numParallel; i++) {
         HttpConnection * connPtr = new HttpConnection();
@@ -745,6 +739,7 @@ HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
         addSourceRightAway("connection" + to_string(i), connection);
         avlConnections_[i] = connPtr;
     }
+    addSource("queue", queue_);
 }
 
 HttpClient::
@@ -779,26 +774,31 @@ enqueueRequest(const string & verb, const string & resource,
                int timeout)
 {
     string url = baseUrl_ + resource + queryParams.uriEscaped();
-    bool res = queue_->tryPush(HttpRequest(verb, url, callbacks,
-                                           content, headers, timeout));
+    HttpRequest request(verb, url, callbacks, content, headers, timeout);
 
-    return res;
+    return queue_.push_back(std::move(request));
 }
 
 void
 HttpClient::
-handleQueueEvent(HttpRequest && request)
+handleQueueEvent()
 {
-    if (nextAvail_ < avlConnections_.size()) {
-        if (inThreadQueue_.size() > 0) {
-            cerr << "BAD: connections available while there are elements in the queue?\n";
+    size_t numConnections = avlConnections_.size() - nextAvail_;
+    if (numConnections > 0) {
+        /* "0" has a special meaning for pop_front and must be avoided here */
+        auto requests = queue_.pop_front(numConnections);
+        for (auto request: requests) {
+            HttpConnection * conn = getConnection();
+            if (!conn) {
+                cerr << ("nextAvail_: "  + to_string(nextAvail_)
+                         + "; num conn: "  + to_string(numConnections)
+                         + "; num reqs: "  + to_string(requests.size())
+                         + "\n");
+                throw ML::Exception("inconsistency in count of available"
+                                    " connections");
+            }
+            conn->perform(move(request));
         }
-        HttpConnection * conn = getConnection();
-        conn->perform(move(request));
-    }
-    else {
-        // cerr << "enqueuing request in thread\n";
-        inThreadQueue_.emplace_back(move(request));
     }
 }
 
@@ -806,10 +806,10 @@ void
 HttpClient::
 handleHttpConnectionDone(HttpConnection * connection, int result)
 {
-    if (inThreadQueue_.size() > 0) {
+    auto requests = queue_.pop_front(1);
+    if (requests.size() > 0) {
         // cerr << "emptying queue...\n";
-        connection->perform(move(inThreadQueue_.front()));
-        inThreadQueue_.pop_front();
+        connection->perform(move(requests[0]));
     }
     else {
         releaseConnection(connection);

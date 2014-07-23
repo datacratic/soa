@@ -21,29 +21,25 @@
      cookies per se
 */
 
+#pragma once
 
 /* TODO:
    blockers:
    - parser:
      - needs better validation (header key size, ...)
      - handling of multi-line headers
-   - SSL support
    - connection timeout (Curl style)
    - socket timeout
    - auto disconnect (keep-alive)
+   - chunked encoding
 
    nice to have:
+   - SSL support
    - tunnelling
-   - chunked encoding
  */
 
-#pragma once
-
-#include <deque>
 #include <string>
 #include <vector>
-
-#include "jml/utils/ring_buffer.h"
 
 #include "soa/jsoncpp/value.h"
 #include "soa/service/message_loop.h"
@@ -382,7 +378,7 @@ struct HttpClient : public MessageLoop {
        will be used as base for all requests
        "numParallels": number of requests that can be handled simultaneously
        "queueSize": size of the backlog of pending requests, after which
-       operations will be refused */
+       operations will be refused (0 for unlimited queue) */
     HttpClient(const std::string & baseUrl,
                int numParallel = 4, size_t queueSize = 32);
     HttpClient(HttpClient && other) = delete;
@@ -461,7 +457,7 @@ private:
                         const RestParams & headers,
                         int timeout = -1);
 
-    void handleQueueEvent(HttpRequest && rq);
+    void handleQueueEvent();
 
     void handleHttpConnectionDone(HttpConnection * connection, int result);
 
@@ -494,9 +490,7 @@ private:
     std::vector<HttpConnection *> avlConnections_;
     size_t nextAvail_;
 
-    std::shared_ptr<TypedMessageSink<HttpRequest>> queue_; /* queued requests */
-    std::deque<HttpRequest> inThreadQueue_; /* requests moved to the worker
-                                             * thread */
+    TypedMessageQueue<HttpRequest> queue_; /* queued requests */
 
     HttpConnection::OnDone onHttpConnectionDone_;
 };
