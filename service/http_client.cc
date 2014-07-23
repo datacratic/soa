@@ -440,10 +440,6 @@ HttpConnection()
     parser_.onDone = [&] (bool doClose) {
         this->onParserDone(doClose);
     };
-
-    handleTimeoutEventCb_ = [&] (const struct epoll_event & event) {
-        this->handleTimeoutEvent(event);
-    };
 }
 
 HttpConnection::
@@ -634,7 +630,7 @@ finalizeEndOfRq(int code)
 
 void
 HttpConnection::
-onDisconnected(bool fromPeer)
+onDisconnected(bool fromPeer, const std::vector<std::string> & msgs)
 {
     if (fromPeer) {
         ;
@@ -656,14 +652,16 @@ armRequestTimer()
             if (timeoutFd_ == -1) {
                 throw ML::Exception(errno, "timerfd_create");
             }
-            addFdOneShot(timeoutFd_, handleTimeoutEventCb_,
-                         true, false);
-            // cerr << "timer armed\n";
+            auto handleTimeoutEventCb = [&] (const struct epoll_event & event) {
+                this->handleTimeoutEvent(event);
+            };
+            cerr << " timeoutFd_: "  + to_string(timeoutFd_) + "\n";
+            addFdOneShot(timeoutFd_, handleTimeoutEventCb, true, false);
+            cerr << "timer armed\n";
         }
         else {
-            restartFdOneShot(timeoutFd_, handleTimeoutEventCb_,
-                             true, false);
-            // cerr << "timer rearmed\n";
+            cerr << "timer rearmed\n";
+            restartFdOneShot(timeoutFd_, true, false);
         }
 
         itimerspec spec;

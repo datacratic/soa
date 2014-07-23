@@ -337,9 +337,11 @@ private:
     /* tcp_socket overrides */
     virtual void onConnectionResult(ConnectionResult result,
                                     const std::vector<std::string> & msgs);
-    virtual void onDisconnected(bool fromPeer);
+    virtual void onDisconnected(bool fromPeer,
+                                const std::vector<std::string> & msgs);
     virtual void onWriteResult(int error,
-                               const std::string & written, size_t writtenSize);
+                               const std::string & written,
+                               size_t writtenSize);
     virtual void onReceivedData(const char * data, size_t size);
     virtual void onException(const std::exception_ptr & excPtr);
 
@@ -366,7 +368,6 @@ private:
     void cancelRequestTimer();
     void handleTimeoutEvent(const ::epoll_event & event);
 
-    EpollCallback handleTimeoutEventCb_;
     int timeoutFd_;
 };
 
