@@ -176,7 +176,6 @@ private:
     int fd_;
     bool closing_;
     size_t readBufferSize_;
-    EpollCallback handleFdEventCb_;
     bool writeReady_;
 
     ML::RingBufferSRMW<std::string> threadBuffer_;
@@ -189,7 +188,6 @@ private:
     size_t msgsSent_;
 
     ML::Wakeup_Fd wakeup_;
-    EpollCallback handleWakeupEventCb_;
 
     OnDisconnected onDisconnected_;
     OnWriteResult onWriteResult_;

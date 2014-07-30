@@ -48,14 +48,10 @@ AsyncWriterSource(const OnDisconnected & onDisconnected,
     if (epollFd_ == -1)
         throw ML::Exception(errno, "epoll_create");
 
-    handleFdEventCb_ = [&] (const ::epoll_event & event) {
-        this->handleFdEvent(event);
-    };
-
-    handleWakeupEventCb_ = [&] (const ::epoll_event & event) {
+    auto handleWakeupEventCb = [&] (const ::epoll_event & event) {
         this->handleWakeupEvent(event);
     };
-    addFdOneShot(wakeup_.fd(), handleWakeupEventCb_, true, false);
+    addFdOneShot(wakeup_.fd(), handleWakeupEventCb, true, false);
 }
 
 AsyncWriterSource::
@@ -77,10 +73,10 @@ setFd(int newFd)
 
     ExcCheck(fd_ == -1, "fd already set");
     fd_ = newFd;
-    handleFdEventCb_ = [&] (const ::epoll_event & event) {
+    auto handleFdEventCb = [&] (const ::epoll_event & event) {
         this->handleFdEvent(event);
     };
-    addFdOneShot(fd_, handleFdEventCb_, true, true);
+    addFdOneShot(fd_, handleFdEventCb, readBufferSize_ > 0, true);
 }
 
 void
@@ -418,7 +414,7 @@ handleFdEvent(const ::epoll_event & event)
     }
 
     if (fd_ != -1) {
-        restartFdOneShot(fd_, true, !writeReady_);
+        restartFdOneShot(fd_, readBufferSize_ > 0, !writeReady_);
     }
 }
 
