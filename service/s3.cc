@@ -1966,7 +1966,7 @@ struct StreamingUploadSource {
         size_t offset;
         size_t chunkSize;
         size_t chunkIndex;
-        bool shutdown;
+        atomic<bool> shutdown;
         boost::thread_group tg;
 
         Date startDate;
@@ -2071,6 +2071,8 @@ struct StreamingUploadSource {
             if (exc)
                 std::rethrow_exception(exc);
 
+            ML::memory_barrier();
+
             size_t done = current.append(s, n);
             offset += done;
             if (done < n) {
@@ -2080,6 +2082,8 @@ struct StreamingUploadSource {
 
             //cerr << "writing " << n << " characters returned "
             //     << done << endl;
+
+            ML::memory_barrier();
 
             if (exc)
                 std::rethrow_exception(exc);
@@ -2104,6 +2108,9 @@ struct StreamingUploadSource {
         {
             if (exc)
                 std::rethrow_exception(exc);
+
+            ML::memory_barrier();
+
             // cerr << "pushing last chunk " << chunkIndex << endl;
             flush();
 
@@ -2120,6 +2127,7 @@ struct StreamingUploadSource {
 
             // Make sure that an exception in uploading the last chunk doesn't
             // lead to a corrupt (truncated) file
+            ML::memory_barrier();
             if (exc)
                 std::rethrow_exception(exc);
 
@@ -2127,9 +2135,6 @@ struct StreamingUploadSource {
                                                        uploadId,
                                                        etags);
             //cerr << "final etag is " << etag << endl;
-
-            if (exc)
-                std::rethrow_exception(exc);
 
             // double elapsed = Date::now().secondsSince(startDate);
 
@@ -2142,10 +2147,12 @@ struct StreamingUploadSource {
         void runThread()
         {
             while (!shutdown) {
+                ML::memory_barrier();
                 Chunk chunk;
                 if (chunks.tryPop(chunk, 0.01)) {
-                    if (exc)
+                    if (exc) {
                         return;
+                    }
                     try {
                         //cerr << "got chunk " << chunk.index
                         //     << " with " << chunk.size << " bytes at index "
