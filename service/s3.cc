@@ -1966,7 +1966,9 @@ struct StreamingUploadSource {
         size_t offset;
         size_t chunkSize;
         size_t chunkIndex;
-        atomic<bool> shutdown;
+        atomic<bool> shutdown; /* type is atomic<bool> to ensure that
+                                  "shutdown" has the intended value in all
+                                  threads when set or queried */
         boost::thread_group tg;
 
         Date startDate;
@@ -2071,6 +2073,9 @@ struct StreamingUploadSource {
             if (exc)
                 std::rethrow_exception(exc);
 
+            /* this barrier is meant to ensure that "exc", as used in the "if"
+             * clause above, has the value it is meant to have at the
+             * beginning of the function */
             ML::memory_barrier();
 
             size_t done = current.append(s, n);
@@ -2085,6 +2090,9 @@ struct StreamingUploadSource {
 
             ML::memory_barrier();
 
+            /* this barrier is meant to ensure that "exc", as used in the "if"
+             * clause below, has the value it is meant to have at the
+             * end of the function */
             if (exc)
                 std::rethrow_exception(exc);
 
@@ -2109,6 +2117,10 @@ struct StreamingUploadSource {
             if (exc)
                 std::rethrow_exception(exc);
 
+            /* this barrier is meant to ensure that "exc", as used in the "if"
+             * clause above, has the value it is meant to have at the
+             * beginning of the function */
+
             ML::memory_barrier();
 
             // cerr << "pushing last chunk " << chunkIndex << endl;
@@ -2125,8 +2137,11 @@ struct StreamingUploadSource {
             stop();
             //cerr << "stopped" << endl;
 
-            // Make sure that an exception in uploading the last chunk doesn't
-            // lead to a corrupt (truncated) file
+            /* Make sure that an exception in uploading the last chunk doesn't
+               lead to a corrupt (truncated) file. A barrier is used here to
+               ensure that "exc", as used in the "if" clause below, has the
+               value it is meant to have at this time, right before
+               "finishMultiPartUpload" is invoked. */
             ML::memory_barrier();
             if (exc)
                 std::rethrow_exception(exc);
@@ -2147,6 +2162,9 @@ struct StreamingUploadSource {
         void runThread()
         {
             while (!shutdown) {
+                /* This barrier is meant to ensure that "exc", as used below,
+                   has the correct value even if it is assigned its value in
+                   another thread. */
                 ML::memory_barrier();
                 Chunk chunk;
                 if (chunks.tryPop(chunk, 0.01)) {
