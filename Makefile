@@ -2,7 +2,7 @@ CXX ?= g++
 CC ?= gcc
 FC := gfortran
 NODEJS_ENABLED:=1
-PYTHON_ENABLED:=0
+PYTHON_ENABLED:=1
 
 LOCAL_DIR?=$(HOME)/local
 NODE_PREFIX:=$(LOCAL_DIR)
@@ -15,7 +15,7 @@ MACHINE_NAME:=$(shell uname -n)
 
 
 -include local.mk
-VIRTUALENV ?= $(LOCAL_DIR)/platform_virtualenv
+VIRTUALENV ?= virtualenv
 PYTHON ?= $(VIRTUALENV)/bin/python
 PIP ?= $(VIRTUALENV)/bin/pip
 
