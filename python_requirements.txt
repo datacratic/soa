@@ -1,3 +1,0 @@
-# http://pip.readthedocs.org/en/latest/user_guide.html#requirements-files
-ipython==0.13
-flake8
