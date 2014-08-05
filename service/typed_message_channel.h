@@ -106,7 +106,13 @@ struct TypedMessageQueue: public AsyncEventSource
 {
     friend class test_typed_message_queue;
 
-    typedef std::function<void ()> OnNotify;
+    /* Type of callback invoked when one or more messages have become
+     * available. If the function returns "true", it will continue to be
+     * invoked periodically as long as there are elements in the queue,
+     * otherwise it will stop after the first invocation and until the queue
+     * has been emptied completely. It is the receiver's responsibility to
+     * consume the queue using "pop_front". */
+    typedef std::function<bool ()> OnNotify;
 
     /* "onNotify": callback used when one or more messages are reported in the
      * queue
@@ -127,27 +133,25 @@ struct TypedMessageQueue: public AsyncEventSource
     virtual bool processOne()
     {
         while (wakeup_.tryRead());
-        onNotify();
+        bool retry = onNotify();
         
         Guard guard(queueLock_);
         if (queue_.size() == 0) {
             pending_ = false;
         }
-        else {
+        else if (retry) {
             wakeup_.signal();
         }
 
         return false;
     }
 
-    /* function invoked when one or more messages become available and as long
-     * as at least one message stays available; it is the receiver's
-     * responsibility to consume the queue using "pop_front" */
-    virtual void onNotify()
+    virtual bool onNotify()
     {
-        if (onNotify_) {
-            onNotify_();
+        if (!onNotify_) {
+            return false;
         }
+        return onNotify_();
     }
 
     /* reset the maximum number of messages */
@@ -196,24 +200,25 @@ struct TypedMessageQueue: public AsyncEventSource
 
     /* number of messages present in the queue */
     uint64_t size()
-        const
     {
         Guard guard(queueLock_);
         return queue_.size();
     }
 
 private:
+    size_t maxMessages_;
+
     typedef std::mutex Mutex;
     typedef std::unique_lock<Mutex> Guard;
     Mutex queueLock_;
     std::queue<Message> queue_;
-    size_t maxMessages_;
 
     ML::Wakeup_Fd wakeup_;
 
     /* notifications are pending */
     bool pending_;
 
+    /* callback */
     OnNotify onNotify_;
 };
 
