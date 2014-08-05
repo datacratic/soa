@@ -23,7 +23,9 @@ namespace Datacratic {
 /****************************************************************************/
 
 /* A base class enabling the asynchronous and buffered writing of data to a
- * file descriptor. */
+ * file descriptor. This class currently implements two separate concerns (a
+ * read-write "Epoller" and a write queue) and might need to be split at some
+ * point. */
 
 struct AsyncWriterSource : public AsyncEventSource
 {
@@ -120,38 +122,37 @@ protected:
      * file descriptor */
     typedef std::function<void (const ::epoll_event &)> EpollCallback;
 
-    /* register a file descriptor into the internal epoll queue and an
-       associated callback, for reading and/or writing */
-    void addFdOneShot(int fd, const EpollCallback & cb,
-                      bool readerFd, bool writerFd)
-    {
-        registerFdCallback(fd, cb);
-        performAddFd(fd, readerFd, writerFd, false);
-    }
+    /* register a file descriptor into the internal epoll queue for reading
+       and/or writing */
+    void addFd(int fd, bool readerFd, bool writerFd)
+    { performAddFd(fd, readerFd, writerFd, false, false); }
 
-    /* rearm a file descriptor in the epoll queue */
-    void restartFdOneShot(int fd, bool readerFd, bool writerFd)
-    {
-        performAddFd(fd, readerFd, writerFd, true);
-    }
+    /* same as addFd, with the EPOLLONESHOT flag */
+    void addFdOneShot(int fd, bool readerFd, bool writerFd)
+    { performAddFd(fd, readerFd, writerFd, false, true); }
+
+    /* modify a file descriptor in the epoll queue */
+    void modifyFd(int fd, bool readerFd, bool writerFd)
+    { performAddFd(fd, readerFd, writerFd, true, false); }
+
+    /* same as modifyFd, with the EPOLLONESHOT flag */
+    void modifyFdOneShot(int fd, bool readerFd, bool writerFd)
+    { performAddFd(fd, readerFd, writerFd, true, true); }
 
     /* remove a file descriptor from the internal epoll queue */
     void removeFd(int fd);
 
-    /* return and remove all the messages enqueued for writing */
-    std::vector<std::string> emptyMessageQueue()
-    {
-        std::vector<std::string> messages
-            = threadBuffer_.tryPopMulti(remainingMsgs_);
-        remainingMsgs_ -= messages.size();
+    /* associate a callback with a file descriptor for future epoll
+       operations */
+    void registerFdCallback(int fd, const EpollCallback & cb);
 
-        return messages;
-    }
+    /* disassociate a callback and a file descriptor from the callback
+       registry */
+    void unregisterFdCallback(int fd);
 
 private:
-    void performAddFd(int fd, bool readerFd, bool writerFd, bool restart);
-    void registerFdCallback(int fd, const EpollCallback & cb);
-    std::map<int, EpollCallback> fdCallbacks_;
+    void performAddFd(int fd, bool readerFd, bool writerFd,
+                      bool modify, bool oneshot);
 
     /* epoll operations */
     void closeEpollFd();
@@ -172,6 +173,8 @@ private:
 
     int epollFd_;
     size_t numFds_;
+
+    std::map<int, EpollCallback> fdCallbacks_;
 
     int fd_;
     bool closing_;

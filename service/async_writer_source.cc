@@ -67,87 +67,60 @@ void
 AsyncWriterSource::
 setFd(int newFd)
 {
+    ExcCheck(fd_ == -1, "fd already set");
     if (!ML::is_file_flag_set(newFd, O_NONBLOCK)) {
         throw ML::Exception("file decriptor is blocking");
     }
 
-    ExcCheck(fd_ == -1, "fd already set");
-    fd_ = newFd;
+    addFd(queue_.selectFd(), true, false);
+
     auto handleFdEventCb = [&] (const ::epoll_event & event) {
         this->handleFdEvent(event);
     };
-    addFdOneShot(fd_, handleFdEventCb, readBufferSize_ > 0, true);
+    registerFdCallback(newFd, handleFdEventCb);
+    addFd(newFd, readBufferSize_ > 0, true);
+    fd_ = newFd;
+    enableQueue();
 }
 
 void
 AsyncWriterSource::
 closeFd()
 {
-    ExcCheck(!threadBuffer_.couldPop(),
-             "message queue not empty");
+    ExcCheck(queue_.size() == 0, "message queue not empty");
     ExcCheck(fd_ != -1, "already closed (fd)");
 
-    removeFd(fd_);
-    ::close(fd_);
     handleDisconnection(false);
-    fd_ = -1;
 }
 
 void
 AsyncWriterSource::
 closeEpollFd()
 {
-    if (epollFd_ == -1) 
-        return;
-
-    ::close(epollFd_);
-    epollFd_ = -1;
+    if (epollFd_ != -1) {
+        ::close(epollFd_);
+        epollFd_ = -1;
+    }
 }
 
 bool
 AsyncWriterSource::
-write(const string & data)
-{
-    return write(data.c_str(), data.size());
-}
-
-bool
-AsyncWriterSource::
-write(const char * data, size_t size)
-{
-    return write(string(data, size));
-}
-
-bool
-AsyncWriterSource::
-write(string && data)
+write(string data)
 {
     ExcAssert(!closing_);
+    ExcAssert(queueEnabled_);
 
     bool result(true);
 
-    if (canSendMessages()) {
-        if (threadBuffer_.tryPush(move(data))) {
-            remainingMsgs_++;
-        }
-        else {
-            result = false;
-        }
-        wakeup_.signal();
+    if (queueEnabled()) {
+        ExcCheck(data.size() > 0, "attempting to write empty data");
+        result = queue_.push_back(move(data));
     }
     else {
-        throw ML::Exception("cannot write while not connected");
+        throw ML::Exception("cannot write while queue is disabled");
     }
 
     return result;
-}
-
-bool
-AsyncWriterSource::
-canSendMessages()
-    const
-{
-    return !closing_ && fd_ != -1;
 }
 
 void
@@ -264,19 +237,21 @@ processOne()
 {
     struct epoll_event events[numFds_];
 
-    try {
-        int res = epoll_wait(epollFd_, events, numFds_, 0);
-        if (res == -1) {
-            throw ML::Exception(errno, "epoll_wait");
-        }
+    if (numFds_ > 0) {
+        try {
+            int res = epoll_wait(epollFd_, events, numFds_, 0);
+            if (res == -1) {
+                throw ML::Exception(errno, "epoll_wait");
+            }
 
-        for (int i = 0; i < res; i++) {
-            auto * fn = static_cast<EpollCallback *>(events[i].data.ptr);
-            (*fn)(events[i]);
+            for (int i = 0; i < res; i++) {
+                auto * fn = static_cast<EpollCallback *>(events[i].data.ptr);
+                (*fn)(events[i]);
+            }
         }
-    }
-    catch (...) {
-        handleException();
+        catch (...) {
+            handleException();
+        }
     }
 
     return false;
@@ -414,7 +389,7 @@ handleFdEvent(const ::epoll_event & event)
     }
 
     if (fd_ != -1) {
-        restartFdOneShot(fd_, readBufferSize_ > 0, !writeReady_);
+        modifyFd(fd_, readBufferSize_ > 0, !writeReady_);
     }
 }
 
@@ -450,13 +425,28 @@ registerFdCallback(int fd, const EpollCallback & cb)
 
 void
 AsyncWriterSource::
-performAddFd(int fd, bool readerFd, bool writerFd, bool restart)
+unregisterFdCallback(int fd)
+{
+    if (fdCallbacks_.find(fd) == fdCallbacks_.end()) {
+        throw ML::Exception("callback not registered for fd");
+    }
+    fdCallbacks_.erase(fd);
+}
+
+void
+AsyncWriterSource::
+performAddFd(int fd, bool readerFd, bool writerFd, bool modify, bool oneshot)
 {
     if (epollFd_ == -1)
         return;
 
     struct epoll_event event;
-    event.events = EPOLLONESHOT;
+    if (oneshot) {
+        event.events = EPOLLONESHOT;
+    }
+    else {
+        event.events = 0;
+    }
     if (readerFd) {
         event.events |= EPOLLIN;
     }
@@ -467,17 +457,17 @@ performAddFd(int fd, bool readerFd, bool writerFd, bool restart)
     EpollCallback & cb = fdCallbacks_.at(fd);
     event.data.ptr = &cb;
 
-    int operation = restart ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
+    int operation = modify ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
     int res = epoll_ctl(epollFd_, operation, fd, &event);
     if (res == -1) {
         string message = (string("epoll_ctl:")
-                          + " restart=" + to_string(restart)
+                          + " modify=" + to_string(modify)
                           + " fd=" + to_string(fd)
                           + " readerFd=" + to_string(readerFd)
                           + " writerFd=" + to_string(writerFd));
         throw ML::Exception(errno, message);
     }
-    if (!restart) {
+    if (!modify) {
         numFds_++;
     }
 }
@@ -486,11 +476,6 @@ void
 AsyncWriterSource::
 removeFd(int fd)
 {
-    if (fdCallbacks_.find(fd) == fdCallbacks_.end()) {
-        throw ML::Exception("callback not registered for fd");
-    }
-    fdCallbacks_.erase(fd);
-
     if (epollFd_ == -1)
         return;
 
