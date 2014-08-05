@@ -10,10 +10,10 @@
 #include <atomic>
 #include <string>
 
-#include "jml/arch/wakeup_fd.h"
 #include "jml/utils/ring_buffer.h"
 
 #include "async_event_source.h"
+#include "typed_message_channel.h"
 
 
 namespace Datacratic {
@@ -63,12 +63,18 @@ struct AsyncWriterSource : public AsyncEventSource
 
     /* enqueue "data" for writing, provided the file descriptor is open or
      * being opened, or throws */
-    bool write(const std::string & data);
-    bool write(const char * data, size_t size);
-    bool write(std::string && data);
+    bool write(std::string data);
+    bool write(const char * data, size_t size)
+    {
+        return write(std::string(data, size));
+    }
 
     /* returns whether we are ready to accept messages for sending */
-    bool canSendMessages() const;
+    bool queueEnabled()
+        const
+    {
+        return queueEnabled_;
+    }
 
     /* invoked when a write operation has been performed, where "written" is
        the string that was sent, "writtenSize" is the amount of bytes from it
@@ -112,6 +118,17 @@ protected:
         const
     {
         return fd_;
+    }
+
+    /* enable message queueing */
+    void enableQueue()
+    {
+        queueEnabled_ = true;
+    }
+
+    void disableQueue()
+    {
+        queueEnabled_ = false;
     }
 
     /* close the "main" file descriptor and take care of the surrounding
@@ -169,7 +186,7 @@ private:
     void handleException();
 
     /* wakeup operations */
-    void handleWakeupEvent(const ::epoll_event & event);
+    void handleQueueNotification();
 
     int epollFd_;
     size_t numFds_;
@@ -181,16 +198,14 @@ private:
     size_t readBufferSize_;
     bool writeReady_;
 
-    ML::RingBufferSRMW<std::string> threadBuffer_;
-    std::atomic<size_t> remainingMsgs_;
+    bool queueEnabled_;
+    TypedMessageQueue<std::string> queue_;
     std::string currentLine_;
     size_t currentSent_;
 
     uint64_t bytesSent_;
     uint64_t bytesReceived_;
     size_t msgsSent_;
-
-    ML::Wakeup_Fd wakeup_;
 
     OnDisconnected onDisconnected_;
     OnWriteResult onWriteResult_;
