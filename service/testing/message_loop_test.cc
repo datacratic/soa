@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE( test_addSource_with_needsPoll )
 BOOST_AUTO_TEST_CASE( test_addSource_after_before_start )
 {
     ML::Watchdog wd(30);
-    const int numSources(10000);
+    const int numSources(1000);
 
     typedef shared_ptr<TypedMessageSink<string> > TestSource;
 
