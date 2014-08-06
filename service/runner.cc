@@ -260,7 +260,7 @@ handleChildStatus(const struct epoll_event & event)
 void
 Runner::
 handleOutputStatus(const struct epoll_event & event,
-                   int outputFd, shared_ptr<InputSink> & sink)
+                   int & outputFd, shared_ptr<InputSink> & sink)
 {
     char buffer[4096];
     bool closedFd(false);
@@ -303,21 +303,15 @@ handleOutputStatus(const struct epoll_event & event,
     }
 
     if (closedFd || (event.events & EPOLLHUP) != 0) {
+        ExcAssert(sink != nullptr);
         sink->notifyClosed();
         sink.reset();
+        if (outputFd > -1) {
+            removeFd(outputFd);
+            ::close(outputFd);
+            outputFd = -1;
+        }
         attemptTaskTermination();
-    }
-    else {
-        JML_TRACE_EXCEPTIONS(false);
-        try {
-            restartFdOneShot(outputFd, event.data.ptr);
-        }
-        catch (const ML::Exception & exc) {
-            cerr << "closing sink due to bad fd\n";
-            sink->notifyClosed();
-            sink.reset(); 
-            attemptTaskTermination();
-        }
     }
 }
 
