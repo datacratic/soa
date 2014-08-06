@@ -136,10 +136,7 @@ struct TypedMessageQueue: public AsyncEventSource
         bool retry = onNotify();
         
         Guard guard(queueLock_);
-        if (queue_.size() == 0) {
-            pending_ = false;
-        }
-        else if (retry) {
+        if (retry && pending_) {
             wakeup_.signal();
         }
 
@@ -193,6 +190,10 @@ struct TypedMessageQueue: public AsyncEventSource
         for (size_t i = 0; i < number; i++) {
             messages.emplace_back(std::move(queue_.front()));
             queue_.pop();
+        }
+
+        if (queue_.size() == 0) {
+            pending_ = false;
         }
 
         return messages;
