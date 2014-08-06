@@ -78,15 +78,15 @@ errorMessage(HttpClientError errorCode)
     static const string timeout = "Request timed out";
 
     switch (errorCode) {
-    case HttpClientError::SUCCESS:
+    case HttpClientError::None:
         return none;
-    case HttpClientError::UNKNOWN:
+    case HttpClientError::Unknown:
         return unknown;
-    case HttpClientError::TIMEOUT:
+    case HttpClientError::Timeout:
         return timeout;
-    case HttpClientError::HOST_UNKNOWN:
+    case HttpClientError::HostNotFound:
         return hostNotFound;
-    case HttpClientError::COULD_NOT_CONNECT:
+    case HttpClientError::CouldNotConnect:
         return couldNotConnect;
     default:
         throw ML::Exception("invalid error code");

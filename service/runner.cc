@@ -27,6 +27,7 @@
 #include "jml/utils/guard.h"
 #include "jml/utils/file_functions.h"
 
+#include "logs.h"
 #include "message_loop.h"
 #include "sink.h"
 
@@ -69,6 +70,11 @@ rusageDescription()
 
 namespace {
 
+
+
+Logging::Category warnings("Runner::warning");
+
+
 tuple<int, int>
 CreateStdPipe(bool forWriting)
 {
@@ -95,7 +101,8 @@ namespace Datacratic {
 Runner::
 Runner()
     : closeStdin(false), running_(false), childPid_(-1),
-      wakeup_(EFD_NONBLOCK), statusRemaining_(sizeof(Task::ChildStatus))
+      wakeup_(EFD_NONBLOCK | EFD_CLOEXEC),
+      statusRemaining_(sizeof(Task::ChildStatus))
 {
     Epoller::init(4);
 
@@ -243,9 +250,6 @@ handleChildStatus(const struct epoll_event & event)
         ::close(task_.statusFd);
         task_.statusFd = -1;
     }
-    else {
-        restartFdOneShot(task_.statusFd, event.data.ptr);
-    }
 
     // cerr << "handleChildStatus done\n";
 }
@@ -253,7 +257,7 @@ handleChildStatus(const struct epoll_event & event)
 void
 Runner::
 handleOutputStatus(const struct epoll_event & event,
-                   int outputFd, shared_ptr<InputSink> & sink)
+                   int & outputFd, shared_ptr<InputSink> & sink)
 {
     char buffer[4096];
     bool closedFd(false);
@@ -296,21 +300,15 @@ handleOutputStatus(const struct epoll_event & event,
     }
 
     if (closedFd || (event.events & EPOLLHUP) != 0) {
+        ExcAssert(sink != nullptr);
         sink->notifyClosed();
         sink.reset();
+        if (outputFd > -1) {
+            removeFd(outputFd);
+            ::close(outputFd);
+            outputFd = -1;
+        }
         attemptTaskTermination();
-    }
-    else {
-        JML_TRACE_EXCEPTIONS(false);
-        try {
-            restartFdOneShot(outputFd, event.data.ptr);
-        }
-        catch (const ML::Exception & exc) {
-            cerr << "closing sink due to bad fd\n";
-            sink->notifyClosed();
-            sink.reset(); 
-            attemptTaskTermination();
-        }
     }
 }
 
@@ -330,7 +328,6 @@ handleWakeup(const struct epoll_event & event)
             }
             else {
                 wakeup_.signal();
-                restartFdOneShot(wakeup_.fd(), event.data.ptr);
             }
         }
     }
@@ -409,6 +406,11 @@ run(const vector<string> & command,
     const shared_ptr<InputSink> & stdOutSink,
     const shared_ptr<InputSink> & stdErrSink)
 {
+    if (parent_ == nullptr) {
+        LOG(warnings)
+            << ML::format("Runner %p is not connected to any MessageLoop\n", this);
+    }
+
     if (running_)
         throw ML::Exception("already running");
 
@@ -456,16 +458,16 @@ run(const vector<string> & command,
             ML::set_file_flag(task_.stdInFd, O_NONBLOCK);
             stdInSink_->init(task_.stdInFd);
             parent_->addSource("stdInSink", stdInSink_);
-            addFdOneShot(wakeup_.fd());
+            addFd(wakeup_.fd());
         }
-        addFdOneShot(task_.statusFd, &task_.statusFd);
+        addFd(task_.statusFd, &task_.statusFd);
         if (stdOutSink) {
             ML::set_file_flag(task_.stdOutFd, O_NONBLOCK);
-            addFdOneShot(task_.stdOutFd, &task_.stdOutFd);
+            addFd(task_.stdOutFd, &task_.stdOutFd);
         }
         if (stdErrSink) {
             ML::set_file_flag(task_.stdErrFd, O_NONBLOCK);
-            addFdOneShot(task_.stdErrFd, &task_.stdErrFd);
+            addFd(task_.stdErrFd, &task_.stdErrFd);
         }
 
         childFds.close();
