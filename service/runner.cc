@@ -250,9 +250,6 @@ handleChildStatus(const struct epoll_event & event)
         ::close(task_.statusFd);
         task_.statusFd = -1;
     }
-    else {
-        restartFdOneShot(task_.statusFd, event.data.ptr);
-    }
 
     // cerr << "handleChildStatus done\n";
 }
@@ -331,7 +328,6 @@ handleWakeup(const struct epoll_event & event)
             }
             else {
                 wakeup_.signal();
-                restartFdOneShot(wakeup_.fd(), event.data.ptr);
             }
         }
     }
@@ -462,16 +458,16 @@ run(const vector<string> & command,
             ML::set_file_flag(task_.stdInFd, O_NONBLOCK);
             stdInSink_->init(task_.stdInFd);
             parent_->addSource("stdInSink", stdInSink_);
-            addFdOneShot(wakeup_.fd());
+            addFd(wakeup_.fd());
         }
-        addFdOneShot(task_.statusFd, &task_.statusFd);
+        addFd(task_.statusFd, &task_.statusFd);
         if (stdOutSink) {
             ML::set_file_flag(task_.stdOutFd, O_NONBLOCK);
-            addFdOneShot(task_.stdOutFd, &task_.stdOutFd);
+            addFd(task_.stdOutFd, &task_.stdOutFd);
         }
         if (stdErrSink) {
             ML::set_file_flag(task_.stdErrFd, O_NONBLOCK);
-            addFdOneShot(task_.stdErrFd, &task_.stdErrFd);
+            addFd(task_.stdErrFd, &task_.stdErrFd);
         }
 
         childFds.close();
