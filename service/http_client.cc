@@ -480,7 +480,7 @@ perform(HttpRequest && request)
     request_ = move(request);
 
     responseState_ = HEADERS;
-    if (canSendMessages()) {
+    if (queueEnabled()) {
         write(request_.requestStr());
         armRequestTimer();
     }
@@ -655,13 +655,14 @@ armRequestTimer()
             auto handleTimeoutEventCb = [&] (const struct epoll_event & event) {
                 this->handleTimeoutEvent(event);
             };
+            registerFdCallback(timeoutFd_, handleTimeoutEventCb);
             cerr << " timeoutFd_: "  + to_string(timeoutFd_) + "\n";
-            addFdOneShot(timeoutFd_, handleTimeoutEventCb, true, false);
+            addFdOneShot(timeoutFd_, true, false);
             cerr << "timer armed\n";
         }
         else {
             cerr << "timer rearmed\n";
-            restartFdOneShot(timeoutFd_, true, false);
+            modifyFdOneShot(timeoutFd_, true, false);
         }
 
         itimerspec spec;
@@ -684,6 +685,7 @@ cancelRequestTimer()
     if (timeoutFd_ != -1) {
         // cerr << "  was active\n";
         removeFd(timeoutFd_);
+        unregisterFdCallback(timeoutFd_);
         ::close(timeoutFd_);
         timeoutFd_ = -1;
     }
@@ -724,7 +726,7 @@ HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
       debug_(false),
       avlConnections_(numParallel),
       nextAvail_(0),
-      queue_([&]() { this->handleQueueEvent(); }, queueSize)
+      queue_([&]() { this->handleQueueEvent(); return false; }, queueSize)
 {
     /* available connections */
     for (size_t i = 0; i < numParallel; i++) {

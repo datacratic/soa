@@ -108,8 +108,6 @@ connect()
     // cerr << "connect...\n";
     ExcCheck(state() == DISCONNECTED, "socket is not closed");
     ExcCheck(!address_.empty(), "no address set");
-    ExcCheck(!canSendMessages(),
-             "connection already pending or established");
 
     state_ = ClientTcpSocketState::CONNECTING;
     ML::futex_wake(state_);
@@ -187,7 +185,10 @@ connect()
             = [&, socketFd] (const ::epoll_event & event) {
             this->handleConnectionEvent(socketFd, event);
         };
-        addFdOneShot(socketFd, handleConnectionEventCb_, false, true);
+        registerFdCallback(socketFd, handleConnectionEventCb_);
+        addFdOneShot(socketFd, false, true);
+        enableQueue();
+        state_ = ClientTcpSocketState::CONNECTING;
         // cerr << "connection in progress\n";
     }
     else {
@@ -195,8 +196,8 @@ connect()
         setFd(socketFd);
         onConnectionResult(ConnectionResult::SUCCESS, {});
         state_ = ClientTcpSocketState::CONNECTED;
-        ML::futex_wake(state_);
     }
+    ML::futex_wake(state_);
 
     /* no cleanup required */
     success = true;
@@ -233,6 +234,7 @@ handleConnectionEvent(int socketFd, const ::epoll_event & event)
 
     vector<string> lostMessages;
     removeFd(socketFd);
+    unregisterFdCallback(socketFd);
     if (connResult == SUCCESS) {
         errno = 0;
         setFd(socketFd);
@@ -240,6 +242,7 @@ handleConnectionEvent(int socketFd, const ::epoll_event & event)
         state_ = ClientTcpSocketState::CONNECTED;
     }
     else {
+        disableQueue();
         ::close(socketFd);
         state_ = ClientTcpSocketState::DISCONNECTED;
         lostMessages = emptyMessageQueue();

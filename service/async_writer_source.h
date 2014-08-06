@@ -133,6 +133,11 @@ protected:
         queueEnabled_ = false;
     }
 
+    std::vector<std::string> emptyMessageQueue()
+    {
+        return queue_.pop_front(0);
+    }
+
     /* close the "main" file descriptor and take care of the surrounding
        operations */
     virtual void closeFd();
