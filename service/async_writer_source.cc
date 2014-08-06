@@ -34,7 +34,7 @@ AsyncWriterSource(const OnDisconnected & onDisconnected,
       readBufferSize_(readBufferSize),
       writeReady_(false),
       queueEnabled_(false),
-      queue_([&] { this->handleQueueNotification(); return true; },
+      queue_([&] { this->handleQueueNotification(); return false; },
              maxMessages),
       currentSent_(0),
       bytesSent_(0),
@@ -265,6 +265,9 @@ handleQueueNotification()
 {
     if (fd_ != -1) {
         flush();
+        if (fd_ != -1 && !writeReady_) {
+            modifyFd(fd_, readBufferSize_ > 0, true);
+        }
     }
 }
 
