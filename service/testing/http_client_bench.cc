@@ -56,7 +56,7 @@ AsyncModelBench(HttpMethod method,
         }
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
-    HttpRequest::Content content(payload, "application/binary");
+    MimeContent content(payload, "application/binary");
 
     auto & clientRef = *client.get();
     string url("/");
