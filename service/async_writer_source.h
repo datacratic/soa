@@ -5,6 +5,8 @@
    A base class for handling writable file descriptors.
 */
 
+#pragma once
+
 #include <sys/epoll.h>
 
 #include <atomic>
