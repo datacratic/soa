@@ -84,6 +84,10 @@ handleHttpPayload(HttpTestConnHandler & handler,
         headersBody += "}\n";
         handler.sendResponse(200, headersBody, "application/json");
     }
+    else if (header.resource == "/query-params") {
+        string body = header.queryParams.uriEscaped();
+        handler.sendResponse(200, body, "text/plain");
+    }
     else if (header.resource == "/connection-close") {
         handler.send("HTTP/1.1 204 No contents\r\nConnection: close\r\n\r\n",
                      PassiveConnectionHandler::NextAction::NEXT_CLOSE);

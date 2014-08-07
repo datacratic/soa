@@ -25,6 +25,7 @@ typedef tuple<int, int, string> ClientResponse;
 /* sync request helpers */
 ClientResponse
 doGetRequest(const string & baseUrl, const string & resource,
+             const RestParams & queryParams = RestParams(),
              const RestParams & headers = RestParams(),
              int timeout = -1)
 {
@@ -51,10 +52,10 @@ doGetRequest(const string & baseUrl, const string & resource,
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
 
     if (timeout == -1) {
-        client.get(resource, cbs, RestParams(), headers);
+        client.get(resource, cbs, queryParams, headers);
     }
     else {
-        client.get(resource, cbs, RestParams(), headers,
+        client.get(resource, cbs, queryParams, headers,
                    timeout);
     }
 
@@ -273,7 +274,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     {
         ::fprintf(stderr, "request with timeout\n");
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
-        auto resp = doGetRequest(baseUrl, "/timeout", {}, 1);
+        auto resp = doGetRequest(baseUrl, "/timeout", {}, {}, 1);
         BOOST_CHECK_EQUAL(get<0>(resp),
                           ConnectionResult::TIMEOUT);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
@@ -312,7 +313,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     /* headers and cookies */
     {
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
-        auto resp = doGetRequest(baseUrl, "/headers",
+        auto resp = doGetRequest(baseUrl, "/headers", {},
                                  {{"someheader", "somevalue"}});
         Json::Value expBody;
         expBody["accept"] = "*/*";
@@ -320,6 +321,15 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         expBody["someheader"] = "somevalue";
         Json::Value jsonBody = Json::parse(get<2>(resp));
         BOOST_CHECK_EQUAL(jsonBody, expBody);
+    }
+
+    /* query-params */
+    {
+        string baseUrl("http://127.0.0.1:" + to_string(service.port()));
+        auto resp = doGetRequest(baseUrl, "/query-params",
+                                 {{"value", "hello"}});
+        string body = get<2>(resp);
+        BOOST_CHECK_EQUAL(body, "?value=hello");
     }
 }
 #endif
