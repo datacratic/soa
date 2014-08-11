@@ -123,7 +123,7 @@ struct MimeContent {
         return data_;
     }
 
-    const uint64_t size()
+    uint64_t size()
         const
     {
         return size_;
@@ -461,25 +461,6 @@ private:
     void handleQueueEvent();
 
     void handleHttpConnectionDone(HttpConnection * connection, int result);
-
-#if 0
-    void handleEvents();
-    void handleEvent(const ::epoll_event & event);
-    void handleTimerEvent();
-    void handleMultiEvent(const ::epoll_event & event);
-
-    void checkMultiInfos();
-
-    static int socketCallback(CURL *e, curl_socket_t s, int what,
-                              void *clientP, void *sockp);
-    int onCurlSocketEvent(CURL *e, curl_socket_t s, int what, void *sockp);
-
-    static int timerCallback(CURLM *multi, long timeoutMs, void *clientP);
-    int onCurlTimerEvent(long timeout_ms);
-
-    void addFd(int fd, bool isMod, int flags) const;
-    void removeFd(int fd) const;
-#endif
 
     HttpConnection * getConnection();
     void releaseConnection(HttpConnection * connection);
