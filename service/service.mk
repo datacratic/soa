@@ -51,6 +51,7 @@ LIBSERVICES_SOURCES := \
 	tcp_socket.cc \
 	zookeeper.cc \
 	http_client.cc \
+	http_parsers.cc \
 	http_rest_proxy.cc \
 	xml_helpers.cc \
 	nprobe.cc \

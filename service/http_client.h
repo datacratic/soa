@@ -43,7 +43,7 @@
 
 #include "soa/jsoncpp/value.h"
 #include "soa/service/message_loop.h"
-#include "soa/service/http_header.h"
+#include "soa/service/http_parsers.h"
 #include "soa/service/typed_message_channel.h"
 #include "soa/service/tcp_socket.h"
 
@@ -263,47 +263,6 @@ private:
 };
 
 
-/* HTTP RESPONSE PARSER */
-
-struct HttpResponseParser {
-    typedef std::function<void (const std::string &,
-                                int)> OnResponseStart;
-    typedef std::function<void (const char *, size_t)> OnData;
-    typedef std::function<void (bool)> OnDone;
-
-    HttpResponseParser()
-        noexcept
-    {
-        clear();
-    }
-
-    void clear() noexcept;
-
-    void feed(const char * data);
-    void feed(const char * data, size_t size);
-
-    uint64_t remainingBody() const
-    {
-        return remainingBody_;
-    }
-
-    OnResponseStart onResponseStart;
-    OnData onHeader;
-    OnData onData;
-    OnDone onDone;
-
-private:
-    void handleHeader(const char * data, size_t dataSize);
-    void finalizeParsing();
-
-    int state_;
-    std::string buffer_;
-
-    uint64_t remainingBody_;
-    bool requireClose_;
-};
-
-
 /* HTTP CONNECTION */
 
 struct HttpConnection : ClientTcpSocket {
@@ -512,7 +471,7 @@ struct HttpClientCallbacks {
 
     /* register header lines */
     void feedHeader(const HttpRequest & rq,
-                        const char * data, size_t size);
+                    const char * data, size_t size);
 
     /* feed one chunk body data */
     void feedBodyData(const HttpRequest & rq,
