@@ -43,6 +43,7 @@
 
 #include "soa/jsoncpp/value.h"
 #include "soa/service/message_loop.h"
+#include "soa/service/http_header.h"
 #include "soa/service/http_parsers.h"
 #include "soa/service/typed_message_channel.h"
 #include "soa/service/tcp_socket.h"
@@ -268,12 +269,9 @@ private:
 struct HttpConnection : ClientTcpSocket {
     typedef std::function<void (int)> OnDone;
 
-    static const uint64_t sendSize = 65536;
-
     enum HttpState {
         IDLE,
-        HEADERS,
-        BODY
+        PENDING
     };
 
     HttpConnection();
@@ -309,6 +307,8 @@ private:
     void onParserData(const char * data, size_t size);
     void onParserDone(bool onClose);
 
+    void startSendingRequest();
+
     void handleEndOfRq(int code, bool requireClose);
     void finalizeEndOfRq(int code);
 
@@ -317,7 +317,6 @@ private:
     HttpState responseState_;
     HttpRequest request_;
     bool requestEnded_;
-    size_t uploadOffset_;
 
     /* Connection: close */
     int lastCode_;

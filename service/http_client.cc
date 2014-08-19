@@ -199,7 +199,6 @@ clear()
     responseState_ = IDLE;
     requestEnded_ = false;
     request_.clear();
-    uploadOffset_ = 0;
     lastCode_ = 0;
 }
 
@@ -216,10 +215,8 @@ perform(HttpRequest && request)
 
     request_ = move(request);
 
-    responseState_ = HEADERS;
     if (queueEnabled()) {
-        write(request_.requestStr());
-        armRequestTimer();
+        startSendingRequest();
     }
     else {
         connect();
@@ -232,8 +229,7 @@ onConnectionResult(ConnectionResult result, const vector<string> & msgs)
 {
     // cerr << " onConnectionResult: " + to_string(result) + "\n";
     if (result == ConnectionResult::SUCCESS) {
-        write(request_.requestStr());
-        armRequestTimer();
+        startSendingRequest();
     }
     else {
         cerr << " failure with result: "  + to_string(result) + "\n";
@@ -243,34 +239,28 @@ onConnectionResult(ConnectionResult result, const vector<string> & msgs)
 
 void
 HttpConnection::
+startSendingRequest()
+{
+    string rqData = request_.requestStr();
+    const MimeContent & content = request_.content();
+    if (content.size() > 0) {
+        rqData.append(content.data(), content.size());
+    }
+    responseState_ = PENDING;
+    write(move(rqData));
+    armRequestTimer();
+}
+
+void
+HttpConnection::
 onWriteResult(int error, const string & written, size_t writtenSize)
 {
     if (error == 0) {
-        const MimeContent content = request_.content();
-        if (responseState_ == HEADERS) {
-            if (content.size() > 0) {
-                responseState_ = BODY;
-                uploadOffset_ = 0;
-            }
-            else {
-                responseState_ = IDLE;
-            }
+        if (responseState_ == PENDING) {
+            responseState_ = IDLE;
         }
-        else if (responseState_ == BODY) {
-            uploadOffset_ += writtenSize;
-        }
-        else if (responseState_ != BODY) {
+        else {
             throw ML::Exception("invalid state");
-        }
-        if (responseState_ == BODY) {
-            uint64_t remaining = content.size() - uploadOffset_;
-            uint64_t chunkSize = min(remaining, HttpConnection::sendSize);
-            if (chunkSize == 0) {
-                responseState_ = IDLE;
-            }
-            else {
-                write(content.data() + uploadOffset_, chunkSize);
-            }
         }
     }
     else {
