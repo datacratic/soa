@@ -33,23 +33,17 @@ struct TypedMessageSink: public AsyncEventSource {
 
     std::function<void (Message && message)> onEvent;
 
-    void push(const Message & message)
+    template<typename MessageT>
+    void push(MessageT&& message)
     {
-        if (buf.tryPush(message))
-            wakeup.signal();
-        else
-            throw ML::Exception("the message queue is full");
-    }
-
-    void push(Message && message)
-    {
-        buf.push(message);
+        buf.push(std::forward<MessageT>(message));
         wakeup.signal();
     }
 
-    bool tryPush(Message && message)
+    template<typename MessageT>
+    bool tryPush(MessageT&& message)
     {
-        bool pushed = buf.tryPush(message);
+        bool pushed = buf.tryPush(std::forward<MessageT>(message));
         if (pushed)
             wakeup.signal();
 
@@ -112,7 +106,7 @@ struct TypedMessageQueue: public AsyncEventSource
      * otherwise it will stop after the first invocation and until the queue
      * has been emptied completely. It is the receiver's responsibility to
      * consume the queue using "pop_front". */
-    typedef std::function<bool ()> OnNotify;
+    typedef std::function<void ()> OnNotify;
 
     /* "onNotify": callback used when one or more messages are reported in the
      * queue
@@ -133,22 +127,16 @@ struct TypedMessageQueue: public AsyncEventSource
     virtual bool processOne()
     {
         while (wakeup_.tryRead());
-        bool retry = onNotify();
+        onNotify();
         
-        Guard guard(queueLock_);
-        if (retry && pending_) {
-            wakeup_.signal();
-        }
-
         return false;
     }
 
-    virtual bool onNotify()
+    virtual void onNotify()
     {
-        if (!onNotify_) {
-            return false;
+        if (onNotify_) {
+            onNotify_();
         }
-        return onNotify_();
     }
 
     /* reset the maximum number of messages */
@@ -207,12 +195,11 @@ struct TypedMessageQueue: public AsyncEventSource
     }
 
 private:
-    size_t maxMessages_;
-
     typedef std::mutex Mutex;
     typedef std::unique_lock<Mutex> Guard;
     Mutex queueLock_;
     std::queue<Message> queue_;
+    size_t maxMessages_;
 
     ML::Wakeup_Fd wakeup_;
 
