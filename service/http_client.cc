@@ -164,6 +164,11 @@ HttpConnection()
 {
     // cerr << "HttpConnection(): " << this << "\n";
 
+    /* Apart with pipelining, there is no real interest in using the Nagle
+       algorithm with HTTP, since we will want to send everything in one shot
+       as soon as possible. */
+    setUseNagle(false);
+
     parser_.onResponseStart = [&] (const string & httpVersion,
                                    int code) {
         this->onParserResponseStart(httpVersion, code);
