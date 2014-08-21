@@ -16,36 +16,41 @@
 #include "async_writer_source.h"
 
 
-/* TODO:
-   An exception should trigger the closing of the socket and the returning of
-   pending messages. */
-
 namespace Datacratic {
 
 struct Url;
 
-/* CLIENT TCP SOCKET CONNECTION RESULT */
+
+/****************************************************************************/
+/* CLIENT TCP SOCKET CONNECTION RESULT                                      */
+/****************************************************************************/
 
 enum ConnectionResult {
-    SUCCESS = 0,
-    UNKNOWN_ERROR = 1,
-    COULD_NOT_CONNECT = 2,
-    HOST_UNKNOWN = 3,
-    TIMEOUT = 4
+    Success = 0,
+    UnknownError = 1,
+    ConnectionFailure = 2,
+    HostUnknown = 3,
+    Timeout = 4
 };
 
 
-/* CLIENT TCP SOCKET STATE */
+/****************************************************************************/
+/* CLIENT TCP SOCKET STATE                                                  */
+/****************************************************************************/
 
 enum ClientTcpSocketState {
-    DISCONNECTED,
-    CONNECTING,
-    CONNECTED,
-    DISCONNECTING
+    Disconnected,
+    Connecting,
+    Connected
 };
 
 
-/* CLIENT TCP SOCKET */
+/****************************************************************************/
+/* CLIENT TCP SOCKET                                                        */
+/****************************************************************************/
+
+/* A class that handles the asynchronous opening and connection of TCP
+ * sockets. */
 
 struct ClientTcpSocket : public AsyncWriterSource
 {
@@ -53,7 +58,7 @@ struct ClientTcpSocket : public AsyncWriterSource
         OnConnectionResult;
 
     ClientTcpSocket(OnConnectionResult onConnectionResult = nullptr,
-                    OnDisconnected onDisonnected = nullptr,
+                    OnClosed onClosed = nullptr,
                     OnWriteResult onWriteResult = nullptr,
                     OnReceivedData onReceivedData = nullptr,
                     OnException onException = nullptr,
@@ -62,7 +67,7 @@ struct ClientTcpSocket : public AsyncWriterSource
 
     virtual ~ClientTcpSocket();
 
-    /* setup object */
+    /* utility functions to defined the target service */
     void init(const std::string & url);
     void init(const Url & url);
     void init(const std::string & address, int port);
@@ -80,8 +85,6 @@ struct ClientTcpSocket : public AsyncWriterSource
     /* state of the connection */
     ClientTcpSocketState state() const
     { return ClientTcpSocketState(state_); }
-
-    void waitState(ClientTcpSocketState state) const;
 
 private:
     void handleConnectionEvent(int socketFd, const ::epoll_event & event);

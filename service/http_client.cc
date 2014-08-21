@@ -233,7 +233,7 @@ HttpConnection::
 onConnectionResult(ConnectionResult result, const vector<string> & msgs)
 {
     // cerr << " onConnectionResult: " + to_string(result) + "\n";
-    if (result == ConnectionResult::SUCCESS) {
+    if (result == ConnectionResult::Success) {
         startSendingRequest();
     }
     else {
@@ -443,7 +443,7 @@ handleTimeoutEvent(const ::epoll_event & event)
             }
         }
         // cerr << "ending request due to timeout\n";
-        handleEndOfRq(ConnectionResult::TIMEOUT, true);
+        handleEndOfRq(ConnectionResult::Timeout, true);
     }
 }
 

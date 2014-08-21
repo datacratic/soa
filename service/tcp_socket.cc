@@ -26,16 +26,16 @@ using namespace Datacratic;
 
 ClientTcpSocket::
 ClientTcpSocket(OnConnectionResult onConnectionResult,
-                OnDisconnected onDisconnected,
+                OnClosed onClosed,
                 OnWriteResult onWriteResult,
                 OnReceivedData onReceivedData,
                 OnException onException,
                 size_t maxMessages,
                 size_t recvBufSize)
-    : AsyncWriterSource(onDisconnected, onWriteResult, onReceivedData,
+    : AsyncWriterSource(onClosed, onWriteResult, onReceivedData,
                         onException, maxMessages, recvBufSize),
       port_(-1),
-      state_(ClientTcpSocketState::DISCONNECTED),
+      state_(ClientTcpSocketState::Disconnected),
       noNagle_(false),
       onConnectionResult_(onConnectionResult)
 {
@@ -65,8 +65,8 @@ void
 ClientTcpSocket::
 init(const string & address, int port)
 {
-    if (state_ == ClientTcpSocketState::CONNECTING
-        || state_ == ClientTcpSocketState::CONNECTED) {
+    if (state_ == ClientTcpSocketState::Connecting
+        || state_ == ClientTcpSocketState::Connected) {
         throw ML::Exception("connection already pending or established");
     }
     if (address.empty()) {
@@ -81,20 +81,9 @@ init(const string & address, int port)
 
 void
 ClientTcpSocket::
-waitState(ClientTcpSocketState state)
-    const
-{
-    while (state_ != state) {
-        int oldState = state_;
-        ML::futex_wait(state_, oldState);
-    }
-}
-
-void
-ClientTcpSocket::
 setUseNagle(bool useNagle)
 {
-    if (state() != DISCONNECTED) {
+    if (state() != Disconnected) {
         throw ML::Exception("socket already created");
     }
 
@@ -106,16 +95,16 @@ ClientTcpSocket::
 connect()
 {
     // cerr << "connect...\n";
-    ExcCheck(state() == DISCONNECTED, "socket is not closed");
+    ExcCheck(state() == Disconnected, "socket is not closed");
     ExcCheck(!address_.empty(), "no address set");
 
-    state_ = ClientTcpSocketState::CONNECTING;
+    state_ = ClientTcpSocketState::Connecting;
     ML::futex_wake(state_);
 
     int res = ::socket(AF_INET,
                        SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (res == -1) {
-        state_ = ClientTcpSocketState::DISCONNECTED;
+        state_ = ClientTcpSocketState::Disconnected;
         ML::futex_wake(state_);
         throw ML::Exception(errno, "socket");
     }
@@ -128,7 +117,7 @@ connect()
     auto cleanup = [&] () {
         if (!success) {
             ::close(socketFd);
-            state_ = ClientTcpSocketState::DISCONNECTED;
+            state_ = ClientTcpSocketState::Disconnected;
             ML::futex_wake(state_);
         }
     };
@@ -164,8 +153,7 @@ connect()
                               buffer, sizeof(buffer),
                               &hostentryP, &hErrnoP);
         if (res == -1 || hostentry.h_addr_list == nullptr) {
-            cerr << "host is not valid\n";
-            onConnectionResult(ConnectionResult::HOST_UNKNOWN, {});
+            onConnectionResult(ConnectionResult::HostUnknown, {});
             return;
         }
         addr.sin_family = hostentry.h_addrtype;
@@ -177,7 +165,7 @@ connect()
                     (const struct sockaddr *) &addr, sizeof(sockaddr_in));
     if (res == -1) {
         if (errno != EINPROGRESS) {
-            onConnectionResult(ConnectionResult::COULD_NOT_CONNECT,
+            onConnectionResult(ConnectionResult::ConnectionFailure,
                                {});
             return;
         }
@@ -188,14 +176,14 @@ connect()
         registerFdCallback(socketFd, handleConnectionEventCb_);
         addFdOneShot(socketFd, false, true);
         enableQueue();
-        state_ = ClientTcpSocketState::CONNECTING;
+        state_ = ClientTcpSocketState::Connecting;
         // cerr << "connection in progress\n";
     }
     else {
         // cerr << "connection established\n";
         setFd(socketFd);
-        onConnectionResult(ConnectionResult::SUCCESS, {});
-        state_ = ClientTcpSocketState::CONNECTED;
+        onConnectionResult(ConnectionResult::Success, {});
+        state_ = ClientTcpSocketState::Connected;
     }
     ML::futex_wake(state_);
 
@@ -218,15 +206,15 @@ handleConnectionEvent(int socketFd, const ::epoll_event & event)
 
     ConnectionResult connResult;
     if (result == 0) {
-        connResult = SUCCESS;
+        connResult = Success;
     }
     else if (result == ENETUNREACH) {
-        connResult = HOST_UNKNOWN;
+        connResult = HostUnknown;
     }
     else if (result == ECONNREFUSED
              || result == EHOSTDOWN
              || result == EHOSTUNREACH) {
-        connResult = COULD_NOT_CONNECT;
+        connResult = ConnectionFailure;
     }
     else {
         throw ML::Exception("unhandled error:" + to_string(result));
@@ -235,16 +223,16 @@ handleConnectionEvent(int socketFd, const ::epoll_event & event)
     vector<string> lostMessages;
     removeFd(socketFd);
     unregisterFdCallback(socketFd);
-    if (connResult == SUCCESS) {
+    if (connResult == Success) {
         errno = 0;
         setFd(socketFd);
         // cerr << "connection successful\n";
-        state_ = ClientTcpSocketState::CONNECTED;
+        state_ = ClientTcpSocketState::Connected;
     }
     else {
         disableQueue();
         ::close(socketFd);
-        state_ = ClientTcpSocketState::DISCONNECTED;
+        state_ = ClientTcpSocketState::Disconnected;
         lostMessages = emptyMessageQueue();
     }
     ML::futex_wake(state_);
