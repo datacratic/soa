@@ -222,8 +222,8 @@ requestClose()
 {
     if (queueEnabled()) {
         disableQueue();
-        queue_.push_back("");
         closing_ = true;
+        queue_.push_back("");
     }
     else {
         throw ML::Exception("already closed/ing\n");

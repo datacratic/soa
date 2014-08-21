@@ -196,7 +196,7 @@ private:
     std::map<int, EpollCallback> fdCallbacks_;
 
     int fd_;
-    bool closing_;
+    std::atomic<bool> closing_;
     size_t readBufferSize_;
     bool writeReady_;
 
