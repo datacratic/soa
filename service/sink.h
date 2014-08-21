@@ -101,7 +101,7 @@ struct AsyncFdOutputSink : public AsyncWriterSource,
     void init(int outputFd);
 
     /* AsyncWriterSource */
-    void onDisconnected(bool fromPeer, const std::vector<std::string> & msgs);
+    void onClosed(bool fromPeer, const std::vector<std::string> & msgs);
 
     /* OutputSink interface */
     virtual bool write(std::string && data);
