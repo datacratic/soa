@@ -31,9 +31,9 @@ namespace Datacratic {
 
 struct AsyncWriterSource : public AsyncEventSource
 {
-    /* type of callback used when a pipe or socket has been disconnected */
+    /* type of callback used when the file descriptor has been closed */
     typedef std::function<void(bool,
-                               const std::vector<std::string> & msgs)> OnDisconnected;
+                               const std::vector<std::string> & msgs)> OnClosed;
 
     /* type of callback invoked when a string or a message has been written to
        the file descriptor */
@@ -48,7 +48,7 @@ struct AsyncWriterSource : public AsyncEventSource
     /* type of callback invoked whenever an uncaught exception occurs */
     typedef std::function<void(const std::exception_ptr &)> OnException;
 
-    AsyncWriterSource(const OnDisconnected & onDisconnected,
+    AsyncWriterSource(const OnClosed & onClosed,
                       const OnWriteResult & onWriteResult,
                       const OnReceivedData & onReceivedData,
                       const OnException & onException,
@@ -90,8 +90,11 @@ struct AsyncWriterSource : public AsyncEventSource
      * received, implying that "write" will never be invoked anymore */
     void requestClose();
 
-    /* invoked when the connection is closed */
-    virtual void onDisconnected(bool fromPeer,
+    /* invoked when the connection is closed, where "fromPeer" indicates
+     * whether the file descriptor was closed due to a call to "requestClose"
+     * or due to a pipe reset. In the latter case, "msgs" also contains all
+     * the unsent messages. */
+    virtual void onClosed(bool fromPeer,
                                 const std::vector<std::string> & msgs);
 
     /* invoked when the data is available for reading */
@@ -113,7 +116,7 @@ struct AsyncWriterSource : public AsyncEventSource
 
 protected:
     /* set the "main" file descriptor, for which epoll events are monitored
-     * and the onWriteResult, onReceivedData and onDisconnected callbacks are
+     * and the onWriteResult, onReceivedData and onClosed callbacks are
      * invoked automatically */
     void setFd(int fd);
     int getFd()
@@ -189,7 +192,7 @@ private:
     void handleWriteReady();
     void handleWriteResult(int error,
                            const std::string & written, size_t writtenSize);
-    void handleDisconnection(bool fromPeer);
+    void handleClosing(bool fromPeer);
     void handleException();
 
     /* wakeup operations */
@@ -201,7 +204,7 @@ private:
     std::map<int, EpollCallback> fdCallbacks_;
 
     int fd_;
-    bool closing_;
+    std::atomic<bool> closing_;
     size_t readBufferSize_;
     bool writeReady_;
 
@@ -214,7 +217,7 @@ private:
     uint64_t bytesReceived_;
     size_t msgsSent_;
 
-    OnDisconnected onDisconnected_;
+    OnClosed onClosed_;
     OnWriteResult onWriteResult_;
     OnReceivedData onReceivedData_;
     OnException onException_;

@@ -110,9 +110,8 @@ requestClose()
 
 void
 AsyncFdOutputSink::
-onDisconnected(bool fromPeer, const vector<string> & msgs)
+onClosed(bool fromPeer, const vector<string> & msgs)
 {
-    // cerr << "onDisconnected\n";
     if (fromPeer) {
         if (onHangup_) {
             onHangup_();

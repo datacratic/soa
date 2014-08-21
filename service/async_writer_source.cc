@@ -20,7 +20,7 @@ using namespace Datacratic;
 
 
 AsyncWriterSource::
-AsyncWriterSource(const OnDisconnected & onDisconnected,
+AsyncWriterSource(const OnClosed & onClosed,
                   const OnWriteResult & onWriteResult,
                   const OnReceivedData & onReceivedData,
                   const OnException & onException,
@@ -40,7 +40,7 @@ AsyncWriterSource(const OnDisconnected & onDisconnected,
       bytesSent_(0),
       bytesReceived_(0),
       msgsSent_(0),
-      onDisconnected_(onDisconnected),
+      onClosed_(onClosed),
       onReceivedData_(onReceivedData),
       onException_(onException)
 {
@@ -90,7 +90,7 @@ closeFd()
     ExcCheck(queue_.size() == 0, "message queue not empty");
     ExcCheck(fd_ != -1, "already closed (fd)");
 
-    handleDisconnection(false);
+    handleClosing(false);
 }
 
 void
@@ -141,6 +141,9 @@ handleReadReady()
                 break;
             }
             else if (errno == EBADF || errno == EINVAL) {
+                /* This happens when the pipe or socket was closed by the
+                   remote process before "read" was called (race
+                   condition). */
                 break;
             }
             if (s == -1) {
@@ -178,10 +181,10 @@ handleException()
 
 void
 AsyncWriterSource::
-onDisconnected(bool fromPeer, const vector<string> & msgs)
+onClosed(bool fromPeer, const vector<string> & msgs)
 {
-    if (onDisconnected_) {
-        onDisconnected_(fromPeer, msgs);
+    if (onClosed_) {
+        onClosed_(fromPeer, msgs);
     }
 }
 
@@ -222,8 +225,8 @@ requestClose()
 {
     if (queueEnabled()) {
         disableQueue();
-        queue_.push_back("");
         closing_ = true;
+        queue_.push_back("");
     }
     else {
         throw ML::Exception("already closed/ing\n");
@@ -336,7 +339,7 @@ flush()
             handleWriteResult(errno, currentLine_, currentSent_);
             currentLine_.clear();
             if (errno == EPIPE || errno == EBADF) {
-                handleDisconnection(true);
+                handleClosing(true);
                 break;
             }
             else {
@@ -362,7 +365,7 @@ handleFdEvent(const ::epoll_event & event)
         handleReadReady();
     }
     if ((event.events & EPOLLHUP) != 0) {
-        handleDisconnection(true);
+        handleClosing(true);
     }
 
     if (fd_ != -1) {
@@ -372,7 +375,7 @@ handleFdEvent(const ::epoll_event & event)
 
 void
 AsyncWriterSource::
-handleDisconnection(bool fromPeer)
+handleClosing(bool fromPeer)
 {
     if (fd_ != -1) {
         disableQueue();
@@ -383,7 +386,7 @@ handleDisconnection(bool fromPeer)
         writeReady_ = false;
 
         vector<string> lostMessages = queue_.pop_front(0);
-        onDisconnected(fromPeer, lostMessages);
+        onClosed(fromPeer, lostMessages);
     }
 }
 

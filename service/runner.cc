@@ -161,7 +161,9 @@ handleChildStatus(const struct epoll_event & event)
                     break;
                 }
                 else if (errno == EBADF || errno == EINVAL) {
-                    // cerr << "badf\n";
+                    /* This happens when the pipe or socket was closed by the
+                       remote process before "read" was called (race
+                       condition). */
                     break;
                 }
                 throw ML::Exception(errno, "Runner::handleChildStatus read");
@@ -273,6 +275,9 @@ handleOutputStatus(const struct epoll_event & event,
                     break;
                 }
                 else if (errno == EBADF || errno == EINVAL) {
+                    /* This happens when the pipe or socket was closed by the
+                       remote process before "read" was called (race
+                       condition). */
                     closedFd = true;
                     break;
                 }
