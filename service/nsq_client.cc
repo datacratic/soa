@@ -89,7 +89,7 @@ onReceivedData(const char * bufferData, size_t bufferSize)
             if (!parseUInt32(responseType)) {
                 return;
             }
-            parserFrame_.type = (NsqFrameFrameType) responseType;
+            parserFrame_.type = (NsqFrameType) responseType;
             parserRemaining_ -= 4;
         }
         if (parserStep_ == 2) {
@@ -143,12 +143,12 @@ NsqClient::
 handleFrame()
 {
     switch (parserFrame_.type) {
-    case NsqFrameFrameType::Response:
-    case NsqFrameFrameType::Error: {
+    case NsqFrameType::Response:
+    case NsqFrameType::Error: {
         handleCommandFrame();
         break;
     }
-    case NsqFrameFrameType::Message: {
+    case NsqFrameType::Message: {
         handleNsqMessage();
         break;
     }
@@ -191,11 +191,12 @@ handleNsqMessage()
     uint64_t nanos = be64toh(*(uint64_t *) data);
     double nanoDouble = (double) nanos;
     Date ts = Date::fromSecondsSinceEpoch(nanoDouble / 1000000000);
+    uint16_t attempts = ntohs(*(uint16_t *) (data + 8));
     string messageId(data + 10, 16);
     string message(data + 26,
                    parserFrame_.data.size() - 26);
 
-    onMessage(ts, messageId, message);
+    onMessage(ts, attempts, messageId, message);
 
     remainingRdy_--;
     if (remainingRdy_ == 0) {
@@ -205,11 +206,11 @@ handleNsqMessage()
 
 void 
 NsqClient::
-onMessage(Date ts, const string & messageId,
-          const string & message)
+onMessage(Date ts, uint16_t attempts,
+          const string & messageId, const string & message)
 {
     if (onMessage_) {
-        onMessage_(ts, messageId, message);
+        onMessage_(ts, attempts, messageId, message);
     }
 }
 

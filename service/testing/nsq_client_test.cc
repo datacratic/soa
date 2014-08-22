@@ -117,7 +117,8 @@ doSubscriberThread()
     set<string> ids;
     set<string> contents;
 
-    auto onMessage = [&] (Date ts, const string & messageId,
+    auto onMessage = [&] (Date ts, uint16_t attempts,
+                          const string & messageId,
                           const string & message) {
         last = Date::now();
         numReceived++;

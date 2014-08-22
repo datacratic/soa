@@ -47,14 +47,14 @@ CREATE_STRUCTURE_DESCRIPTION(NsqIdentifyPayload);
 /* NSQ FRAME                                                                */
 /****************************************************************************/
 
-enum NsqFrameFrameType {
+enum NsqFrameType {
     Response = 0,
     Error = 1,
     Message = 2
 };
 
 struct NsqFrame {
-    NsqFrameFrameType type;
+    NsqFrameType type;
     std::string data;
 };
 
@@ -65,7 +65,8 @@ struct NsqFrame {
 
 struct NsqClient : public TcpClient {
     typedef std::function<void (const NsqFrame &)> OnFrame;
-    typedef std::function<void (Date, const std::string &,
+    typedef std::function<void (Date, uint16_t,
+                                const std::string &,
                                 const std::string &)> OnMessage;
 
     NsqClient(OnClosed onClosed = nullptr,
@@ -93,7 +94,8 @@ struct NsqClient : public TcpClient {
 
     void fin(const std::string & messageId);
 
-    virtual void onMessage(Date ts, const std::string & messageId,
+    virtual void onMessage(Date ts, uint16_t attempts,
+                           const std::string & messageId,
                            const std::string & message);
 
 private:
