@@ -232,12 +232,10 @@ void
 HttpConnection::
 onConnectionResult(ConnectionResult result, const vector<string> & msgs)
 {
-    // cerr << " onConnectionResult: " + to_string(result) + "\n";
     if (result == ConnectionResult::Success) {
         startSendingRequest();
     }
     else {
-        cerr << " failure with result: "  + to_string(result) + "\n";
         handleEndOfRq(result, true);
     }
 }
@@ -328,21 +326,15 @@ void
 HttpConnection::
 handleEndOfRq(int code, bool requireClose)
 {
-    // ::fprintf(stderr, "%p: handleEndOfRq: %d, %d, %d\n",
-    //           this, code, requireClose, requestEnded_);
     if (requestEnded_) {
         // cerr << "ignoring extraneous end of request\n";
         ;
     }
     else {
         requestEnded_ = true;
-
-        // cerr << "handleEndOfRq: " << this << endl;
         cancelRequestTimer();
-
         if (requireClose) {
             lastCode_ = code;
-            // cerr << "request close\n";
             requestClose();
         }
         else {
@@ -362,7 +354,7 @@ finalizeEndOfRq(int code)
 
 void
 HttpConnection::
-onDisconnected(bool fromPeer, const std::vector<std::string> & msgs)
+onClosed(bool fromPeer, const std::vector<std::string> & msgs)
 {
     if (fromPeer) {
         ;
@@ -442,7 +434,6 @@ handleTimeoutEvent(const ::epoll_event & event)
                 throw ML::Exception(errno, "read");
             }
         }
-        // cerr << "ending request due to timeout\n";
         handleEndOfRq(ConnectionResult::Timeout, true);
     }
 }

@@ -95,7 +95,7 @@ struct AsyncWriterSource : public AsyncEventSource
      * or due to a pipe reset. In the latter case, "msgs" also contains all
      * the unsent messages. */
     virtual void onClosed(bool fromPeer,
-                                const std::vector<std::string> & msgs);
+                          const std::vector<std::string> & msgs);
 
     /* invoked when the data is available for reading */
     virtual void onReceivedData(const char * data, size_t size);

@@ -294,8 +294,8 @@ private:
     /* tcp_socket overrides */
     virtual void onConnectionResult(ConnectionResult result,
                                     const std::vector<std::string> & msgs);
-    virtual void onDisconnected(bool fromPeer,
-                                const std::vector<std::string> & msgs);
+    virtual void onClosed(bool fromPeer,
+                          const std::vector<std::string> & msgs);
     virtual void onWriteResult(int error,
                                const std::string & written,
                                size_t writtenSize);
