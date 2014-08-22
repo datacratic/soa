@@ -2,6 +2,7 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <iostream>
+#include <set>
 #include <thread>
 #include <boost/test/unit_test.hpp>
 
@@ -23,6 +24,9 @@ doPublisherThread()
     MessageLoop loop;
     loop.start();
 
+    Date start = Date::now();
+    Date last;
+
     int closed(true);
     auto onClosed = [&] (bool fromPeer,
                          const std::vector<std::string> & msgs) {
@@ -43,6 +47,7 @@ doPublisherThread()
 
     int numDone(0);
     auto onPub = [&] (const NsqFrame & response) {
+        last = Date::now();
         numDone++;
         if (numDone == numMessages) {
             cerr << "publisher: received response for all published messages\n";
@@ -62,7 +67,7 @@ doPublisherThread()
     cerr << "publisher: identify...\n";
     client->identify(onIdentify);
     
-    cerr << "publisher: waiting for all messages to be sent...\n";
+    cerr << "publisher: waiting 5 seconds of inactivity\n";
     while (numDone < numMessages) {
         cerr << "publisher: numDone = " + to_string(numDone) + "\n";
         ML::sleep(2.0);
@@ -81,7 +86,12 @@ doPublisherThread()
 
     cerr << "publisher: final numDone = " + to_string(numDone) + "\n";
 
-    cerr << "publisher: exit\n";
+    double delay = last - start;
+    double rate = double(numDone) / delay;
+    cerr << (string("published exiting:\n")
+             + "  sent " + to_string(numDone) + " messages in "
+             + to_string(delay) + " secs\n"
+             + "  "  + to_string(rate) + " msgs/sec\n");
 }
 
 void
@@ -89,6 +99,9 @@ doSubscriberThread()
 {
     MessageLoop loop;
     loop.start();
+
+    Date start = Date::now();
+    Date last = Date::now();
 
     int closed(true);
     auto onClosed = [&] (bool fromPeer,
@@ -100,9 +113,17 @@ doSubscriberThread()
 
     int numReceived(0);
     std::shared_ptr<NsqClient> client;
+
+    set<string> ids;
+    set<string> contents;
+
     auto onMessage = [&] (Date ts, const string & messageId,
                           const string & message) {
+        last = Date::now();
         numReceived++;
+        ids.insert(messageId);
+        contents.insert(message);
+        // cerr << "received: /" + message + "/\n";
         client->fin(messageId);
     };
 
@@ -123,9 +144,9 @@ doSubscriberThread()
     cerr << "subscriber: identify...\n";
     client->identify(onIdentify);
     
-    while (numReceived < numMessages) {
+    while (Date::now() < last.plusSeconds(5)) {
         cerr << "subscriber: numReceived = " + to_string(numReceived) + "\n";
-        ML::sleep(1.0);
+        ML::sleep(2.0);
     }
 
     client->requestClose();
@@ -139,8 +160,14 @@ doSubscriberThread()
 
     loop.shutdown();
 
-    cerr << "subscriber: final numReceived = " + to_string(numReceived) + "\n";
-    cerr << "subscriber: exit\n";
+    double delay = last - start;
+    double rate = double(numReceived) / delay;
+    cerr << (string("subscriber exiting:\n")
+             + "  received " + to_string(numReceived) + " messages in "
+             + to_string(delay) + " secs\n"
+             + "  "  + to_string(rate) + " msgs/sec\n"
+             + "  unique ids: " + to_string(ids.size()) + "\n"
+             + "  unique contents: " + to_string(contents.size()) + "\n");
 }
 
 
