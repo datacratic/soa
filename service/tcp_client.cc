@@ -19,42 +19,42 @@
 #include "jml/utils/guard.h"
 #include "soa/types/url.h"
 
-#include "tcp_socket.h"
+#include "tcp_client.h"
 
 using namespace std;
 using namespace Datacratic;
 
-ClientTcpSocket::
-ClientTcpSocket(OnConnectionResult onConnectionResult,
-                OnClosed onClosed,
-                OnWriteResult onWriteResult,
-                OnReceivedData onReceivedData,
-                OnException onException,
-                size_t maxMessages,
-                size_t recvBufSize)
+TcpClient::
+TcpClient(OnConnectionResult onConnectionResult,
+          OnClosed onClosed,
+          OnWriteResult onWriteResult,
+          OnReceivedData onReceivedData,
+          OnException onException,
+          size_t maxMessages,
+          size_t recvBufSize)
     : AsyncWriterSource(onClosed, onWriteResult, onReceivedData,
                         onException, maxMessages, recvBufSize),
       port_(-1),
-      state_(ClientTcpSocketState::Disconnected),
+      state_(TcpClientState::Disconnected),
       noNagle_(false),
       onConnectionResult_(onConnectionResult)
 {
 }
 
-ClientTcpSocket::
-~ClientTcpSocket()
+TcpClient::
+~TcpClient()
 {
 }
 
 void
-ClientTcpSocket::
+TcpClient::
 init(const string & url)
 {
     init(Url(url));
 }
 
 void
-ClientTcpSocket::
+TcpClient::
 init(const Url & url)
 {
     int port = url.url->EffectiveIntPort();
@@ -62,11 +62,11 @@ init(const Url & url)
 }
 
 void
-ClientTcpSocket::
+TcpClient::
 init(const string & address, int port)
 {
-    if (state_ == ClientTcpSocketState::Connecting
-        || state_ == ClientTcpSocketState::Connected) {
+    if (state_ == TcpClientState::Connecting
+        || state_ == TcpClientState::Connected) {
         throw ML::Exception("connection already pending or established");
     }
     if (address.empty()) {
@@ -80,7 +80,7 @@ init(const string & address, int port)
 }
 
 void
-ClientTcpSocket::
+TcpClient::
 setUseNagle(bool useNagle)
 {
     if (state() != Disconnected) {
@@ -91,20 +91,20 @@ setUseNagle(bool useNagle)
 }
 
 void
-ClientTcpSocket::
+TcpClient::
 connect()
 {
     // cerr << "connect...\n";
     ExcCheck(state() == Disconnected, "socket is not closed");
     ExcCheck(!address_.empty(), "no address set");
 
-    state_ = ClientTcpSocketState::Connecting;
+    state_ = TcpClientState::Connecting;
     ML::futex_wake(state_);
 
     int res = ::socket(AF_INET,
                        SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (res == -1) {
-        state_ = ClientTcpSocketState::Disconnected;
+        state_ = TcpClientState::Disconnected;
         ML::futex_wake(state_);
         throw ML::Exception(errno, "socket");
     }
@@ -117,7 +117,7 @@ connect()
     auto cleanup = [&] () {
         if (!success) {
             ::close(socketFd);
-            state_ = ClientTcpSocketState::Disconnected;
+            state_ = TcpClientState::Disconnected;
             ML::futex_wake(state_);
         }
     };
@@ -176,14 +176,14 @@ connect()
         registerFdCallback(socketFd, handleConnectionEventCb_);
         addFdOneShot(socketFd, false, true);
         enableQueue();
-        state_ = ClientTcpSocketState::Connecting;
+        state_ = TcpClientState::Connecting;
         // cerr << "connection in progress\n";
     }
     else {
         // cerr << "connection established\n";
         setFd(socketFd);
         onConnectionResult(ConnectionResult::Success, {});
-        state_ = ClientTcpSocketState::Connected;
+        state_ = TcpClientState::Connected;
     }
     ML::futex_wake(state_);
 
@@ -192,7 +192,7 @@ connect()
 }
 
 void
-ClientTcpSocket::
+TcpClient::
 handleConnectionEvent(int socketFd, const ::epoll_event & event)
 {
     // cerr << "handle connection result\n";
@@ -227,12 +227,12 @@ handleConnectionEvent(int socketFd, const ::epoll_event & event)
         errno = 0;
         setFd(socketFd);
         // cerr << "connection successful\n";
-        state_ = ClientTcpSocketState::Connected;
+        state_ = TcpClientState::Connected;
     }
     else {
         disableQueue();
         ::close(socketFd);
-        state_ = ClientTcpSocketState::Disconnected;
+        state_ = TcpClientState::Disconnected;
         lostMessages = emptyMessageQueue();
     }
     ML::futex_wake(state_);
@@ -240,7 +240,7 @@ handleConnectionEvent(int socketFd, const ::epoll_event & event)
 }
 
 void
-ClientTcpSocket::
+TcpClient::
 onConnectionResult(ConnectionResult result, const vector<string> & msgs)
 {
     if (onConnectionResult_) {

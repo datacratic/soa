@@ -1,4 +1,4 @@
-/* tcp_socket.h                                                -*- C++ -*-
+/* tcp_client.h                                                    -*- C++ -*-
    Wolfgang Sourdeau, April 2014
    Copyright (c) 2014 Datacratic.  All rights reserved.
 
@@ -38,7 +38,7 @@ enum ConnectionResult {
 /* CLIENT TCP SOCKET STATE                                                  */
 /****************************************************************************/
 
-enum ClientTcpSocketState {
+enum TcpClientState {
     Disconnected,
     Connecting,
     Connected
@@ -52,12 +52,12 @@ enum ClientTcpSocketState {
 /* A class that handles the asynchronous opening and connection of TCP
  * sockets. */
 
-struct ClientTcpSocket : public AsyncWriterSource
+struct TcpClient : public AsyncWriterSource
 {
     typedef std::function<void(ConnectionResult, const std::vector<std::string> &)>
         OnConnectionResult;
 
-    ClientTcpSocket(OnConnectionResult onConnectionResult = nullptr,
+    TcpClient(OnConnectionResult onConnectionResult = nullptr,
                     OnClosed onClosed = nullptr,
                     OnWriteResult onWriteResult = nullptr,
                     OnReceivedData onReceivedData = nullptr,
@@ -65,7 +65,7 @@ struct ClientTcpSocket : public AsyncWriterSource
                     size_t maxMessages = 32,
                     size_t recvBufSize = 65536);
 
-    virtual ~ClientTcpSocket();
+    virtual ~TcpClient();
 
     /* utility functions to defined the target service */
     void init(const std::string & url);
@@ -83,8 +83,8 @@ struct ClientTcpSocket : public AsyncWriterSource
                                     const std::vector<std::string> & msgs);
 
     /* state of the connection */
-    ClientTcpSocketState state() const
-    { return ClientTcpSocketState(state_); }
+    TcpClientState state() const
+    { return TcpClientState(state_); }
 
 private:
     void handleConnectionEvent(int socketFd, const ::epoll_event & event);
@@ -92,7 +92,7 @@ private:
 
     std::string address_;
     int port_;
-    int state_; /* ClientTcpSocketState */
+    int state_; /* TcpClientState */
     bool noNagle_;
 
     EpollCallback handleConnectionEventCb_;
