@@ -49,7 +49,6 @@ LIBSERVICES_SOURCES := \
 	rest_request_binding.cc \
 	runner.cc \
 	sink.cc \
-	tcp_socket.cc \
 	zookeeper.cc \
 	http_client.cc \
 	http_parsers.cc \

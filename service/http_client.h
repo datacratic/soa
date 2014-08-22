@@ -46,7 +46,7 @@
 #include "soa/service/http_header.h"
 #include "soa/service/http_parsers.h"
 #include "soa/service/typed_message_channel.h"
-#include "soa/service/tcp_socket.h"
+#include "soa/service/tcp_client.h"
 
 
 namespace Datacratic {
@@ -266,7 +266,7 @@ private:
 
 /* HTTP CONNECTION */
 
-struct HttpConnection : ClientTcpSocket {
+struct HttpConnection : TcpClient {
     typedef std::function<void (int)> OnDone;
 
     enum HttpState {
