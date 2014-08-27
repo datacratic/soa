@@ -41,6 +41,7 @@ AsyncWriterSource(const OnClosed & onClosed,
       bytesReceived_(0),
       msgsSent_(0),
       onClosed_(onClosed),
+      onWriteResult_(onWriteResult),
       onReceivedData_(onReceivedData),
       onException_(onException)
 {
@@ -466,4 +467,11 @@ removeFd(int fd)
         throw ML::Exception("inconsistent number of fds registered");
     }
     numFds_--;
+}
+
+std::vector<std::string>
+AsyncWriterSource::
+emptyMessageQueue()
+{
+    return queue_.pop_front(0);
 }

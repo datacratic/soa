@@ -10,7 +10,12 @@
 #include <sys/epoll.h>
 
 #include <atomic>
+#include <queue>
+#include <vector>
 #include <string>
+#include <map>
+#include <functional>
+#include <exception>
 
 #include "jml/utils/ring_buffer.h"
 
@@ -177,10 +182,7 @@ protected:
        registry */
     void unregisterFdCallback(int fd);
 
-    std::vector<std::string> emptyMessageQueue()
-    {
-        return queue_.pop_front(0);
-    }
+    std::vector<std::string> emptyMessageQueue();
 
 private:
     void performAddFd(int fd, bool readerFd, bool writerFd,
