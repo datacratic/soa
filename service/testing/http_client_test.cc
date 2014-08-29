@@ -134,7 +134,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://123.234.12.23");
         auto resp = doGetRequest(baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
-                          ConnectionResult::COULD_NOT_CONNECT);
+                          TcpConnectionCode::COULD_NOT_CONNECT);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
     }
 #endif
@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://somewhere.lost");
         auto resp = doGetRequest(baseUrl, "/");
         BOOST_CHECK_EQUAL(get<0>(resp),
-                          ConnectionResult::HOST_UNKNOWN);
+                          TcpConnectionCode::HOST_UNKNOWN);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
     }
 #endif
@@ -159,7 +159,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
         auto resp = doGetRequest(baseUrl, "/timeout", {}, {}, 1);
         BOOST_CHECK_EQUAL(get<0>(resp),
-                          ConnectionResult::Timeout);
+                          TcpConnectionCode::Timeout);
         BOOST_CHECK_EQUAL(get<1>(resp), 0);
     }
 
@@ -168,7 +168,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         ::fprintf(stderr, "testing behaviour with connection: close\n");
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
         auto resp = doGetRequest(baseUrl, "/connection-close");
-        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::Success);
+        BOOST_CHECK_EQUAL(get<0>(resp), TcpConnectionCode::Success);
         BOOST_CHECK_EQUAL(get<1>(resp), 204);
     }
 
@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
         auto resp = doGetRequest(baseUrl, "/nothing");
-        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::Success);
+        BOOST_CHECK_EQUAL(get<0>(resp), TcpConnectionCode::Success);
         BOOST_CHECK_EQUAL(get<1>(resp), 404);
     }
 
@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
         auto resp = doGetRequest(baseUrl, "/coucou");
-        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::Success);
+        BOOST_CHECK_EQUAL(get<0>(resp), TcpConnectionCode::Success);
         BOOST_CHECK_EQUAL(get<1>(resp), 200);
         BOOST_CHECK_EQUAL(get<2>(resp), "coucou");
     }
@@ -232,7 +232,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_post )
                        + to_string(service.port()));
         auto resp = doUploadRequest(false, baseUrl, "/post-test",
                                     "post body", "application/x-nothing");
-        BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::Success);
+        BOOST_CHECK_EQUAL(get<0>(resp), TcpConnectionCode::Success);
         BOOST_CHECK_EQUAL(get<1>(resp), 200);
         Json::Value jsonBody = Json::parse(get<2>(resp));
         BOOST_CHECK_EQUAL(jsonBody["verb"], "POST");
@@ -259,7 +259,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     }
     auto resp = doUploadRequest(true, baseUrl, "/put-test",
                                 bigBody, "application/x-nothing");
-    BOOST_CHECK_EQUAL(get<0>(resp), ConnectionResult::Success);
+    BOOST_CHECK_EQUAL(get<0>(resp), TcpConnectionCode::Success);
     BOOST_CHECK_EQUAL(get<1>(resp), 200);
     Json::Value jsonBody = Json::parse(get<2>(resp));
     BOOST_CHECK_EQUAL(jsonBody["verb"], "PUT");

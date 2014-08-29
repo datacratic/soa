@@ -224,19 +224,15 @@ perform(HttpRequest && request)
         startSendingRequest();
     }
     else {
-        connect();
-    }
-}
-
-void
-HttpConnection::
-onConnectionResult(ConnectionResult result, const vector<string> & msgs)
-{
-    if (result == ConnectionResult::Success) {
-        startSendingRequest();
-    }
-    else {
-        handleEndOfRq(result, true);
+        auto onConnectionResult = [&] (TcpConnectionResult result) {
+            if (result.code == TcpConnectionCode::Success) {
+                startSendingRequest();
+            }
+            else {
+                handleEndOfRq(result.code, true);
+            }
+        };
+        connect(onConnectionResult);
     }
 }
 
@@ -250,25 +246,22 @@ startSendingRequest()
         rqData.append(content.data(), content.size());
     }
     responseState_ = PENDING;
-    write(move(rqData));
-    armRequestTimer();
-}
 
-void
-HttpConnection::
-onWriteResult(int error, const string & written, size_t writtenSize)
-{
-    if (error == 0) {
-        if (responseState_ == PENDING) {
-            responseState_ = IDLE;
+    auto onWriteResult = [&] (AsyncWriteResult result) {
+        if (result.error == 0) {
+            if (responseState_ == PENDING) {
+                responseState_ = IDLE;
+            }
+            else {
+                throw ML::Exception("invalid state");
+            }
         }
         else {
-            throw ML::Exception("invalid state");
+            throw ML::Exception("unhandled error");
         }
-    }
-    else {
-        throw ML::Exception("unhandled error");
-    }
+    };
+    write(move(rqData), onWriteResult);
+    armRequestTimer();
 }
 
 void
@@ -434,7 +427,7 @@ handleTimeoutEvent(const ::epoll_event & event)
                 throw ML::Exception(errno, "read");
             }
         }
-        handleEndOfRq(ConnectionResult::Timeout, true);
+        handleEndOfRq(TcpConnectionCode::Timeout, true);
     }
 }
 
