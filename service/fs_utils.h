@@ -72,7 +72,7 @@ OnUriObject;
 struct UrlFsHandler {
     virtual FsObjectInfo getInfo(const Url & url) const = 0;
 
-    virtual size_t getSize(const Url & url) const;
+    virtual int64_t getSize(const Url & url) const;
     virtual std::string getEtag(const Url & url) const;
 
     virtual void makeDirectory(const Url & url) const = 0;
@@ -101,11 +101,11 @@ void registerUrlFsHandler(const std::string & scheme,
 FsObjectInfo getUriObjectInfo(const std::string & filename);
 
 // Return the object info for either a file or an S3 object, or null if
-// it doesn't exist
-FsObjectInfo tryGetUriObjectInfo(const std::string & filename);
+// it doesn't exist (deprecated, use getUriObjectInfo instead)
+FsObjectInfo tryGetUriObjectInfo(const std::string & filename) __attribute__((__deprecated__));
 
 // Return an URI for either a file or an s3 object
-size_t getUriSize(const std::string & filename);
+int64_t getUriSize(const std::string & filename);
 
 // Return an etag for either a file or an s3 object
 std::string getUriEtag(const std::string & filename);

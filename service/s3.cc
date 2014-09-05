@@ -57,7 +57,7 @@ struct S3UrlFsHandler : public UrlFsHandler {
     {
         string bucket = url.host();
         auto api = getS3ApiForBucket(bucket);
-        return api->getObjectInfo(bucket, url.path().substr(1));
+        return api->tryGetObjectInfo(bucket, url.path().substr(1));
     }
 
     virtual void makeDirectory(const Url & url) const
