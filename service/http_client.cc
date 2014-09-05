@@ -452,7 +452,7 @@ HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
         connection->onDone = [&, connPtr] (int result) {
             handleHttpConnectionDone(connPtr, result);
         };
-        addSourceRightAway("connection" + to_string(i), connection);
+        addSource("connection" + to_string(i), connection);
         avlConnections_[i] = connPtr;
     }
     addSource("queue", queue_);
