@@ -406,38 +406,6 @@ struct S3Api : public AwsApi {
                   const std::string & outfile,
                   ssize_t endOffset = -1) const;
 
-    /** Get a streambuf that will allow a bucket to be streamed through.  If
-        an onChunk is provided, downloaded chunks will also be provided
-        to that method.
-    */
-    std::unique_ptr<std::streambuf>
-    streamingDownload(const std::string & bucket,
-                      const std::string & object,
-                      ssize_t startOffset = 0,
-                      ssize_t endOffset = -1) const;
-
-    /** Get a streambuf that will allow a bucket to be streamed through.  If
-        an onChunk is provided, downloaded chunks will also be provided
-        to that method.
-    */
-    std::unique_ptr<std::streambuf>
-    streamingDownload(const std::string & uri,
-                      ssize_t startOffset = 0,
-                      ssize_t endOffset = -1) const;
-
-    /** Get a streambuf that will write to s3 when written to. */
-    std::unique_ptr<std::streambuf>
-    streamingUpload(const std::string & uri,
-                    const ML::OnUriHandlerException & onException,
-                    const ObjectMetadata & md = ObjectMetadata()) const;
-
-    /** Get a streambuf that will write to s3 when written to. */
-    std::unique_ptr<std::streambuf>
-    streamingUpload(const std::string & bucket,
-                    const std::string & object,
-                    const ML::OnUriHandlerException & onException,
-                    const ObjectMetadata & md = ObjectMetadata()) const;
-
     struct ObjectInfo : public FsObjectInfo {
         ObjectInfo()
         {}
@@ -654,6 +622,29 @@ private:
     static Redundancy defaultRedundancy;
 
 };
+
+/** Get a streambuf that will allow a bucket to be streamed through. */
+std::unique_ptr<std::streambuf>
+makeStreamingDownload(const std::string & bucket, const std::string & object);
+
+/** Get a streambuf that will allow a bucket to be streamed through. */
+std::unique_ptr<std::streambuf>
+makeStreamingDownload(const std::string & uri);
+
+/** Get a streambuf that will write to s3 when written to. */
+std::unique_ptr<std::streambuf>
+makeStreamingUpload(const std::string & uri,
+                    const ML::OnUriHandlerException & onException,
+                    const S3Api::ObjectMetadata & md
+                    = S3Api::ObjectMetadata());
+
+/** Get a streambuf that will write to s3 when written to. */
+std::unique_ptr<std::streambuf>
+makeStreamingUpload(const std::string & bucket, const std::string & object,
+                    const ML::OnUriHandlerException & onException,
+                    const S3Api::ObjectMetadata & md
+                    = S3Api::ObjectMetadata());
+
 
 struct S3Handle{
     S3Api s3;
