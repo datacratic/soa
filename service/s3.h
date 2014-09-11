@@ -623,29 +623,6 @@ private:
 
 };
 
-/** Get a streambuf that will allow a bucket to be streamed through. */
-std::unique_ptr<std::streambuf>
-makeStreamingDownload(const std::string & bucket, const std::string & object);
-
-/** Get a streambuf that will allow a bucket to be streamed through. */
-std::unique_ptr<std::streambuf>
-makeStreamingDownload(const std::string & uri);
-
-/** Get a streambuf that will write to s3 when written to. */
-std::unique_ptr<std::streambuf>
-makeStreamingUpload(const std::string & uri,
-                    const ML::OnUriHandlerException & onException,
-                    const S3Api::ObjectMetadata & md
-                    = S3Api::ObjectMetadata());
-
-/** Get a streambuf that will write to s3 when written to. */
-std::unique_ptr<std::streambuf>
-makeStreamingUpload(const std::string & bucket, const std::string & object,
-                    const ML::OnUriHandlerException & onException,
-                    const S3Api::ObjectMetadata & md
-                    = S3Api::ObjectMetadata());
-
-
 struct S3Handle{
     S3Api s3;
     std::string s3UriPrefix;

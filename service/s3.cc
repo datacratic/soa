@@ -1936,8 +1936,6 @@ struct StreamingUploadSource {
         auto s3Api = getS3ApiForUri(urlStr);
         Url url(urlStr);
 
-        cerr << "host: " + url.host() + "\n";
-        cerr << "path: " + url.path() + "\n";
         impl.reset(new Impl());
         impl->owner = s3Api;
         impl->bucket = url.host();
