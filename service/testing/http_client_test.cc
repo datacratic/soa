@@ -9,6 +9,7 @@
 #include "jml/utils/testing/watchdog.h"
 #include "soa/service/rest_proxy.h"
 #include "soa/service/http_client.h"
+#include "soa/utils/print_utils.h"
 
 #include "test_http_services.h"
 
@@ -265,6 +266,66 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     BOOST_CHECK_EQUAL(jsonBody["verb"], "PUT");
     BOOST_CHECK_EQUAL(jsonBody["payload"], bigBody);
     BOOST_CHECK_EQUAL(jsonBody["type"], "application/x-nothing");
+}
+#endif
+
+#if 1
+BOOST_AUTO_TEST_CASE( test_http_client_put_multi )
+{
+    cerr << "client_put_multi\n";
+    auto proxies = make_shared<ServiceProxies>();
+    HttpUploadService service(proxies);
+    service.start();
+
+    string baseUrl("http://127.0.0.1:"
+                   + to_string(service.port()));
+
+    HttpClient client(baseUrl);
+    client.start();
+
+    size_t maxRequests(500);
+    int done(0);
+
+    auto makeBody = [&] (size_t i) {
+        int multiplier = (i < maxRequests / 2) ? -2 : 2;
+        size_t bodySize = 2000 + multiplier * i;
+        string body = ML::format("%.4x", bodySize);
+        size_t rndSize = bodySize - body.size();
+        body += randomString(rndSize);
+
+        return body;
+    };
+
+    for (size_t i = 0; i < maxRequests; i++) {
+        auto sendBody = makeBody(i);
+        auto onResponse = [&, sendBody] (const HttpRequest & rq,
+                                         int error,
+                                         int status,
+                                         string && headers,
+                                         string && body) {
+            BOOST_CHECK_EQUAL(error, TcpConnectionCode::Success);
+            BOOST_CHECK_EQUAL(status, 200);
+            Json::Value jsonBody = Json::parse(body);
+            BOOST_CHECK_EQUAL(jsonBody["verb"], "PUT");
+            BOOST_CHECK_EQUAL(jsonBody["payload"], sendBody);
+            BOOST_CHECK_EQUAL(jsonBody["type"], "text/plain");
+            done++;
+            if (done == maxRequests) {
+                ML::futex_wake(done);
+            }
+        };
+
+        auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
+        MimeContent content(sendBody, "text/plain");
+        while (!client.put(baseUrl, cbs, content)) {
+            ML::sleep(0.2);
+        }
+    };
+
+    while (done < maxRequests) {
+        int oldDone = done;
+        ML::futex_wait(done, oldDone);
+    }
 }
 #endif
 
