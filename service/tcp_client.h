@@ -98,7 +98,7 @@ struct TcpClient : public AsyncWriterSource
     /* utility functions to defined the target service */
     void init(const std::string & url);
     void init(const Url & url);
-    void init(const std::string & address, int port);
+    void init(const std::string & hostname, int port);
 
     /* disable the Nagle algorithm (TCP_NODELAY) */
     void setUseNagle(bool useNagle);
@@ -115,7 +115,7 @@ private:
                                OnConnectionResult onConnectionResult);
     void handleConnectionResult();
 
-    std::string address_;
+    std::string hostname_;
     int port_;
     int state_; /* TcpClientState */
     bool noNagle_;
