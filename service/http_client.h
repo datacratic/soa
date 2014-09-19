@@ -397,6 +397,11 @@ struct HttpClient : public MessageLoop {
                               queryParams, headers, timeout);
     }
 
+    size_t queuedRequests()
+    {
+        return queue_.size();
+    }
+
     HttpClient & operator = (HttpClient && other) = delete;
     HttpClient & operator = (const HttpClient & other) = delete;
 
