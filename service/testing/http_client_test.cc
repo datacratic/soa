@@ -23,12 +23,15 @@ namespace {
 
 typedef tuple<int, int, string> ClientResponse;
 
+#define CALL_MEMBER_FN(object, pointer)  (object.*(pointer))
+
 /* sync request helpers */
+template<typename Func>
 ClientResponse
-doGetRequest(const string & baseUrl, const string & resource,
-             const RestParams & queryParams = RestParams(),
-             const RestParams & headers = RestParams(),
-             int timeout = -1)
+doRequest(const string & baseUrl, const string & resource,
+          Func func,
+          const RestParams & queryParams, const RestParams & headers,
+          int timeout = -1)
 {
     ClientResponse response;
 
@@ -52,20 +55,37 @@ doGetRequest(const string & baseUrl, const string & resource,
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
 
-    if (timeout == -1) {
-        client.get(resource, cbs, queryParams, headers);
-    }
-    else {
-        client.get(resource, cbs, queryParams, headers,
-                   timeout);
-    }
+    CALL_MEMBER_FN(client, func)(resource, cbs, queryParams, headers,
+                                 timeout);
 
     while (!done) {
         int oldDone = done;
         ML::futex_wait(done, oldDone);
     }
 
+    client.shutdown();
+
     return response;
+}
+
+ClientResponse
+doGetRequest(const string & baseUrl, const string & resource,
+             const RestParams & queryParams = RestParams(),
+             const RestParams & headers = RestParams(),
+             int timeout = -1)
+{
+    return doRequest(baseUrl, resource, &HttpClient::get,
+                     queryParams, headers, timeout);
+}
+
+ClientResponse
+doDeleteRequest(const string & baseUrl, const string & resource,
+                const RestParams & queryParams = RestParams(),
+                const RestParams & headers = RestParams(),
+                int timeout = -1)
+{
+    return doRequest(baseUrl, resource, &HttpClient::del,
+                     queryParams, headers, timeout);
 }
 
 ClientResponse
@@ -266,6 +286,26 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     BOOST_CHECK_EQUAL(jsonBody["verb"], "PUT");
     BOOST_CHECK_EQUAL(jsonBody["payload"], bigBody);
     BOOST_CHECK_EQUAL(jsonBody["type"], "application/x-nothing");
+}
+#endif
+
+#if 1
+BOOST_AUTO_TEST_CASE( http_test_client_delete )
+{
+    cerr << "client_delete" << endl;
+    ML::Watchdog watchdog(10);
+
+    auto proxies = make_shared<ServiceProxies>();
+    HttpGetService service(proxies);
+
+    service.addResponse("DELETE", "/deleteMe", 200, "Deleted");
+    service.start();
+
+    string baseUrl("http://127.0.0.1:" + to_string(service.port()));
+    auto resp = doDeleteRequest(baseUrl, "/deleteMe", {}, {}, 1);
+
+    BOOST_CHECK_EQUAL(get<0>(resp), TcpConnectionCode::Success);
+    BOOST_CHECK_EQUAL(get<1>(resp), 200);
 }
 #endif
 
