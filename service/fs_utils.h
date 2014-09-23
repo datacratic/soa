@@ -71,7 +71,6 @@ OnUriObject;
 
 struct UrlFsHandler {
     virtual FsObjectInfo getInfo(const Url & url) const = 0;
-    virtual FsObjectInfo tryGetInfo(const Url & url) const = 0;
 
     virtual int64_t getSize(const Url & url) const;
     virtual std::string getEtag(const Url & url) const;
