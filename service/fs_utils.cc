@@ -178,6 +178,9 @@ struct AtInit {
 /* ensures that local filenames are represented as urls */
 Url makeUrl(const string & urlStr)
 {
+    if (urlStr.empty())
+        throw ML::Exception("can't makeUrl on empty url");
+
     /* scheme is specified */
     if (urlStr.find("://") != string::npos) {
         return Url(urlStr);
@@ -239,14 +242,17 @@ void registerUrlFsHandler(const std::string & scheme,
 FsObjectInfo
 getUriObjectInfo(const std::string & url)
 {
-    Url realUrl = makeUrl(url);
-    return findFsHandler(realUrl.scheme())->getInfo(realUrl);
+    FsObjectInfo info = tryGetUriObjectInfo(url);
+    if (!info) {
+        throw ML::Exception("object does not exist at: " + url);
+    }
 }
 
 FsObjectInfo
 tryGetUriObjectInfo(const std::string & url)
 {
-    return getUriObjectInfo(url);
+    Url realUrl = makeUrl(url);
+    return findFsHandler(realUrl.scheme())->getInfo(realUrl);
 }
 
 int64_t
@@ -269,7 +275,7 @@ makeUriDirectory(const std::string & url)
     string dirUrl(url);
     size_t slashIdx = dirUrl.rfind('/');
     if (slashIdx == string::npos) {
-        throw ML::Exception("makeUriDirectory cannot work on filenames");
+        throw ML::Exception("makeUriDirectory cannot work on filenames: instead of " + url + " you should probably write file://" + url);
     }
     dirUrl.resize(slashIdx);
 
