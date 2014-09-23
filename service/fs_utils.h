@@ -97,18 +97,18 @@ void registerUrlFsHandler(const std::string & scheme,
 /* FREE FUNCTIONS                                                            */
 /*****************************************************************************/
 
-// Return the object info for either a file or an S3 object
-FsObjectInfo getUriObjectInfo(const std::string & filename);
+// Return the object info for the given url and throws if it does not exist
+FsObjectInfo getUriObjectInfo(const std::string & url);
 
-// Return the object info for either a file or an S3 object, or null if
-// it doesn't exist (deprecated, use getUriObjectInfo instead)
-FsObjectInfo tryGetUriObjectInfo(const std::string & filename) __attribute__((__deprecated__));
+// Return the object info for either a file or an S3 object or an empty
+// FsObjectInfo it doesn't exist
+FsObjectInfo tryGetUriObjectInfo(const std::string & url);
 
-// Return an URI for either a file or an s3 object
-int64_t getUriSize(const std::string & filename);
+// Return the file size for the given url
+int64_t getUriSize(const std::string & url);
 
 // Return an etag for either a file or an s3 object
-std::string getUriEtag(const std::string & filename);
+std::string getUriEtag(const std::string & url);
 
 /* Create the directories for the given path.  For S3 it does nothing;
    for normal directories it does mkdir -p
