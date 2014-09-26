@@ -1978,8 +1978,8 @@ struct StreamingUploadSource {
 
     struct Impl {
         Impl()
-            : offset(0), chunkIndex(0), shutdown(false),
-              chunks(16)
+            : offset(0), chunkIndex(0), shutdown(false), chunks(16),
+              exceptionThrown(false), uploadAborted(false)
         {
         }
 
@@ -2075,6 +2075,8 @@ struct StreamingUploadSource {
         std::mutex etagsLock;
         std::vector<std::string> etags;
         std::exception_ptr exc;
+        bool exceptionThrown;
+        bool uploadAborted;
         ML::OnUriHandlerException onException;
 
         void start()
@@ -2108,8 +2110,10 @@ struct StreamingUploadSource {
 
         std::streamsize write(const char_type* s, std::streamsize n)
         {
-            if (exc)
-                std::rethrow_exception(exc);
+            if (exc) {
+                handleException();
+                return 0;
+            }
 
             size_t done = current.append(s, n);
             offset += done;
@@ -2121,8 +2125,10 @@ struct StreamingUploadSource {
             //cerr << "writing " << n << " characters returned "
             //     << done << endl;
 
-            if (exc)
-                std::rethrow_exception(exc);
+            if (exc) {
+                handleException();
+                return 0;
+            }
 
             return done;
         }
@@ -2142,6 +2148,11 @@ struct StreamingUploadSource {
 
         void finish()
         {
+            if (exc) {
+                handleException();
+                return;
+            }
+
             // cerr << "pushing last chunk " << chunkIndex << endl;
             flush();
 
@@ -2159,22 +2170,16 @@ struct StreamingUploadSource {
             // Make sure that an exception in uploading the last chunk doesn't
             // lead to a corrupt (truncated) file
             if (exc) {
-                if (!metadata.commitOnThrow) {
-                    owner->abortMultiPartUpload(bucket, "/" + object,
-                                                uploadId);
-                }
-                std::rethrow_exception(exc);
+                handleException();
+                return;
             }
 
             try {
-                 owner->finishMultiPartUpload(bucket, "/" + object,
-                                              uploadId, etags);
+                owner->finishMultiPartUpload(bucket, "/" + object, uploadId,
+                                             etags);
             }
             catch (...) {
-                if (!metadata.commitOnThrow) {
-                    owner->abortMultiPartUpload(bucket, "/" + object,
-                                                uploadId);
-                }
+                owner->abortMultiPartUpload(bucket, "/" + object, uploadId);
                 onException();
                 throw;
             }
@@ -2187,14 +2192,28 @@ struct StreamingUploadSource {
             //      << "MB/s" << " to " << etag << endl;
         }
 
+        void handleException()
+        {
+            if (!uploadAborted) {
+                owner->abortMultiPartUpload(bucket, "/" + object, uploadId);
+                uploadAborted = true;
+            }
+            if (!exceptionThrown) {
+                exceptionThrown = true;
+                std::rethrow_exception(exc);
+            }
+        }
+
         /* upload threads */
         void runThread()
         {
             while (!shutdown) {
                 Chunk chunk;
                 if (chunks.tryPop(chunk, 0.01)) {
-                    if (exc)
+                    if (exc) {
+                        while (chunks.tryPop(chunk));
                         return;
+                    }
                     try {
                         //cerr << "got chunk " << chunk.index
                         //     << " with " << chunk.size << " bytes at index "
@@ -2559,9 +2578,6 @@ struct RegisterS3Handler {
                 }
                 else if (name == "num-threads") {
                     md.numThreads = std::stoi(value);
-                }
-                else if (name == "commit-on-throw") {
-                    md.commitOnThrow = std::stoi(value);
                 }
                 else if (name == "throw-chunk") {
                     md.throwChunk = std::stoi(value);
