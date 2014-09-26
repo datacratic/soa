@@ -2187,6 +2187,7 @@ struct StreamingUploadSource {
             //      << "MB/s" << " to " << etag << endl;
         }
 
+        /* upload threads */
         void runThread()
         {
             while (!shutdown) {
@@ -2199,6 +2200,11 @@ struct StreamingUploadSource {
                         //     << " with " << chunk.size << " bytes at index "
                         //     << chunk.index << endl;
 
+                        if (chunk.index == metadata.throwChunk) {
+                            throw ML::Exception("deterministic upload"
+                                                " exception at chunk %d",
+                                                chunk.index);
+                        }
                         // Upload the data
                         string md5 = md5HashToHex(chunk.data, chunk.size);
 
@@ -2209,10 +2215,6 @@ struct StreamingUploadSource {
                                                     S3Api::Content(chunk.data,
                                                                    chunk.size,
                                                                    md5));
-                        if (chunk.index == metadata.throwChunk) {
-                            throw ML::Exception("deterministic upload"
-                                                " exception");
-                        }
                         if (putResult.code_ != 200) {
                             cerr << putResult.bodyXmlStr() << endl;
 
