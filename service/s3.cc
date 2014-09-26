@@ -890,6 +890,19 @@ finishMultiPartUpload(const std::string & bucket,
 }
 
 void
+S3Api::
+abortMultiPartUpload(const std::string & bucket,
+                     const std::string & resource,
+                     const std::string & uploadId)
+    const
+{
+    auto result = erase(bucket, resource, "uploadId=" + uploadId);
+    if (result.code_ != 204) {
+        throw ML::Exception("error aborting multipart upload: " + uploadId);
+    }
+}
+
+void
 S3Api::MultiPartUploadPart::
 fromXml(tinyxml2::XMLElement * element)
 {
@@ -2129,8 +2142,6 @@ struct StreamingUploadSource {
 
         void finish()
         {
-            if (exc)
-                std::rethrow_exception(exc);
             // cerr << "pushing last chunk " << chunkIndex << endl;
             flush();
 
@@ -2147,23 +2158,26 @@ struct StreamingUploadSource {
 
             // Make sure that an exception in uploading the last chunk doesn't
             // lead to a corrupt (truncated) file
-            if (exc)
+            if (exc) {
+                if (!metadata.commitOnThrow) {
+                    owner->abortMultiPartUpload(bucket, "/" + object,
+                                                uploadId);
+                }
                 std::rethrow_exception(exc);
+            }
 
-            string etag;
             try {
-                etag = owner->finishMultiPartUpload(bucket, "/" + object,
-                                                    uploadId,
-                                                    etags);
+                 owner->finishMultiPartUpload(bucket, "/" + object,
+                                              uploadId, etags);
             }
             catch (...) {
+                if (!metadata.commitOnThrow) {
+                    owner->abortMultiPartUpload(bucket, "/" + object,
+                                                uploadId);
+                }
                 onException();
                 throw;
             }
-            //cerr << "final etag is " << etag << endl;
-
-            if (exc)
-                std::rethrow_exception(exc);
 
             // double elapsed = Date::now().secondsSince(startDate);
 
@@ -2195,6 +2209,10 @@ struct StreamingUploadSource {
                                                     S3Api::Content(chunk.data,
                                                                    chunk.size,
                                                                    md5));
+                        if (chunk.index == metadata.throwChunk) {
+                            throw ML::Exception("deterministic upload"
+                                                " exception");
+                        }
                         if (putResult.code_ != 200) {
                             cerr << putResult.bodyXmlStr() << endl;
 
@@ -2537,9 +2555,14 @@ struct RegisterS3Handler {
                     throw ML::Exception("unknown aws option " + name + "=" + value
                                         + " opening S3 object " + resource);
                 }
-                else if(name == "num-threads")
-                {
+                else if (name == "num-threads") {
                     md.numThreads = std::stoi(value);
+                }
+                else if (name == "commit-on-throw") {
+                    md.commitOnThrow = std::stoi(value);
+                }
+                else if (name == "throw-chunk") {
+                    md.throwChunk = std::stoi(value);
                 }
                 else {
                     cerr << "warning: skipping unknown S3 option "

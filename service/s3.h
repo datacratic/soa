@@ -245,7 +245,7 @@ struct S3Api : public AwsApi {
         ObjectMetadata(const Redundancy & redundancy)
             : redundancy(redundancy),
               serverSideEncryption(SSE_NONE),
-              numThreads(8)
+              numThreads(8), commitOnThrow(false), throwChunk(-1)
         {
         }
 
@@ -259,6 +259,15 @@ struct S3Api : public AwsApi {
         std::map<std::string, std::string> metadata;
         std::string acl;
         unsigned int numThreads;
+
+        /* By default, exceptions thrown during the writing of one multipart
+           upload part cancels the upload. This flag enables to keep it in its
+           final state instead. */
+        bool commitOnThrow;
+
+        /* Index of the chunk during a write operation after which to emulate
+           an HTTP exception. */
+        int throwChunk;
     };
 
     /** Signed request that can be executed. */
@@ -557,6 +566,11 @@ struct S3Api : public AwsApi {
                           const std::string & resource,
                           const std::string & uploadId,
                           const std::vector<std::string> & etags) const;
+
+    void
+    abortMultiPartUpload(const std::string & bucket,
+                         const std::string & resource,
+                         const std::string & uploadId) const;
 
     void uploadRecursive(std::string dirSrc,
                          std::string bucketDest,
