@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include <map>
 #include "tinyxml2/tinyxml2.h"
@@ -19,7 +20,7 @@
 #include "aws.h"
 #include "fs_utils.h"
 #include "http_endpoint.h"
-#include "http_rest_proxy.h"
+#include "http_client.h"
 
 #include "soa/types/basic_value_descriptions.h"
 #include "soa/types/value_description.h"
@@ -91,33 +92,6 @@ struct S3Api : public AwsApi {
     std::string serviceUri;
     double bandwidthToServiceMbps;
 
-    typedef std::vector<std::pair<std::string, std::string> > StrPairVector;
-
-    struct Content {
-        Content()
-            : data(0), size(0), hasContent(false)
-        {
-        }
-
-        Content(const char * data, uint64_t size,
-                const std::string & contentType = "",
-                const std::string & contentMd5 = "")
-            : data(data), size(size), hasContent(true),
-              contentType(contentType), contentMd5(contentMd5)
-        {
-        }
-
-        Content(const tinyxml2::XMLDocument & xml);
-
-        const char * data;
-        uint64_t size;
-        bool hasContent;
-
-        std::string str;
-        std::string contentType;
-        std::string contentMd5;
-    };
-
     struct Range {
         Range(uint64_t aSize)
             : offset(0), size(aSize)
@@ -128,6 +102,7 @@ struct S3Api : public AwsApi {
         {}
 
         uint64_t endPos()
+            const
         { return (offset + size - 1); }
 
         void adjust(size_t downloaded)
@@ -138,6 +113,15 @@ struct S3Api : public AwsApi {
             }
             offset += downloaded;
             size -= downloaded;
+        }
+
+        std::string headerValue()
+            const
+        {
+            return (std::string("bytes=")
+                    + std::to_string(offset)
+                    + "-"
+                    + std::to_string(endPos()));
         }
 
         uint64_t offset;
@@ -159,17 +143,23 @@ struct S3Api : public AwsApi {
 
         std::string contentType;
         std::string contentMd5;
-        Content content;
+        HttpRequest::Content content;
         Range downloadRange;
 
-        StrPairVector headers;
-        StrPairVector queryParams;
+        bool useRange()
+            const
+        {
+            return (verb == "GET");
+        };
+
+        RestParams headers;
+        RestParams queryParams;
     };
 
     /** The response of a request.  Has a return code and a body. */
     struct Response {
         Response()
-            : code_(0)
+            : code_(0), errorCondition_(false)
         {
         }
 
@@ -211,6 +201,7 @@ struct S3Api : public AwsApi {
         }
 
         long code_;
+        bool errorCondition_;
         std::string body_;
         HttpHeader header_;
     };
@@ -249,8 +240,7 @@ struct S3Api : public AwsApi {
         {
         }
 
-        std::vector<std::pair<std::string, std::string> >
-        getRequestHeaders() const;
+        RestParams getRequestHeaders() const;
 
         Redundancy redundancy;
         ServerSideEncryption serverSideEncryption;
@@ -265,19 +255,25 @@ struct S3Api : public AwsApi {
     struct SignedRequest {
         RequestParams params;
         std::string auth;
-        std::string uri;
+        std::string resource;
         double bandwidthToServiceMbps;
-        S3Api * owner;
-
-        /** Perform the request synchronously and return the result. */
-        Response performSync() const;
     };
 
     /** Calculate the signature for a given request. */
     std::string signature(const RequestParams & request) const;
 
     /** Prepare a request to be executed. */
-    SignedRequest prepare(const RequestParams & request) const;
+    std::shared_ptr<SignedRequest> prepare(const RequestParams
+                                           & request) const;
+
+    typedef std::function<void (Response && response)> OnResponse;
+
+    /** Perform the request asynchronously. */
+    void perform(const std::shared_ptr<SignedRequest> & rq,
+                 const OnResponse & onResponse) const;
+
+    /** Perform the request synchronously and return the result. */
+    Response performSync(const std::shared_ptr<SignedRequest> & rq) const;
 
     /** Escape a resource used by S3; this in particular leaves a slash
         in place. */
@@ -287,8 +283,8 @@ struct S3Api : public AwsApi {
     Response head(const std::string & bucket,
                   const std::string & resource,
                   const std::string & subResource = "",
-                  const StrPairVector & headers = StrPairVector(),
-                  const StrPairVector & queryParams = StrPairVector())
+                  const RestParams & headers = RestParams(),
+                  const RestParams & queryParams = RestParams())
         const
     {
         return headEscaped(bucket, s3EscapeResource(resource), subResource,
@@ -300,8 +296,8 @@ struct S3Api : public AwsApi {
                  const std::string & resource,
                  const Range & downloadRange,
                  const std::string & subResource = "",
-                 const StrPairVector & headers = StrPairVector(),
-                 const StrPairVector & queryParams = StrPairVector())
+                 const RestParams & headers = RestParams(),
+                 const RestParams & queryParams = RestParams())
         const
     {
         return getEscaped(bucket, s3EscapeResource(resource), downloadRange,
@@ -313,9 +309,9 @@ struct S3Api : public AwsApi {
     Response post(const std::string & bucket,
                   const std::string & resource,
                   const std::string & subResource = "",
-                  const StrPairVector & headers = StrPairVector(),
-                  const StrPairVector & queryParams = StrPairVector(),
-                  const Content & content = Content())
+                  const RestParams & headers = RestParams(),
+                  const RestParams & queryParams = RestParams(),
+                  const HttpRequest::Content & content = HttpRequest::Content())
         const
     {
         return postEscaped(bucket, s3EscapeResource(resource), subResource,
@@ -326,9 +322,9 @@ struct S3Api : public AwsApi {
     Response put(const std::string & bucket,
                  const std::string & resource,
                  const std::string & subResource = "",
-                 const StrPairVector & headers = StrPairVector(),
-                 const StrPairVector & queryParams = StrPairVector(),
-                 const Content & content = Content())
+                 const RestParams & headers = RestParams(),
+                 const RestParams & queryParams = RestParams(),
+                 const HttpRequest::Content & content = HttpRequest::Content())
         const
     {
         return putEscaped(bucket, s3EscapeResource(resource), subResource,
@@ -339,13 +335,12 @@ struct S3Api : public AwsApi {
     Response erase(const std::string & bucket,
                    const std::string & resource,
                    const std::string & subResource = "",
-                   const StrPairVector & headers = StrPairVector(),
-                   const StrPairVector & queryParams = StrPairVector(),
-                   const Content & content = Content())
+                   const RestParams & headers = RestParams(),
+                   const RestParams & queryParams = RestParams())
         const
     {
         return eraseEscaped(bucket, s3EscapeResource(resource), subResource,
-                            headers, queryParams, content);
+                            headers, queryParams);
     }
 
     enum CheckMethod {
@@ -523,7 +518,6 @@ struct S3Api : public AwsApi {
         uint64_t startOffset;
         uint64_t size;
         std::string lastModified;
-        std::string contentMd5;
         std::string etag;
         bool done;
 
@@ -568,40 +562,39 @@ struct S3Api : public AwsApi {
     Response headEscaped(const std::string & bucket,
                          const std::string & resource,
                          const std::string & subResource = "",
-                         const StrPairVector & headers = StrPairVector(),
-                         const StrPairVector & queryParams = StrPairVector()) const;
+                         const RestParams & headers = RestParams(),
+                         const RestParams & queryParams = RestParams()) const;
 
     /* get */
     Response getEscaped(const std::string & bucket,
                         const std::string & resource,
                         const Range & downloadRange,
                         const std::string & subResource = "",
-                        const StrPairVector & headers = StrPairVector(),
-                        const StrPairVector & queryParams = StrPairVector()) const;
+                        const RestParams & headers = RestParams(),
+                        const RestParams & queryParams = RestParams()) const;
 
     /* post */
     Response postEscaped(const std::string & bucket,
                          const std::string & resource,
                          const std::string & subResource = "",
-                         const StrPairVector & headers = StrPairVector(),
-                         const StrPairVector & queryParams = StrPairVector(),
-                         const Content & content = Content()) const;
+                         const RestParams & headers = RestParams(),
+                         const RestParams & queryParams = RestParams(),
+                         const HttpRequest::Content & content = HttpRequest::Content()) const;
 
     /* put */
     Response putEscaped(const std::string & bucket,
                         const std::string & resource,
                         const std::string & subResource = "",
-                        const StrPairVector & headers = StrPairVector(),
-                        const StrPairVector & queryParams = StrPairVector(),
-                        const Content & content = Content()) const;
+                        const RestParams & headers = RestParams(),
+                        const RestParams & queryParams = RestParams(),
+                        const HttpRequest::Content & content = HttpRequest::Content()) const;
 
     /* erase */
     Response eraseEscaped(const std::string & bucket,
                           const std::string & resource,
                           const std::string & subResource,
-                          const StrPairVector & headers = StrPairVector(),
-                          const StrPairVector & queryParams = StrPairVector(),
-                          const Content & content = Content()) const;
+                          const RestParams & headers = RestParams(),
+                          const RestParams & queryParams = RestParams()) const;
 
     //easy handle for v8 wrapping
     void setDefaultBandwidthToServiceMbps(double mpbs);
