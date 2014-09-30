@@ -64,19 +64,20 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(headers[0], "Header1: value1");
     parser.feed("\r");
     BOOST_CHECK_EQUAL(headers.size(), 1);
+
+    /* Headers require line ending + 1 character, since the latter requires
+     * testing for multiline headers. */
     parser.feed("\n");
+    BOOST_CHECK_EQUAL(headers.size(), 1);
+    parser.feed("H");
     BOOST_CHECK_EQUAL(headers.size(), 2);
     BOOST_CHECK_EQUAL(headers[1], "Header2: value2");
-    parser.feed("");
+    parser.feed("ead");
     BOOST_CHECK_EQUAL(headers.size(), 2);
-    parser.feed("He");
-    BOOST_CHECK_EQUAL(headers.size(), 2);
-    parser.feed("ad");
-    BOOST_CHECK_EQUAL(headers.size(), 2);
-    parser.feed("er3: Val3\r\n");
+    parser.feed("er3: Val3\r\nC");
     BOOST_CHECK_EQUAL(headers.size(), 3);
     BOOST_CHECK_EQUAL(headers[2], "Header3: Val3");
-    parser.feed("Content-Length: 10\r\n\r");
+    parser.feed("ontent-Length: 10\r\n\r");
     parser.feed("\n");
     BOOST_CHECK_EQUAL(headers.size(), 4);
     BOOST_CHECK_EQUAL(headers[3], "Content-Length: 10");
@@ -127,5 +128,37 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(body, "0123456789");
     BOOST_CHECK_EQUAL(done, true);
     BOOST_CHECK_EQUAL(shouldClose, false);
+}
+#endif
+
+#if 1
+/* Ensures that multiline headers are correctly parsed. */
+BOOST_AUTO_TEST_CASE( http_response_parser_multiline_header_test )
+{
+    vector<string> headers;
+
+    HttpResponseParser parser;
+    parser.onResponseStart = [&] (const string & httpVersion, int code) {
+        headers.clear();
+    };
+    parser.onHeader = [&] (const char * data, size_t size) {
+        headers.emplace_back(data, size);
+    };
+
+    parser.feed("HTTP/1.1 200 This is some blabla\r\n");
+
+    parser.feed("Header1: value1\r\nH");
+    BOOST_CHECK_EQUAL(headers.size(), 1);
+    BOOST_CHECK_EQUAL(headers[0], "Header1: value1");
+
+    parser.feed("eader2: value2\r\n  with another line\r\nH");
+    BOOST_CHECK_EQUAL(headers.size(), 2);
+    BOOST_CHECK_EQUAL(headers[1], "Header2: value2 with another line");
+    parser.feed("eader3: Val3\r\n\t with tab\r\n  and space\r\nH");
+    BOOST_CHECK_EQUAL(headers.size(), 3);
+    BOOST_CHECK_EQUAL(headers[2], "Header3: Val3 with tab and space");
+    parser.feed("eader4: Value4\r\n \r\n\r\n");
+    BOOST_CHECK_EQUAL(headers.size(), 4);
+    BOOST_CHECK_EQUAL(headers[3], "Header4: Value4");
 }
 #endif

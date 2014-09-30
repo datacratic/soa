@@ -27,7 +27,6 @@
    blockers:
    - parser:
      - needs better validation (header key size, ...)
-     - handling of multi-line headers
    - connection timeout (Curl style)
    - socket timeout
    - auto disconnect (keep-alive)

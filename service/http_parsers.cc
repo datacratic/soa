@@ -179,7 +179,9 @@ parseStatusLine(BufferState & state)
     state.ptr++;
     state.commit();
 
-    onResponseStart(string(state.data, versionEnd), code);
+    if (onResponseStart) {
+        onResponseStart(string(state.data, versionEnd), code);
+    }
 
     return true;
 }
@@ -188,22 +190,49 @@ bool
 HttpResponseParser::
 parseHeaders(BufferState & state)
 {
+    string multiline;
+    unsigned int numLines(0);
+
     /* header line parsing */
-    while (state.data[state.ptr] != '\r') {
-        size_t headerPtr = state.ptr;
-        if (!state.skipToChar(':', true) || !state.skipToChar('\r', false)) {
+    while (state.data[state.ptr] != '\r' || numLines > 0) {
+        size_t linePtr = state.ptr;
+        if (numLines == 0) {
+            if (!state.skipToChar(':', true)) {
+                return false;
+            }
+        }
+        if (!state.skipToChar('\r', false)) {
+            return false;
+        }
+        if (state.remaining() < 3) {
             return false;
         }
         state.ptr++;
-        if (state.remaining() == 0) {
-            return false;
-        }
         if (state.data[state.ptr] != '\n') {
             throw ML::Exception("expected \\n");
         }
         state.ptr++;
-        handleHeader(state.data + headerPtr, state.ptr - headerPtr - 2);
-        state.commit();
+
+        /* does the next line starts with a space or a tab? */
+        if (state.data[state.ptr] == ' ' || state.data[state.ptr] == '\t') {
+            multiline.append(state.data + linePtr, state.ptr - linePtr - 2);
+            numLines++;
+            state.ptr++;
+        }
+        else {
+            if (numLines == 0) {
+                handleHeader(state.data + linePtr, state.ptr - linePtr - 2);
+                state.commit();
+            }
+            else {
+                multiline.append(state.data + linePtr,
+                                 state.ptr - linePtr - 2);
+                handleHeader(multiline.c_str(), multiline.size());
+                multiline.clear();
+                state.commit();
+                numLines = 0;
+            }
+        }
     }
     if (state.ptr + 1 == state.dataSize) {
         return false;
@@ -268,7 +297,9 @@ handleHeader(const char * data, size_t dataSize)
         remainingBody_ = ML::antoi(data + ptr, data + dataSize);
     }
 
-    onHeader(data, dataSize);
+    if (onHeader) {
+        onHeader(data, dataSize);
+    }
 }
 
 bool
@@ -278,7 +309,9 @@ parseBody(BufferState & state)
     uint64_t chunkSize = min(state.remaining(), remainingBody_);
     // cerr << "toSend: " + to_string(chunkSize) + "\n";
     // cerr << "received body: /" + string(data, chunkSize) + "/\n";
-    onData(state.currentDataPtr(), chunkSize);
+    if (onData) {
+        onData(state.currentDataPtr(), chunkSize);
+    }
     state.ptr += chunkSize;
     remainingBody_ -= chunkSize;
     state.commit();
@@ -289,6 +322,8 @@ void
 HttpResponseParser::
 finalizeParsing()
 {
-    onDone(requireClose_);
+    if (onDone) {
+        onDone(requireClose_);
+    }
     clear();
 }
