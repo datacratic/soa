@@ -25,16 +25,18 @@
 
 /* TODO:
    blockers:
-   - parser:
-     - needs better validation (header key size, ...)
    - connection timeout (Curl style)
-   - socket timeout
-   - auto disconnect (keep-alive)
    - chunked encoding
 
    nice to have:
+   - connect timeout
+   - activity timeout
+   - parser:
+     - needs better validation (header key size, ...)
+   - compression
+   - auto disconnect (keep-alive)
    - SSL support
-   - tunnelling
+   - pipelining
  */
 
 #include <string>
