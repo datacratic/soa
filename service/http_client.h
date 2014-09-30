@@ -35,7 +35,7 @@
 #include <curlpp/Types.hpp>
 
 #include "jml/arch/wakeup_fd.h"
-
+#include "tinyxml2/tinyxml2.h"
 #include "soa/jsoncpp/value.h"
 #include "soa/service/async_event_source.h"
 #include "soa/service/http_header.h"
@@ -71,6 +71,15 @@ struct HttpRequest {
                 const std::string & contentType = "application/json")
             : str(content.toString()), contentType(contentType)
         {
+        }
+
+        Content(const tinyxml2::XMLDocument & xmlContent,
+                const std::string & contentType = "application/xml")
+            : contentType(contentType)
+        {
+            tinyxml2::XMLPrinter printer;
+            const_cast<tinyxml2::XMLDocument &>(xmlContent).Print(&printer);
+            str = printer.CStr();
         }
 
         std::string str;
@@ -203,6 +212,14 @@ struct HttpClient : public AsyncEventSource {
                               queryParams, headers, timeout);
     }
 
+    bool enqueueRequest(const std::string & verb,
+                        const std::string & resource,
+                        const std::shared_ptr<HttpClientCallbacks> & callbacks,
+                        const HttpRequest::Content & content,
+                        const RestParams & queryParams,
+                        const RestParams & headers,
+                        int timeout = -1);
+
     size_t queuedRequests() const;
 
     HttpClient & operator = (HttpClient && other) noexcept;
@@ -213,13 +230,6 @@ private:
     virtual bool processOne();
 
     /* Local */
-    bool enqueueRequest(const std::string & verb,
-                        const std::string & resource,
-                        const std::shared_ptr<HttpClientCallbacks> & callbacks,
-                        const HttpRequest::Content & content,
-                        const RestParams & queryParams,
-                        const RestParams & headers,
-                        int timeout = -1);
     std::vector<HttpRequest> popRequests(size_t number);
 
     void handleEvents();
