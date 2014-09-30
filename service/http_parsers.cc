@@ -6,6 +6,7 @@
 
 #include <string.h>
 
+#include <iostream>
 #include "jml/arch/exception.h"
 #include "jml/utils/string_functions.h"
 
@@ -13,6 +14,7 @@
 
 using namespace std;
 using namespace Datacratic;
+
 
 /****************************************************************************/
 /* HTTP RESPONSE PARSER                                                     */
@@ -23,7 +25,7 @@ HttpResponseParser::
 clear()
     noexcept
 {
-    state_ = 0;
+    stage_ = 0;
     buffer_.clear();
     remainingBody_ = 0;
     requireClose_ = false;
@@ -37,179 +39,183 @@ feed(const char * bufferData)
     feed(bufferData, strlen(bufferData));
 }
 
+HttpResponseParser::BufferState
+HttpResponseParser::
+prepareParsing(const char * bufferData, size_t bufferSize)
+{
+    BufferState state;
+
+    if (buffer_.size() > 0) {
+        buffer_.append(bufferData, bufferSize);
+        state.data = buffer_.c_str();
+        state.dataSize = buffer_.size();
+        state.fromBuffer = true;
+    }
+    else {
+        state.data = bufferData;
+        state.dataSize = bufferSize;
+        state.fromBuffer = false;
+    }
+
+    return state;
+}
+
+bool
+HttpResponseParser::
+BufferState::
+skipToChar(char c, bool throwOnEol)
+{
+    while (ptr < dataSize) {
+        if (data[ptr] == c) {
+            return true;
+        }
+        else if (throwOnEol
+                 && (data[ptr] == '\r' || data[ptr] == '\n')) {
+            throw ML::Exception("unexpected end of line");
+        }
+        ptr++;
+    }
+
+    return false;
+}
+
 void
 HttpResponseParser::
 feed(const char * bufferData, size_t bufferSize)
 {
-    const char * data;
-    size_t dataSize;
-    bool fromBuffer;
-
-    // cerr << ("data: /"
+    // std::cerr << ("data: /"
     //          + ML::hexify_string(string(bufferData, bufferSize))
     //          + "/\n");
+    BufferState state = prepareParsing(bufferData, bufferSize);
 
-    if (buffer_.size() > 0) {
-        buffer_.append(bufferData, bufferSize);
-        data = buffer_.c_str();
-        fromBuffer = true;
-        dataSize = buffer_.size();
-    }
-    else {
-        data = bufferData;
-        fromBuffer = false;
-        dataSize = bufferSize;
-    }
-
-    size_t ptr = 0;
-
-    auto skipToChar = [&] (char c, bool throwOnEol) {
-        while (ptr < dataSize) {
-            if (data[ptr] == c)
-                return true;
-            else if (throwOnEol
-                     && (data[ptr] == '\r' || data[ptr] == '\n')) {
-                throw ML::Exception("unexpected end of line");
-            }
-            ptr++;
-        }
-
-        return false;
-    };
-
-    // cerr << ("state: " + to_string(state_)
+    // cerr << ("state: " + to_string(stage_)
     //          + "; dataSize: " + to_string(dataSize) + "\n");
 
-    while (true) {
-        if (ptr == dataSize) {
-            if (fromBuffer) {
-                buffer_.clear();
-            }
-            return;
-        }
-        if (state_ == 0) {
-            // status line
-            // HTTP/1.1 200 OK
-
-            /* sizeof("HTTP/1.1 200 ") */
-            if ((dataSize - ptr) < 16) {
-                if (!fromBuffer) {
-                    buffer_.assign(data + ptr, dataSize - ptr);
-                }
-                return;
-            }
-
-            if (::memcmp(data + ptr, "HTTP/", 5) != 0) {
-                throw ML::Exception("version must start with 'HTTP/'");
-            }
-            ptr += 5;
-
-            if (!skipToChar(' ', true)) {
-                /* post-version ' ' not found even though size is sufficient */
-                throw ML::Exception("version too long");
-            }
-            size_t versionEnd = ptr;
-
-            ptr++;
-            size_t codeStart = ptr;
-            if (!skipToChar(' ', true)) {
-                /* post-code ' ' not found even though size is sufficient */
-                throw ML::Exception("code too long");
-            }
-
-            size_t codeEnd = ptr;
-            int code = ML::antoi(data + codeStart, data + codeEnd);
-
-            /* we skip the whole "reason" string */
-            if (!skipToChar('\r', false)) {
-                if (!fromBuffer) {
-                    buffer_.assign(data + ptr, dataSize - ptr);
-                }
-                return;
-            }
-            ptr++;
-            if (ptr == dataSize) {
-                return;
-            }
-            if (data[ptr] != '\n') {
-                throw ML::Exception("expected \\n");
-            }
-            ptr++;
-            onResponseStart(string(data, versionEnd), code);
-            state_ = 1;
-
-            if (ptr == dataSize) {
-                buffer_.clear();
-                return;
+    /* We loop as long as there are bytes available for parsing and as long as
+       the parsing stages change. */
+    bool stageDone(true);
+    while (stageDone && state.remaining() > 0) {
+        if (stage_ == 0) {
+            stageDone = parseStatusLine(state);
+            if (stageDone) {
+                stage_ = 1;
             }
         }
-        else if (state_ == 1) {
-            while (data[ptr] != '\r') {
-                size_t headerPtr = ptr;
-                if (!skipToChar(':', true) || !skipToChar('\r', false)) {
-                    if (headerPtr > 0 || !fromBuffer) {
-                        buffer_.assign(data + headerPtr,
-                                       dataSize - headerPtr);
-                    }
-                    return;
+        else if (stage_ == 1) {
+            stageDone = parseHeaders(state);
+            if (stageDone) {
+                if (remainingBody_ == 0) {
+                    finalizeParsing();
+                    stage_ = 0;
                 }
-                ptr++;
-                if (ptr == dataSize) {
-                    if (headerPtr > 0 || !fromBuffer) {
-                        buffer_.assign(data + headerPtr,
-                                       dataSize - headerPtr);
-                    }
-                    return;
-                }
-                if (data[ptr] != '\n') {
-                    throw ML::Exception("expected \\n");
-                }
-                ptr++;
-                handleHeader(data + headerPtr, ptr - headerPtr - 2);
-                if (ptr == dataSize) {
-                    // cerr << "returning\n";
-                    if (fromBuffer) {
-                        buffer_.clear();
-                    }
-                    return;
+                else {
+                    stage_ = 2;
                 }
             }
-            if (ptr + 1 == dataSize) {
-                buffer_.assign(data + ptr, dataSize - ptr);
-                return;
-            }
-            ptr++;
-            if (data[ptr] != '\n') {
-                throw ML::Exception("expected \\n");
-            }
-            ptr++;
-
-            if (remainingBody_ == 0) {
+        }
+        else if (stage_ == 2) {
+            stageDone = parseBody(state);
+            if (stageDone) {
                 finalizeParsing();
-            }
-            else {
-                state_ = 2;
-            }
-
-            if (dataSize == 0) {
-                if (fromBuffer) {
-                    buffer_.clear();
-                }
-                return;
-            }
-        }
-        else if (state_ == 2) {
-            uint64_t chunkSize = min(dataSize - ptr, remainingBody_);
-            // cerr << "toSend: " + to_string(chunkSize) + "\n";
-            // cerr << "received body: /" + string(data, chunkSize) + "/\n";
-            onData(data + ptr, chunkSize);
-            ptr += chunkSize;
-            remainingBody_ -= chunkSize;
-            if (remainingBody_ == 0) {
-                finalizeParsing();
+                stage_ = 0;
             }
         }
     }
+
+    size_t remaining = state.remainingUncommited();
+    if (remaining > 0) {
+        if (state.commited > 0 || !state.fromBuffer) {
+            buffer_.assign(state.data + state.commited, remaining);
+        }
+    }
+    else if (state.fromBuffer) {
+        buffer_.clear();
+    }
+}
+
+bool
+HttpResponseParser::
+parseStatusLine(BufferState & state)
+{
+    /* status line parsing */
+
+    /* sizeof("HTTP/X.X XXX ") */
+    if (state.remaining() < 16) {
+        return false;
+    }
+
+    if (::memcmp(state.currentDataPtr(), "HTTP/", 5) != 0) {
+        throw ML::Exception("version must start with 'HTTP/'");
+    }
+    state.ptr += 5;
+
+    if (!state.skipToChar(' ', true)) {
+        /* post-version ' ' not found even though size is sufficient */
+        throw ML::Exception("version too long");
+    }
+    size_t versionEnd = state.ptr;
+
+    state.ptr++;
+    size_t codeStart = state.ptr;
+    if (!state.skipToChar(' ', true)) {
+        /* post-code ' ' not found even though size is sufficient */
+        throw ML::Exception("code too long");
+    }
+
+    size_t codeEnd = state.ptr;
+    int code = ML::antoi(state.data + codeStart, state.data + codeEnd);
+
+    /* we skip the whole "reason" string */
+    if (!state.skipToChar('\r', false)) {
+        return false;
+    }
+    state.ptr++;
+    if (state.remaining() == 0) {
+        return false;
+    }
+    if (state.data[state.ptr] != '\n') {
+        throw ML::Exception("expected \\n");
+    }
+    state.ptr++;
+    state.commit();
+
+    onResponseStart(string(state.data, versionEnd), code);
+
+    return true;
+}
+
+bool
+HttpResponseParser::
+parseHeaders(BufferState & state)
+{
+    /* header line parsing */
+    while (state.data[state.ptr] != '\r') {
+        size_t headerPtr = state.ptr;
+        if (!state.skipToChar(':', true) || !state.skipToChar('\r', false)) {
+            return false;
+        }
+        state.ptr++;
+        if (state.remaining() == 0) {
+            return false;
+        }
+        if (state.data[state.ptr] != '\n') {
+            throw ML::Exception("expected \\n");
+        }
+        state.ptr++;
+        handleHeader(state.data + headerPtr, state.ptr - headerPtr - 2);
+        state.commit();
+    }
+    if (state.ptr + 1 == state.dataSize) {
+        return false;
+    }
+    state.ptr++;
+    if (state.data[state.ptr] != '\n') {
+        throw ML::Exception("expected \\n");
+    }
+    state.ptr++;
+
+    state.commit();
+    return true;
 }
 
 void
@@ -263,6 +269,20 @@ handleHeader(const char * data, size_t dataSize)
     }
 
     onHeader(data, dataSize);
+}
+
+bool
+HttpResponseParser::
+parseBody(BufferState & state)
+{
+    uint64_t chunkSize = min(state.remaining(), remainingBody_);
+    // cerr << "toSend: " + to_string(chunkSize) + "\n";
+    // cerr << "received body: /" + string(data, chunkSize) + "/\n";
+    onData(state.currentDataPtr(), chunkSize);
+    state.ptr += chunkSize;
+    remainingBody_ -= chunkSize;
+    state.commit();
+    return (remainingBody_ == 0);
 }
 
 void
