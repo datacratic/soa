@@ -10,6 +10,7 @@
 #include "jml/utils/string_functions.h"
 #include "soa/types/date.h"
 #include "soa/types/url.h"
+#include "soa/utils/print_utils.h"
 #include "jml/arch/futex.h"
 #include "jml/utils/exc_assert.h"
 #include "jml/utils/pair_utils.h"
@@ -35,6 +36,7 @@
 
 #include <boost/filesystem.hpp>
 
+#include "message_loop.h"
 #include "http_client.h"
 #include "fs_utils.h"
 
