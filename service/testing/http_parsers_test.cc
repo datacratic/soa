@@ -5,6 +5,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "soa/service/http_parsers.h"
+#include "soa/utils/print_utils.h"
 
 using namespace std;
 using namespace Datacratic;
@@ -133,7 +134,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
 
 #if 1
 /* Ensures that multiline headers are correctly parsed. */
-BOOST_AUTO_TEST_CASE( http_response_parser_multiline_header_test )
+BOOST_AUTO_TEST_CASE( http_parser_multiline_header_test )
 {
     vector<string> headers;
 
@@ -160,5 +161,93 @@ BOOST_AUTO_TEST_CASE( http_response_parser_multiline_header_test )
     parser.feed("eader4: Value4\r\n \r\n\r\n");
     BOOST_CHECK_EQUAL(headers.size(), 4);
     BOOST_CHECK_EQUAL(headers[3], "Header4: Value4");
+}
+#endif
+
+#if 1
+/* Ensures that chunked encoding is well supported. */
+BOOST_AUTO_TEST_CASE( http_parser_chunked_encoding_test )
+{
+    /* missing error tests:
+       - invalid hex value for chunk length
+       - excessive chunk size (> chunk length)
+       - content-length and content-coding are mutually exclusive
+       - no chunk after last-chunk
+    */
+
+    HttpResponseParser parser;
+
+    string chunkA = randomString(0xa);
+    string chunk20 = randomString(0x20);
+    string chunk100 = randomString(0x100);
+
+    int numResponses(0);
+    parser.onResponseStart = [&] (const string & httpVersion, int code) {
+        numResponses++;
+    };
+
+    vector<string> bodyChunks;
+    parser.onData = [&] (const char * data, size_t size) {
+        bodyChunks.emplace_back(data, size);
+    };
+
+    parser.feed("HTTP/1.1 200 This is some blabla\r\n"
+                "Header1: value1\r\n"
+                "Transfer-Encoding: chunked\r\n"
+                "\r\n");
+    BOOST_CHECK_EQUAL(numResponses, 1);
+
+    string feedData = "a\r\n" + chunkA + "\r\n";
+    parser.feed(feedData.c_str(), feedData.size());
+    BOOST_CHECK_EQUAL(bodyChunks.size(), 1);
+    BOOST_CHECK_EQUAL(bodyChunks[0], chunkA);
+
+    feedData = "A;someext\r\n" + chunkA + "\r\n";
+    parser.feed(feedData.c_str(), feedData.size());
+    BOOST_CHECK_EQUAL(bodyChunks.size(), 2);
+    BOOST_CHECK_EQUAL(bodyChunks[1], chunkA);
+
+    feedData = "20;someext\r\n" + chunk20 + "\r\n";
+    parser.feed(feedData.c_str(), feedData.size());
+    BOOST_CHECK_EQUAL(bodyChunks.size(), 3);
+    BOOST_CHECK_EQUAL(bodyChunks[2], chunk20);
+
+    feedData = "100;otherext=value\r\n" + chunk100 + "\r\n";
+    parser.feed(feedData.c_str(), feedData.size());
+    BOOST_CHECK_EQUAL(bodyChunks.size(), 4);
+    BOOST_CHECK_EQUAL(bodyChunks[3], chunk100);
+
+    feedData = "0000\r\n\r\n";
+    parser.feed(feedData.c_str(), feedData.size());
+    BOOST_CHECK_EQUAL(bodyChunks.size(), 4);
+
+    BOOST_CHECK_EQUAL(numResponses, 1);
+
+    /* another response can be fed */
+    parser.feed("HTTP/1.1 200 This is some blabla\r\n"
+                "Header1: value1\r\n"
+                "Transfer-Encoding: chunked\r\n"
+                "\r\n");
+    BOOST_CHECK_EQUAL(numResponses, 2);
+
+    /* we now test chunks of multiple chunks */
+    bodyChunks.clear();
+
+    feedData = ("20\r\n" + chunk20 + "\r\n"
+                "20\r\n" + chunk20 + "\r\n"
+                "20\r\n" + chunk20 + "\r\n"
+                "0\r\n\r\n");
+    parser.feed(feedData.c_str(), feedData.size());
+    BOOST_CHECK_EQUAL(bodyChunks.size(), 3);
+    BOOST_CHECK_EQUAL(bodyChunks[0], chunk20);
+    BOOST_CHECK_EQUAL(bodyChunks[1], chunk20);
+    BOOST_CHECK_EQUAL(bodyChunks[2], chunk20);
+
+    /* yet another response can be fed */
+    parser.feed("HTTP/1.1 200 This is some blabla\r\n"
+                "Header1: value1\r\n"
+                "Transfer-Encoding: chunked\r\n"
+                "\r\n");
+    BOOST_CHECK_EQUAL(numResponses, 3);
 }
 #endif

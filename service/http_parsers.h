@@ -80,6 +80,8 @@ private:
     bool parseStatusLine(BufferState & state);
     bool parseHeaders(BufferState & state);
     bool parseBody(BufferState & state);
+    bool parseChunkedBody(BufferState & state);
+    bool parseBlockBody(BufferState & state);
 
     void handleHeader(const char * data, size_t dataSize);
     void finalizeParsing();
@@ -88,6 +90,7 @@ private:
     std::string buffer_;
 
     uint64_t remainingBody_;
+    bool useChunkedEncoding_;
     bool requireClose_;
 };
 

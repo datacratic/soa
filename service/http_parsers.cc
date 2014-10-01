@@ -28,6 +28,7 @@ clear()
     stage_ = 0;
     buffer_.clear();
     remainingBody_ = 0;
+    useChunkedEncoding_ = false;
     requireClose_ = false;
 }
 
@@ -104,7 +105,7 @@ feed(const char * bufferData, size_t bufferSize)
         else if (stage_ == 1) {
             stageDone = parseHeaders(state);
             if (stageDone) {
-                if (remainingBody_ == 0) {
+                if (remainingBody_ == 0 && !useChunkedEncoding_) {
                     finalizeParsing();
                     stage_ = 0;
                 }
@@ -280,21 +281,28 @@ handleHeader(const char * data, size_t dataSize)
         return result;
     };
 
-    if (matchString("Connection", 10)) {
+    auto skipToValue = [&] () {
         skipChar(' ');
         skipToChar(':');
         ptr++;
         skipChar(' ');
+    };
+
+    if (matchString("Connection", 10)) {
+        skipToValue();
         if (matchString("close", 5)) {
             requireClose_ = true;
         }
     }
     else if (matchString("Content-Length", 14)) {
-        skipChar(' ');
-        skipToChar(':');
-        ptr++;
-        skipChar(' ');
+        skipToValue();
         remainingBody_ = ML::antoi(data + ptr, data + dataSize);
+    }
+    else if (matchString("Transfer-Encoding", 15)) {
+        skipToValue();
+        if (matchString("chunked", 7)) {
+            useChunkedEncoding_ = true;
+        }
     }
 
     if (onHeader) {
@@ -306,15 +314,69 @@ bool
 HttpResponseParser::
 parseBody(BufferState & state)
 {
+    return (useChunkedEncoding_
+            ? parseChunkedBody(state)
+            : parseBlockBody(state));
+}
+
+bool
+HttpResponseParser::
+parseChunkedBody(BufferState & state)
+{
+    int chunkSize(-1);
+
+    /* we loop as long as there are chunks to process */
+    while (chunkSize != 0) {
+        const char * sizeStart = state.data + state.ptr;
+        if (!state.skipToChar('\r', false)) {
+            return false;
+        }
+
+        if (state.remaining() < 2) {
+            return false;
+        }
+
+        const char * sizeEnd = state.data + state.ptr;
+
+        /* look for ';' and adjust sizeEnd in consequence */
+        for (const char * ptr = sizeStart; ptr < sizeEnd; ptr++) {
+            if (*ptr == ';') {
+                sizeEnd = ptr;
+                break;
+            }
+        }
+
+        chunkSize = ML::antoi(sizeStart, sizeEnd, 16);
+
+        state.ptr += 2;
+        if (state.remaining() < chunkSize + 2) {
+            return false;
+        }
+
+        if (onData && chunkSize > 0) {
+            onData(state.currentDataPtr(), chunkSize);
+        }
+        state.ptr += chunkSize + 2;
+        state.commit();
+    }
+
+    return true;
+}
+
+bool
+HttpResponseParser::
+parseBlockBody(BufferState & state)
+{
     uint64_t chunkSize = min(state.remaining(), remainingBody_);
     // cerr << "toSend: " + to_string(chunkSize) + "\n";
     // cerr << "received body: /" + string(data, chunkSize) + "/\n";
-    if (onData) {
+    if (onData && chunkSize > 0) {
         onData(state.currentDataPtr(), chunkSize);
     }
     state.ptr += chunkSize;
     remainingBody_ -= chunkSize;
     state.commit();
+
     return (remainingBody_ == 0);
 }
 
