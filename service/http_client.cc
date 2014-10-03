@@ -229,7 +229,7 @@ perform(HttpRequest && request)
                 startSendingRequest();
             }
             else {
-                handleEndOfRq(result.code, true);
+                handleEndOfRq(result.code, false);
             }
         };
         connect(onConnectionResult);
