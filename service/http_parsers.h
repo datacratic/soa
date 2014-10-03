@@ -15,9 +15,25 @@ namespace Datacratic {
 /* HTTP RESPONSE PARSER                                                     */
 /****************************************************************************/
 
+/* HttpResponseParser offers a very fast and memory efficient HTTP/1.1
+ * response parser. It provides a callback-based interface which enables
+ * on-the-fly response processing.
+ */
+
 struct HttpResponseParser {
+    /* Type of callback used when a response is starting, passing the HTTP
+     * version in use as well as the HTTP response code as parameters */
     typedef std::function<void (const std::string &, int)> OnResponseStart;
+
+    /* Type of callback used when to report a header-line, including the
+     * header key and the value. */
+    typedef std::function<void (const char *, size_t)> OnHeader;
+
+    /* Type of callback used when to report a chunk of the response body. Only
+       invoked when the body is larger than 0 byte. */
     typedef std::function<void (const char *, size_t)> OnData;
+
+    /* Type of callback used when to report the end of a response */
     typedef std::function<void (bool)> OnDone;
 
     HttpResponseParser()
@@ -26,22 +42,29 @@ struct HttpResponseParser {
         clear();
     }
 
-    void clear() noexcept;
-
+    /* Feed the parsing with a 0-ended data chunk. Slightly slower than the
+       explicitly sized version, but useful for testing. Avoid in production
+       code. */
     void feed(const char * data);
+
+    /* Feed the parsing with a data chunk of a specied size. */
     void feed(const char * data, size_t size);
 
+    /* Returns the number of bytes remaining to parse from the body response,
+     * as specified by the "Content-Length" header. */
     uint64_t remainingBody() const
     {
         return remainingBody_;
     }
 
     OnResponseStart onResponseStart;
-    OnData onHeader;
+    OnHeader onHeader;
     OnData onData;
     OnDone onDone;
 
 private:
+    void clear() noexcept;
+
     /* structure to hold the temporary state of the parser used when "feed" is
        invoked */
     struct BufferState {
@@ -51,7 +74,7 @@ private:
         {
         }
 
-        /* skip as many characters as possible until "c" is found */
+        /* skip as many characters as possible until character "c" is found */
         bool skipToChar(char c, bool throwOnEol);
 
         /* number of bytes available for parsing in the buffer */
