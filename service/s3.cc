@@ -180,6 +180,14 @@ struct AtInit {
     }
 } atInit;
 
+HttpRequest::Content
+makeXmlContent(const tinyxml2::XMLDocument & xmlDocument)
+{
+    tinyxml2::XMLPrinter printer;
+    const_cast<tinyxml2::XMLDocument &>(xmlDocument).Print(&printer);
+
+    return HttpRequest::Content(string(printer.CStr()), "application/xml");
+}
 
 struct S3RequestState {
     S3RequestState(const shared_ptr<S3Api::SignedRequest> & rq,
@@ -945,7 +953,7 @@ finishMultiPartUpload(const std::string & bucket,
 
     auto joinResponse
         = postEscaped(bucket, escapedResource, "uploadId=" + uploadId,
-                      {}, {}, joinRequest);
+                      {}, {}, makeXmlContent(joinRequest));
 
     //cerr << joinResponse.bodyXmlStr() << endl;
 
