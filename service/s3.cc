@@ -1729,6 +1729,51 @@ size_t getTotalSystemMemory()
     return pages * page_size;
 }
 
+
+/****************************************************************************/
+/* EXCEPTIONPTR HANDLER                                                     */
+/****************************************************************************/
+
+bool
+ExceptionPtrHandler::
+hasException()
+{
+    std::unique_lock<mutex> guard(excLock);
+    return bool(excPtr);
+}
+
+void
+ExceptionPtrHandler::
+takeException(std::exception_ptr newPtr)
+{
+    std::unique_lock<mutex> guard(excLock);
+    excPtr = newPtr;
+}
+
+void
+ExceptionPtrHandler::
+takeCurrentException()
+{
+    takeException(std::current_exception());
+}
+
+void
+ExceptionPtrHandler::
+rethrowIfSet()
+{
+    std::unique_lock<mutex> guard(excLock);
+    if (excPtr) {
+        std::exception_ptr ptr = excPtr;
+        excPtr = nullptr;
+        std::rethrow_exception(ptr);
+    }
+}
+
+
+/****************************************************************************/
+/* STREAMING DOWNLOAD SOURCE                                                */
+/****************************************************************************/
+
 struct StreamingDownloadSource {
     StreamingDownloadSource(const std::string & urlStr)
     {

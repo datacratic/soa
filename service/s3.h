@@ -628,6 +628,26 @@ struct S3Handle{
     size_t getS3Buffer(const std::string & filename, char** outBuffer);
 };
 
+
+/****************************************************************************/
+/* EXCEPTIONPTR HANDLER                                                     */
+/****************************************************************************/
+
+/* This class provides thread-safe handling of exception-ptr. */
+struct ExceptionPtrHandler {
+    bool hasException();
+    void takeException(std::exception_ptr newPtr);
+    void takeCurrentException();
+    void rethrowIfSet();
+    void clear()
+    { takeException(nullptr); }
+
+private:
+    std::mutex excLock;
+    std::exception_ptr excPtr;
+};
+
+
 /** S3 support for filter_ostream opens.  Register the bucket name here, and
     you can open it directly from s3.
 */
