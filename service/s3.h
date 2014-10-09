@@ -9,6 +9,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -269,8 +270,8 @@ struct S3Api : public AwsApi {
     typedef std::function<void (Response && response)> OnResponse;
 
     /** Perform the request asynchronously. */
-    void perform(const std::shared_ptr<SignedRequest> & rq,
-                 const OnResponse & onResponse) const;
+    void perform(const OnResponse & onResponse,
+                 const std::shared_ptr<SignedRequest> & rq) const;
 
     /** Perform the request synchronously and return the result. */
     Response performSync(const std::shared_ptr<SignedRequest> & rq) const;
@@ -302,6 +303,20 @@ struct S3Api : public AwsApi {
     {
         return getEscaped(bucket, s3EscapeResource(resource), downloadRange,
                           subResource, headers, queryParams);
+    }
+    /** Async version of the above. */
+    void getAsync(const OnResponse & onResponse,
+                  const std::string & bucket,
+                  const std::string & resource,
+                  const Range & downloadRange,
+                  const std::string & subResource = "",
+                  const RestParams & headers = RestParams(),
+                  const RestParams & queryParams = RestParams())
+        const
+    {
+        return getEscapedAsync(onResponse, bucket, s3EscapeResource(resource),
+                               downloadRange, subResource, headers,
+                               queryParams);
     }
 
 
@@ -572,6 +587,13 @@ struct S3Api : public AwsApi {
                         const std::string & subResource = "",
                         const RestParams & headers = RestParams(),
                         const RestParams & queryParams = RestParams()) const;
+    void getEscapedAsync(const OnResponse & onResponse,
+                         const std::string & bucket,
+                         const std::string & resource,
+                         const Range & downloadRange,
+                         const std::string & subResource = "",
+                         const RestParams & headers = RestParams(),
+                         const RestParams & queryParams = RestParams()) const;
 
     /* post */
     Response postEscaped(const std::string & bucket,

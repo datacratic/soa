@@ -527,7 +527,7 @@ S3Api::init()
 
 void
 S3Api::
-perform(const shared_ptr<SignedRequest> & rq, const OnResponse & onResponse)
+perform(const OnResponse & onResponse, const shared_ptr<SignedRequest> & rq)
     const
 {
     size_t spacePos = rq->resource.find(" ");
@@ -552,7 +552,7 @@ performSync(const shared_ptr<SignedRequest> & rq) const
         done = true;
         ML::futex_wake(done);
     };
-    perform(rq, onResponse);
+    perform(onResponse, rq);
     while (!done) {
         ML::futex_wait(done, false);
     }
@@ -652,6 +652,36 @@ getEscaped(const std::string & bucket,
            const RestParams & headers,
            const RestParams & queryParams) const
 {
+    Response response;
+
+    int done(false);
+    auto onResponse = [&] (Response && newResponse) {
+        response = std::move(newResponse);
+        done = true;
+        ML::futex_wake(done);
+    };
+    getEscapedAsync(onResponse, bucket, resource, downloadRange, subResource,
+                    headers, queryParams);
+    while (!done) {
+        ML::futex_wait(done, false);
+    }
+    if (response.errorCondition_) {
+        throw ML::Exception("S3 operation failed");
+    }
+
+    return response;
+}
+
+void
+S3Api::
+getEscapedAsync(const S3Api::OnResponse & onResponse,
+                const std::string & bucket,
+                const std::string & resource,
+                const Range & downloadRange,
+                const std::string & subResource,
+                const RestParams & headers,
+                const RestParams & queryParams) const
+{
     RequestParams request;
     request.verb = "GET";
     request.bucket = bucket;
@@ -662,7 +692,7 @@ getEscaped(const std::string & bucket,
     request.date = Date::now().printRfc2616();
     request.downloadRange = downloadRange;
 
-    return performSync(prepare(request));
+    perform(onResponse, prepare(request));
 }
 
 /** Perform a POST request from end to end. */
@@ -1782,16 +1812,7 @@ struct StreamingDownloadSource {
         std::tie(impl->bucket, impl->object) = S3Api::parseUri(urlStr);
         impl->info = impl->owner->getObjectInfo(urlStr);
         impl->baseChunkSize = 1024 * 1024;  // start with 1MB and ramp up
-
-        int numThreads = 1;
-        if (impl->info.size > 1024 * 1024)
-            numThreads = 2;
-        if (impl->info.size > 16 * 1024 * 1024)
-            numThreads = 3;
-        if (impl->info.size > 256 * 1024 * 1024)
-            numThreads = 5;
-        
-        impl->start(numThreads);
+        impl->start();
     }
 
     typedef char char_type;
@@ -1814,6 +1835,64 @@ struct StreamingDownloadSource {
             stop();
         }
 
+        /* download Chunk */
+        struct Chunk {
+            Chunk()
+                noexcept
+            {
+                clear();
+            }
+
+            Chunk(Chunk && other) noexcept
+                : ready(other.ready.load()),
+                  data(move(other.data))
+            {
+            }
+
+            void clear()
+            {
+                ready = false;
+                data.clear();
+            }
+
+            void assign(string newData)
+            {
+                ExcAssert(ready == false);
+                data = move(newData);
+                ready = true;
+            }
+
+            std::string retrieve()
+            {
+                string chunkData = std::move(data);
+                ready = false;
+                return chunkData;
+            }
+
+            bool isReady()
+                const
+            {
+                return ready;
+            }
+
+            bool waitReady(double timeout)
+                const
+            {
+                if (timeout > 0.0) {
+                    Date start = Date::now();
+                    while (!ready && (Date::now() - start) < timeout) {
+                        ML::sleep(0.1);
+                    }
+                }
+
+                return ready;
+            }
+
+        private:
+            std::atomic<bool> ready;
+            string data;
+        };
+
         /* static variables, set during or right after construction */
         shared_ptr<S3Api> owner;
         std::string bucket;
@@ -1824,100 +1903,96 @@ struct StreamingDownloadSource {
         /* variables set during or after "start" has been called */
         size_t maxChunkSize;
 
-        atomic<bool> shutdown;
-        exception_ptr lastExc;
+        /* state variables, used between "start" and "stop" */
+        atomic<bool> shutdown; /* set when stop is invoked, to make sure that
+                                  no further requests are performed */
+        ExceptionPtrHandler excPtrHandler;
 
         /* read thread */
         uint64_t readOffset; /* number of bytes from the entire stream that
                               * have been returned to the caller */
-
         string readPart; /* data buffer for the part of the stream being
                           * transferred to the caller */
         ssize_t readPartOffset; /* number of bytes from "readPart" that have
                                  * been returned to the caller, or -1 when
                                  * awaiting a new part */
-        int readPartDone; /* the number of the chunk representing "readPart" */
+        unsigned int currentChunk; /* chunk being read */
 
-        /* http threads */
-        typedef RingBufferSRMW<string> ThreadData;
-
-        int numThreads; /* number of http threads */
-        vector<thread> threads; /* thread pool */
-        vector<ThreadData> threadQueues; /* per-thread queue of chunk data */
+        /* http requests */
+        unsigned int maxRqs; /* maximum number of concurrent http requests */
+        uint64_t requestedBytes; /* total number of bytes that have been
+                                  * requested, including the non-received
+                                  * ones */
+        vector<Chunk> chunks; /* chunks */
+        unsigned int currentRq;  /* number of done requests */
+        atomic<unsigned int> activeRqs; /* number of pending http requests */
 
         /* cleanup all the variables that are used during reading, the
            "static" ones are left untouched */
         void reset()
         {
+            maxChunkSize = 0;
             shutdown = false;
-
+            excPtrHandler.clear();
             readOffset = 0;
-
             readPart = "";
             readPartOffset = -1;
-            readPartDone = 0;
-
-            threadQueues.clear();
-            threads.clear();
-            numThreads = 0;
+            currentChunk = 0;
+            maxRqs = 0;
+            requestedBytes = 0;
+            chunks.clear();
+            currentRq = 0;
+            activeRqs = 0;
         }
 
-        void start(int nThreads)
+        void start()
         {
-            // Maximum chunk size is what we can do in 3 seconds
+            reset();
+
+            /* Maximum chunk size is what we can do in 3 seconds, up to 1% of
+               system memory. */
             maxChunkSize = (owner->bandwidthToServiceMbps
                             * 3.0 * 1000000);
             size_t sysMemory = getTotalSystemMemory();
-
-            //cerr << "sysMemory = " << sysMemory << endl;
-            // Limit each chunk to 1% of system memory
             maxChunkSize = std::min(maxChunkSize, sysMemory / 100);
-            //cerr << "maxChunkSize = " << maxChunkSize << endl;
-            numThreads = nThreads;
 
-            for (int i = 0; i < numThreads; i++) {
-                threadQueues.emplace_back(2);
-            }
-            
-            /* ensure that the queues are ready before the threads are
-               launched */
-            ML::memory_barrier();
+            /* The maximum number of concurrent requests is set depending on
+               the total size of the stream. */
+            maxRqs = 1;
+            if (info.size > 1024 * 1024)
+                maxRqs = 2;
+            if (info.size > 16 * 1024 * 1024)
+                maxRqs = 3;
+            if (info.size > 256 * 1024 * 1024)
+                maxRqs = 5;
+            chunks.resize(maxRqs);
 
-            for (int i = 0; i < numThreads; i++) {
-                auto threadFn = [&] (int threadNum) {
-                    this->runThread(threadNum);
-                };
-                threads.emplace_back(threadFn, i);
-            }
+            /* Kick start the requests */
+            ensureRequests();
         }
 
         void stop()
         {
             shutdown = true;
-            for (thread & th: threads) {
-                th.join();
+
+            while (activeRqs > 0) {
+                ML::sleep(0.2);
             }
 
+            excPtrHandler.rethrowIfSet();
             reset();
         }
 
         /* reader thread */
         std::streamsize read(char_type* s, std::streamsize n)
         {
-            if (lastExc) {
-                rethrow_exception(lastExc);
-            }
-
             if (readOffset == info.size)
                 return -1;
 
             if (readPartOffset == -1) {
                 waitNextPart();
             }
-
-            if (lastExc) {
-                rethrow_exception(lastExc);
-            }
+            ensureRequests();
 
             size_t toDo = min<size_t>(readPart.size() - readPartOffset,
                                       n);
@@ -1936,88 +2011,89 @@ struct StreamingDownloadSource {
 
         void waitNextPart()
         {
-            int partThread = readPartDone % numThreads;
-            ThreadData & threadQueue = threadQueues[partThread];
-
-            /* We set a timeout to avoid dead locking when http threads have
-             * exited after an exception. */
-            while (!lastExc) {
-                if (threadQueue.tryPop(readPart, 1.0)) {
-                    break;
-                }
-            }
-
+            Chunk & chunk = chunks[currentChunk % maxRqs];
+            while (!excPtrHandler.hasException() && !chunk.waitReady(1.0));
+            excPtrHandler.rethrowIfSet();
+            readPart = chunk.retrieve();
             readPartOffset = 0;
-            readPartDone++;
+            currentChunk++;
         }
 
-        /* download threads */
-        void runThread(int threadNum)
+        void ensureRequests()
         {
-            ThreadData & threadQueue = threadQueues[threadNum];
-
-            uint64_t start = 0;
-            unsigned int prevChunkNbr = 0;
-
-            try {
-                for (int loop = 0;; loop++) {
-                    /* number of the chunk that we need to process */
-                    unsigned int chunkNbr = loop * numThreads + threadNum;
-
-                    /* we adjust the offset by adding the chunk sizes of all
-                       the chunks downloaded between our previous loop until
-                       now */
-                    for (unsigned int i = prevChunkNbr; i < chunkNbr; i++) {
-                        start += getChunkSize(i);
-                    }
-
-                    if (start >= info.size) {
-                        /* we are done */
-                        return;
-                    }
-                    prevChunkNbr = chunkNbr;
-
-                    size_t chunkSize = getChunkSize(chunkNbr);
-                    uint64_t end = start + chunkSize;
-                    if (end > info.size) {
-                        end = info.size;
-                        chunkSize = end - start;
-                    }
-
-                    auto partResult
-                        = owner->get(bucket, "/" + object,
-                                     S3Api::Range(start, chunkSize));
-                    
-                    if (partResult.code_ != 206) {
-                        throw ML::Exception("http error "
-                                            + to_string(partResult.code_)
-                                            + " while getting part "
-                                            + partResult.bodyXmlStr());
-                    }
-                    // it can sometimes happen that a file changes during download
-                    // i.e it is being overwritten. Make sure we check for this condition
-                    // and throw an appropriate exception
-                    string chunkEtag = partResult.getHeader("etag") ;
-                    if(chunkEtag != info.etag)
-                        throw ML::Exception("chunk etag %s not equal to file etag %s: file <%s> has changed during download!!", chunkEtag.c_str(), info.etag.c_str(), object.c_str());
-                    ExcAssert(partResult.body().size() == chunkSize);
-
-                    while (true) {
-                        if (shutdown || lastExc) {
-                            return;
-                        }
-                        if (threadQueue.tryPush(partResult.body())) {
-                            break;
-                        }
-                        else {
-                            ML::sleep(0.1);
-                        }
-                    }
+            while (true) {
+                if (excPtrHandler.hasException()) {
+                    break;
                 }
+                if (activeRqs >= maxRqs) {
+                    break;
+                }
+                if (requestedBytes >= info.size) {
+                    break;
+                }
+
+                Chunk & chunk = chunks[currentRq % maxRqs];
+                if (chunk.isReady()) {
+                    break;
+                }
+
+                ensureRequest(chunk);
             }
-            catch (...) {
-                lastExc = current_exception();
+        }
+
+        void ensureRequest(Chunk & chunk)
+        {
+            size_t chunkSize = getChunkSize(currentRq);
+            uint64_t end = requestedBytes + chunkSize;
+            if (end > info.size) {
+                end = info.size;
+                chunkSize = end - requestedBytes;
             }
+
+            activeRqs++;
+
+            auto onResponse = [&, chunkSize] (S3Api::Response && response) {
+                this->handleResponse(chunk, chunkSize, std::move(response));
+            };
+            owner->getAsync(onResponse, bucket, "/" + object,
+                            S3Api::Range(requestedBytes, chunkSize));
+            ExcAssert(currentRq < UINT_MAX);
+            currentRq++;
+            requestedBytes += chunkSize;
+        }
+
+        void handleResponse(Chunk & chunk, size_t chunkSize,
+                            S3Api::Response && response)
+        {
+            try {
+                if (response.errorCondition_) {
+                    throw ML::Exception("S3 operation failed");
+                }
+                if (response.code_ != 206) {
+                    throw ML::Exception("http error "
+                                        + to_string(response.code_)
+                                        + " while getting chunk "
+                                        + response.bodyXmlStr());
+                }
+
+                /* It can sometimes happen that a file changes during download
+                   i.e it is being overwritten. Make sure we check for this
+                   condition and throw an appropriate exception. */
+                string chunkEtag = response.getHeader("etag");
+                if (chunkEtag != info.etag) {
+                    throw ML::Exception("chunk etag %s not equal to file etag"
+                                        " %s: file <%s> has changed during"
+                                        " download",
+                                        chunkEtag.c_str(), info.etag.c_str(),
+                                        object.c_str());
+                }
+                ExcAssert(response.body().size() == chunkSize);
+                chunk.assign(std::move(response.body_));
+            }
+            catch (const std::exception & exc) {
+                excPtrHandler.takeCurrentException();
+            }
+            activeRqs--;
         }
 
         size_t getChunkSize(unsigned int chunkNbr)
