@@ -223,6 +223,7 @@ struct S3RequestState {
     S3Api::OnResponse onResponse;
 
     string body;
+    string requestBody;
     S3Api::Range range;
     int retries;
 };
@@ -294,7 +295,7 @@ void
 S3RequestCallbacks::
 onData(const HttpRequest & rq, const char * data, size_t size)
 {
-    state_->body.append(data, size);
+    state_->requestBody.append(data, size);
 }
 
 void
@@ -325,8 +326,10 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         cerr << "curl error: " + errorMessage(errorCode) + "\n";
         restart = true;
         if (state_->rq->params.useRange()) {
-            state_->range.adjust(state_->body.size());
+            state_->range.adjust(state_->requestBody.size());
         }
+        state_->body.append(state_->requestBody);
+        state_->requestBody.clear();
         message = ("S3 operation failed with internal error: "
                    + errorMessage(errorCode) + "\n");
     }
@@ -353,7 +356,9 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
     else {
         response_.header_.parse(header_, false);
         header_.clear();
-        response_.body_ = move(state_->body);
+        state_->body.append(state_->requestBody);
+        state_->requestBody.clear();
+        response_.body_ = std::move(state_->body);
         state_->onResponse(std::move(response_));
     }
 }
@@ -1857,7 +1862,7 @@ struct StreamingDownloadSource {
 
             void assign(string newData)
             {
-                ExcAssert(ready == false);
+                ExcAssertEqual(ready, false);
                 data = move(newData);
                 ready = true;
             }
@@ -2057,7 +2062,7 @@ struct StreamingDownloadSource {
             };
             owner->getAsync(onResponse, bucket, "/" + object,
                             S3Api::Range(requestedBytes, chunkSize));
-            ExcAssert(currentRq < UINT_MAX);
+            ExcAssertLess(currentRq, UINT_MAX);
             currentRq++;
             requestedBytes += chunkSize;
         }
@@ -2087,7 +2092,7 @@ struct StreamingDownloadSource {
                                         chunkEtag.c_str(), info.etag.c_str(),
                                         object.c_str());
                 }
-                ExcAssert(response.body().size() == chunkSize);
+                ExcAssertEqual(response.body().size(), chunkSize);
                 chunk.assign(std::move(response.body_));
             }
             catch (const std::exception & exc) {
