@@ -19,6 +19,8 @@ $(eval $(call library,test_utils,$(LIB_TEST_UTILS_SOURCES),$(LIB_TEST_UTILS_LINK
 
 $(eval $(call library,variadic_hash,variadic_hash.cc,cityhash))
 
+$(eval $(call library,string_encryption,string_encryption.cc,crypto++))
+$(eval $(call program,string_encryption_keygen,string_encryption))
 
 ifeq ($(PYTHON_ENABLED),1)
 
