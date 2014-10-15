@@ -230,14 +230,14 @@ struct S3Api : public AwsApi {
         ObjectMetadata()
             : redundancy(REDUNDANCY_DEFAULT),
               serverSideEncryption(SSE_NONE),
-              numThreads(8)
+              numRequests(8)
         {
         }
 
         ObjectMetadata(const Redundancy & redundancy)
             : redundancy(redundancy),
               serverSideEncryption(SSE_NONE),
-              numThreads(8)
+              numRequests(8)
         {
         }
 
@@ -249,7 +249,9 @@ struct S3Api : public AwsApi {
         std::string contentEncoding;
         std::map<std::string, std::string> metadata;
         std::string acl;
-        unsigned int numThreads;
+
+        /* maximum number of concurrent requests */
+        unsigned int numRequests;
     };
 
     /** Signed request that can be executed. */
@@ -339,11 +341,26 @@ struct S3Api : public AwsApi {
                  const std::string & subResource = "",
                  const RestParams & headers = RestParams(),
                  const RestParams & queryParams = RestParams(),
-                 const HttpRequest::Content & content = HttpRequest::Content())
+                 const HttpRequest::Content & content
+                 = HttpRequest::Content())
         const
     {
         return putEscaped(bucket, s3EscapeResource(resource), subResource,
                           headers, queryParams, content);
+    }
+
+    /** Async version of the above. */
+    void putAsync(const OnResponse & onResponse,
+                  const std::string & bucket,
+                  const std::string & resource,
+                  const std::string & subResource = "",
+                  const RestParams & headers = RestParams(),
+                  const RestParams & queryParams = RestParams(),
+                  const HttpRequest::Content & content = HttpRequest::Content())
+        const
+    {
+        return putEscapedAsync(onResponse, bucket, s3EscapeResource(resource),
+                               subResource, headers, queryParams, content);
     }
 
     /** Perform a DELETE request from end to end including data. */
@@ -610,6 +627,14 @@ struct S3Api : public AwsApi {
                         const RestParams & headers = RestParams(),
                         const RestParams & queryParams = RestParams(),
                         const HttpRequest::Content & content = HttpRequest::Content()) const;
+    void putEscapedAsync(const OnResponse & onResponse,
+                         const std::string & bucket,
+                         const std::string & resource,
+                         const std::string & subResource = "",
+                         const RestParams & headers = RestParams(),
+                         const RestParams & queryParams = RestParams(),
+                         const HttpRequest::Content & content
+                         = HttpRequest::Content()) const;
 
     /* erase */
     Response eraseEscaped(const std::string & bucket,
