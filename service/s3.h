@@ -656,23 +656,9 @@ private:
     ObjectInfo getObjectInfoFull(const std::string & bucket,
                                  const std::string & object) const;
 
-    // Used to pool connections to the S3 service
-    static HttpRestProxy proxy;
-
     /// Static variable to hold the default redundancy to be used
     static Redundancy defaultRedundancy;
 
-};
-
-struct S3Handle{
-    S3Api s3;
-    std::string s3UriPrefix;
-
-    void initS3(const std::string & accessKeyId,
-                const std::string & accessKey,
-                const std::string & uriPrefix);
-
-    size_t getS3Buffer(const std::string & filename, char** outBuffer);
 };
 
 
