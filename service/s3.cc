@@ -169,6 +169,8 @@ double
 S3Api::
 defaultBandwidthToServiceMbps = 20.0;
 
+S3Api::Range S3Api::Range::Full(0);
+
 S3Api::
 S3Api()
 {
@@ -258,7 +260,7 @@ performSync() const
 
     Range currentRange = params.downloadRange;
     bool useRange(false);
-    if (params.verb == "GET" && !currentRange.isNil()) {
+    if (params.verb == "GET" && currentRange != Range::Full) {
         useRange = true;
     }
 
@@ -684,7 +686,7 @@ S3Api::isMultiPartUploadInProgress(
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 0, "uploads", {},
+    auto inProgressReq = get(bucket, "/", Range::Full, "uploads", {},
                              { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -739,7 +741,7 @@ obtainMultiPartUpload(const std::string & bucket,
     if (requirements != UR_FRESH) {
 
         // Check if there is already a multipart upload in progress
-        auto inProgressReq = get(bucket, "/", 0, "uploads", {},
+        auto inProgressReq = get(bucket, "/", Range::Full, "uploads", {},
                                  { { "prefix", outputPrefix } });
 
         //cerr << "in progress requests:" << endl;
@@ -781,7 +783,7 @@ obtainMultiPartUpload(const std::string & bucket,
             continue;
 
             // TODO: check metadata, etc
-            auto inProgressInfo = getEscaped(bucket, escapedResource, 0,
+            auto inProgressInfo = getEscaped(bucket, escapedResource, Range::Full,
                                              "uploadId=" + uploadId)
                 .bodyXml();
 
@@ -921,7 +923,7 @@ upload(const char * data,
 
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
         auto existingResource
-            = get(bucket, "/", 0, "", {},
+            = get(bucket, "/", Range::Full, "", {},
                   { { "prefix", outputPrefix } })
             .bodyXml();
 
@@ -1191,7 +1193,7 @@ forEachObject(const std::string & bucket,
         if (marker != "")
             queryParams.push_back({"marker", marker});
 
-        auto listingResult = get(bucket, "/", 0, "",
+        auto listingResult = get(bucket, "/", Range::Full, "",
                                  {}, queryParams);
         auto listingResultXml = listingResult.bodyXml();
 
@@ -1310,7 +1312,7 @@ getObjectInfoFull(const std::string & bucket, const std::string & object)
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = getEscaped(bucket, "/", 0, "", {}, queryParams);
+    auto listingResult = getEscaped(bucket, "/", Range::Full, "", {}, queryParams);
 
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -1374,7 +1376,7 @@ tryGetObjectInfoFull(const std::string & bucket, const std::string & object)
     StrPairVector queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 0, "", {}, queryParams);
+    auto listingResult = get(bucket, "/", Range::Full, "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
         throw ML::Exception("error getting object request: %d",
@@ -2356,7 +2358,7 @@ forEachBucket(const OnBucket & onBucket) const
 
     //cerr << "forEachObject under " << prefix << endl;
 
-    auto listingResult = get("", "/", 0, "");
+    auto listingResult = get("", "/", Range::Full, "");
     auto listingResultXml = listingResult.bodyXml();
 
     //listingResultXml->Print();

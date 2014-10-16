@@ -127,6 +127,8 @@ struct S3Api : public AwsApi {
             : offset(aOffset), size(aSize)
         {}
 
+        static Range Full;
+
         uint64_t endPos() const
         { return (offset + size - 1); }
 
@@ -140,8 +142,11 @@ struct S3Api : public AwsApi {
             size -= downloaded;
         }
 
-        bool isNil() const
-        { return (size == 0); }
+        bool operator == (const Range & other) const
+        { return offset == other.offset && size == other.size; }
+
+        bool operator != (const Range & other) const
+        { return !(*this == other); }
 
         uint64_t offset;
         uint64_t size;
