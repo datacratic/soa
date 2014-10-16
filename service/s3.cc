@@ -2476,7 +2476,7 @@ void registerS3Bucket(const std::string & bucketName,
     info.api = std::make_shared<S3Api>(accessKeyId, accessKey,
                                        bandwidthToServiceMbps,
                                        protocol, serviceUri);
-    info.api->getEscaped("", "/" + bucketName + "/", 0);//throws if !accessible
+    info.api->getEscaped("", "/" + bucketName + "/", Range::Full);//throws if !accessible
     s3Buckets[bucketName] = info;
 
     if (accessKeyId.size() > 0 && accessKey.size() > 0) {
@@ -2790,7 +2790,7 @@ std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri)
     }
 
     auto api = make_shared<S3Api>(accessKeyId, accessKey);
-    api->getEscaped("", "/" + bucketName + "/", 0);//throws if !accessible
+    api->getEscaped("", "/" + bucketName + "/", Range::Full);//throws if !accessible
 
     return api;
 }
