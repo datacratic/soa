@@ -127,7 +127,7 @@ struct S3Api : public AwsApi {
             : offset(aOffset), size(aSize)
         {}
 
-        uint64_t endPos()
+        uint64_t endPos() const
         { return (offset + size - 1); }
 
         void adjust(size_t downloaded)
@@ -139,6 +139,9 @@ struct S3Api : public AwsApi {
             offset += downloaded;
             size -= downloaded;
         }
+
+        bool isNil() const
+        { return (size == 0); }
 
         uint64_t offset;
         uint64_t size;
