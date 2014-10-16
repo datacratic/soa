@@ -259,10 +259,13 @@ performSync() const
     }
 
     Range currentRange = params.downloadRange;
-    bool useRange(false);
-    if (params.verb == "GET" && currentRange != Range::Full) {
-        useRange = true;
-    }
+
+    /* The "Range" header is only useful with GET and when the range is
+       explicitly specified. The use of Range::Full means that we always
+       request the full body, even during retries. This is mainly useful for
+       requests on non-object urls, where that header is ignored by the S3
+       servers. */
+    bool useRange = (params.verb == "GET" && currentRange != Range::Full);
 
     string body;
     for (int i = 0; i < numRetries; ++i) {
