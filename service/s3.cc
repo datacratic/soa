@@ -5,6 +5,9 @@
     Code to talk to s3.
 */
 
+/* last known compatible commit in master branch:
+ * 3af7972ebb11eb7fadf9a4d255ed6df7d778e2a9 */
+
 #include <atomic>
 #include <mutex>
 
@@ -47,7 +50,68 @@ using namespace Datacratic;
 
 namespace {
 
-/* S3URLFSHANDLER */
+/****************************************************************************/
+/* S3 GLOBALS                                                               */
+/****************************************************************************/
+
+struct S3Globals {
+    S3Globals()
+        : baseRetryDelay(3), numRetries(-1)
+    {
+        if (numRetries == -1) {
+            char * numRetriesEnv = getenv("S3_RETRIES");
+            if (numRetriesEnv) {
+                numRetries = atoi(numRetriesEnv);
+            }
+            else {
+                numRetries = 45;
+            }
+        }
+
+        loop.start();
+    }
+
+    shared_ptr<HttpClient> &
+    getClient(const string & bucket,
+              const string & baseHostname = "s3.amazonaws.com")
+    {
+        string hostname = bucket;
+        if (hostname.size() > 0) {
+            hostname += ".";
+        }
+        hostname += baseHostname;
+
+        unique_lock<mutex> guard(clientsLock);
+        auto & client = clients[hostname];
+        if (!client) {
+            client.reset(new HttpClient(hostname, 30));
+            client->sendExpect100Continue(false);
+            loop.addSource("s3-client-" + hostname, client);
+        }
+
+        return client;
+    }
+
+    int baseRetryDelay;
+    int numRetries;
+    MessageLoop loop;
+
+private:
+    mutex clientsLock;
+    map<string, shared_ptr<HttpClient> > clients;
+};
+
+static S3Globals &
+getS3Globals()
+{
+    static S3Globals s3Config;
+    return s3Config;
+}
+
+
+/****************************************************************************/
+/* S3 URL FS HANDLER                                                        */
+/****************************************************************************/
 
 struct S3UrlFsHandler : public UrlFsHandler {
     virtual FsObjectInfo getInfo(const Url & url) const
@@ -120,17 +184,17 @@ struct S3UrlFsHandler : public UrlFsHandler {
     }
 };
 
+
+/****************************************************************************/
+/* S3 DOWNLOADER                                                            */
+/****************************************************************************/
+
 size_t getTotalSystemMemory()
 {
     long pages = sysconf(_SC_PHYS_PAGES);
     long page_size = sysconf(_SC_PAGE_SIZE);
     return pages * page_size;
 }
-
-
-/****************************************************************************/
-/* S3 DOWNLOADER                                                            */
-/****************************************************************************/
 
 struct S3Downloader {
     S3Downloader(const string & urlStr,
@@ -189,8 +253,7 @@ struct S3Downloader {
         }
     }
 
-    typedef char char_type;
-    std::streamsize read(char_type* s, std::streamsize n)
+    std::streamsize read(char * s, std::streamsize n)
     {
         if (closed) {
             throw ML::Exception("invoking read() on a shutted down download");
@@ -207,7 +270,7 @@ struct S3Downloader {
 
         size_t toDo = min<size_t>(readPart.size() - readPartOffset,
                                   n);
-        const char_type * start = readPart.c_str() + readPartOffset;
+        const char * start = readPart.c_str() + readPartOffset;
         std::copy(start, start + toDo, s);
 
         readPartOffset += toDo;
@@ -431,59 +494,207 @@ private:
 };
 
 
-struct S3Globals {
-    S3Globals()
-        : baseRetryDelay(3), numRetries(-1)
-    {
-        if (numRetries == -1) {
-            char * numRetriesEnv = getenv("S3_RETRIES");
-            if (numRetriesEnv) {
-                numRetries = atoi(numRetriesEnv);
-            }
-            else {
-                numRetries = 45;
-            }
-        }
+/****************************************************************************/
+/* S3 UPLOADER                                                              */
+/****************************************************************************/
 
-        loop.start();
+inline void touchByte(const char * c)
+{
+    __asm__(" # [in]":: [in] "r" (*c):);
+}
+
+inline void touch(const char * start, size_t size)
+{
+    const char * current = start;
+    current = (const char *) ((intptr_t) current % 4096);
+    if (current < start) {
+        current += 4096;
+    }
+    const char * end = start + size;
+    for (; current < end; current += 4096) {
+        touchByte(current);
+    }
+}
+
+struct S3Uploader {
+    S3Uploader(const std::string & urlStr,
+               const ML::OnUriHandlerException & excCallback,
+               const S3Api::ObjectMetadata & objectMetadata)
+        : owner(getS3ApiForUri(urlStr)),
+          metadata(objectMetadata),
+          onException(excCallback),
+          closed(false),
+          chunkSize(8 * 1024 * 1024), // start with 8MB and ramp up
+          currentRq(0),
+          activeRqs(0)
+    {
+        std::tie(bucket, object) = S3Api::parseUri(urlStr);
+
+        /* Maximum chunk size is what we can do in 3 seconds, up to 1% of
+           system memory. */
+#if 0
+        maxChunkSize = (owner->bandwidthToServiceMbps
+                        * 3.0 * 1000000);
+        size_t sysMemory = getTotalSystemMemory();
+        maxChunkSize = std::min(maxChunkSize, sysMemory / 100);
+#else
+        maxChunkSize = 64 * 1024 * 1024;
+#endif
+
+        try {
+            S3Api::MultiPartUpload upload = owner->obtainMultiPartUpload(bucket, "/" + object,
+                                                                         metadata,
+                                                                         S3Api::UR_EXCLUSIVE);
+            uploadId = upload.id;
+        }
+        catch (...) {
+            onException();
+            throw;
+        }
     }
 
-    shared_ptr<HttpClient> &
-    getClient(const string & bucket,
-              const string & baseHostname = "s3.amazonaws.com")
+    ~S3Uploader()
     {
-        string hostname = bucket;
-        if (hostname.size() > 0) {
-            hostname += ".";
+        /* We ensure at runtime that "close" is called because it is mandatory
+           for the proper cleanup of active requests. Because "close" can
+           throw, we cannot however call it from the destructor. */
+        if (!closed) {
+            cerr << "destroying S3Uploader without invoking close()\n";
+            abort();
         }
-        hostname += baseHostname;
-
-        unique_lock<mutex> guard(clientsLock);
-        auto & client = clients[hostname];
-        if (!client) {
-            client.reset(new HttpClient(hostname, 30));
-            client->sendExpect100Continue(false);
-            loop.addSource("s3-client-" + hostname, client);
-        }
-
-        return client;
     }
 
-    int baseRetryDelay;
-    int numRetries;
-    MessageLoop loop;
+    std::streamsize write(const char * s, std::streamsize n)
+    {
+        std::streamsize done(0);
+
+        touch(s, n);
+
+        size_t remaining = chunkSize - current.size();
+        while (n > 0) {
+            if (excPtrHandler.hasException()) {
+                onException();
+            }
+            excPtrHandler.rethrowIfSet();
+            size_t toDo = min(remaining, (size_t) n);
+            if (toDo < n) {
+                flush();
+                remaining = chunkSize - current.size();
+            }
+            current.append(s, toDo);
+            s += toDo;
+            n -= toDo;
+            done += toDo;
+            remaining -= toDo;
+        }
+
+        return done;
+    }
+
+    void flush()
+    {
+        ExcAssert(current.size() > 0);
+        while (activeRqs == metadata.numRequests) {
+            ML::futex_wait(activeRqs, activeRqs, 0.2);
+        }
+        if (excPtrHandler.hasException()) {
+            onException();
+        }
+        excPtrHandler.rethrowIfSet();
+
+        unsigned int rqNbr(currentRq);
+        auto onResponse = [&, rqNbr] (S3Api::Response && response) {
+            this->handleResponse(rqNbr, std::move(response));
+        };
+
+        unsigned int partNumber = currentRq + 1;
+        if (etags.size() < partNumber) {
+            etags.resize(partNumber);
+        }
+
+        activeRqs++;
+        owner->putAsync(onResponse, bucket, "/" + object,
+                        ML::format("partNumber=%d&uploadId=%s",
+                                   partNumber, uploadId),
+                        {}, {}, current);
+
+        if (currentRq % 5 == 0 && chunkSize < maxChunkSize)
+            chunkSize *= 2;
+
+        current.clear();
+        currentRq = partNumber;
+    }
+
+    void handleResponse(unsigned int rqNbr, S3Api::Response && response)
+    {
+        try {
+            if (response.errorCondition_) {
+                throw ML::Exception("S3 operation failed");
+            }
+            if (response.code_ != 200) {
+                cerr << response.bodyXmlStr() << endl;
+                throw ML::Exception("put didn't work: %d", (int)response.code_);
+            }
+
+            string etag = response.getHeader("etag");
+            ExcAssert(etag.size() > 0);
+            etags[rqNbr] = etag;
+        }
+        catch (const std::exception & exc) {
+            excPtrHandler.takeCurrentException();
+        }
+        activeRqs--;
+        ML::futex_wake(activeRqs);
+    }
+
+    string close()
+    {
+        closed = true;
+        if (current.size() > 0) {
+            flush();
+        }
+        while (activeRqs > 0) {
+            ML::futex_wait(activeRqs, 0, 0.2);
+        }
+        if (excPtrHandler.hasException()) {
+            onException();
+        }
+        excPtrHandler.rethrowIfSet();
+
+        string finalEtag;
+        try {
+            finalEtag = owner->finishMultiPartUpload(bucket, "/" + object,
+                                                     uploadId, etags);
+        }
+        catch (...) {
+            onException();
+            throw;
+        }
+
+        return finalEtag;
+    }
 
 private:
-    mutex clientsLock;
-    map<string, shared_ptr<HttpClient> > clients;
+    shared_ptr<S3Api> owner;
+    std::string bucket;
+    std::string object;
+    S3Api::ObjectMetadata metadata;
+    ML::OnUriHandlerException onException;
+
+    size_t maxChunkSize;
+    std::string uploadId;
+
+    /* state variables, used between "start" and "stop" */
+    bool closed; /* whether close() was invoked */
+    ExceptionPtrHandler excPtrHandler;
+
+    string current; /* current chunk data */
+    size_t chunkSize; /* current chunk size */
+    std::vector<std::string> etags; /* etags of individual chunks */
+    unsigned int currentRq;  /* number of done requests */
+    atomic<unsigned int> activeRqs; /* number of pending http requests */
 };
 
-static S3Globals &
-getS3Globals()
-{
-    static S3Globals s3Config;
-    return s3Config;
-}
 
 struct AtInit {
     AtInit() {
@@ -499,6 +710,11 @@ makeXmlContent(const tinyxml2::XMLDocument & xmlDocument)
 
     return HttpRequest::Content(string(printer.CStr()), "application/xml");
 }
+
+
+/****************************************************************************/
+/* S3 REQUEST STATE                                                         */
+/****************************************************************************/
 
 struct S3RequestState {
     S3RequestState(const shared_ptr<S3Api::SignedRequest> & rq,
@@ -538,6 +754,10 @@ struct S3RequestState {
     S3Api::Range range;
     int retries;
 };
+
+/****************************************************************************/
+/* S3 REQUEST CALLBACKS                                                     */
+/****************************************************************************/
 
 struct S3RequestCallbacks : public HttpClientCallbacks {
     S3RequestCallbacks(const shared_ptr<S3RequestState> & state)
@@ -754,12 +974,24 @@ scheduleRestart()
 
 namespace Datacratic {
 
+/****************************************************************************/
+/* S3 CONFIG DESCRIPTION                                                    */
+/****************************************************************************/
+
 S3ConfigDescription::
 S3ConfigDescription()
 {
     addField("accessKeyId", &S3Config::accessKeyId, "");
     addField("accessKey", &S3Config::accessKey, "");
 }
+
+/****************************************************************************/
+/* S3 API                                                                   */
+/****************************************************************************/
+
+double
+S3Api::
+defaultBandwidthToServiceMbps = 20.0;
 
 std::string
 S3Api::
@@ -783,11 +1015,6 @@ s3EscapeResource(const std::string & str)
     
     return result;
 }
-
-
-double
-S3Api::
-defaultBandwidthToServiceMbps = 20.0;
 
 S3Api::
 S3Api()
@@ -825,7 +1052,8 @@ init(const std::string & accessKeyId,
 }
 
 void
-S3Api::init()
+S3Api::
+init()
 {
     string keyId, key;
     std::tie(keyId, key, std::ignore)
@@ -1364,22 +1592,22 @@ std::string
 S3Api::
 upload(const char * data,
        size_t dataSize,
-       const std::string & bucket,
-       const std::string & resource,
+       const std::string & uri,
        CheckMethod check,
-       const ObjectMetadata & metadata,
+       ObjectMetadata metadata,
        int numInParallel)
 {
-    string escapedResource = s3EscapeResource(resource);
-
-    // Contains the resource without the leading slash
-    string outputPrefix(resource, 1);
-
     //cerr << "need to upload " << dataSize << " bytes" << endl;
 
     // Check if it's already there
 
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
+        string bucket, resource;
+        std::tie(bucket, resource) = parseUri(uri);
+        string escapedResource = s3EscapeResource(resource);
+        // Contains the resource without the leading slash
+        string outputPrefix(resource, 1);
+
         auto existingResource
             = get(bucket, "/", 8192, "", {},
                   { { "prefix", outputPrefix } })
@@ -1406,192 +1634,37 @@ upload(const char * data,
         }
     }
 
-    auto upload = obtainMultiPartUpload(bucket, resource, metadata, UR_EXCLUSIVE);
+    if (numInParallel != -1) {
+        metadata.numRequests = numInParallel;
+    }
+    S3Uploader uploader(uri, ML::OnUriHandlerException(), metadata);
 
-    uint64_t partSize = 0;
-    uint64_t currentOffset = 0;
-
-    for (auto & part: upload.parts) {
-        partSize = std::max(partSize, part.size);
-        currentOffset = std::max(currentOffset, part.startOffset + part.size);
+    /* The size of the slices we pass as argument to S3Uploader::write.
+       Internally, S3Uploader will uses its own chunk size when performing the
+       actual upload requests. */
+    size_t partSize = 5 * 1024 * 1024;
+    for (size_t i = 0; i < dataSize;) {
+        size_t remaining = dataSize - i;
+        size_t currentSize = std::min(partSize, remaining);
+        uploader.write(data + i, currentSize);
+        i += currentSize;
     }
 
-    if (partSize == 0) {
-        if (dataSize < 5 * 1024 * 1024) {
-            partSize = dataSize;
-        }
-        else {
-            partSize = 8 * 1024 * 1024;
-            while (dataSize / partSize > 150) {
-                partSize *= 2;
-            }
-        }
-    }
-
-    string uploadId = upload.id;
-    vector<MultiPartUploadPart> & parts = upload.parts;
-
-    uint64_t offset = currentOffset;
-    for (int i = 0;  offset < dataSize;  offset += partSize, ++i) {
-        MultiPartUploadPart part;
-        part.partNumber = parts.size() + 1;
-        part.startOffset = offset;
-        part.size = min<uint64_t>(partSize, dataSize - offset);
-        parts.push_back(part);
-    }
-
-    // we are dealing with an empty file
-    if(parts.empty() || dataSize == 0)
-    {
-        MultiPartUploadPart part;
-        parts.clear();
-        part.partNumber = 1;
-        part.startOffset = offset;
-        part.size = 0;
-        parts.push_back(part);
-    }
-    //cerr << "total parts = " << parts.size() << endl;
-
-    //if (!foundId)
-
-    uint64_t bytesDone = 0;
-    Date start;
-
-    auto touchByte = [] (const char * c)
-        {
-
-            __asm__
-            (" # [in]"
-             :
-             : [in] "r" (*c)
-             :
-             );
-        };
-
-    auto touch = [&] (const char * start, size_t size)
-        {
-            for (size_t i = 0;  i < size;  i += 4096) {
-                touchByte(start + i);
-            }
-        };
-
-    int readyPart = 0;
-
-    auto doPart = [&] (int i)
-        {
-            MultiPartUploadPart & part = parts[i];
-            //cerr << "part " << i << " with " << part.size << " bytes" << endl;
-
-            // Wait until we're allowed to go
-            for (;;) {
-                int isReadyPart = readyPart;
-                if (isReadyPart >= i) {
-                    break;
-                }
-                futex_wait(readyPart, isReadyPart);
-            }
-
-            // First touch the input range
-            touch(data + part.startOffset,
-                  part.size);
-
-            //cerr << "done touching " << i << endl;
-
-            // Now let the next one go
-            ExcAssertEqual(readyPart, i);
-            ++readyPart;
-
-            futex_wake(readyPart);
-
-            string md5 = md5HashToHex(data + part.startOffset,
-                                      part.size);
-
-            if (part.done) {
-                //cerr << "etag is " << part.etag << endl;
-                if ('"' + md5 + '"' == part.etag) {
-                    //cerr << "part " << i << " verified done" << endl;
-                    return;
-                }
-            }
-
-            HttpRequest::Content content(data + part.startOffset, part.size);
-            auto putResult = putEscaped(bucket, escapedResource,
-                                        ML::format("partNumber=%d&uploadId=%s",
-                                                   part.partNumber, uploadId),
-                                        {}, {}, content);
-
-            //cerr << "result of part " << i << " is "
-            //<< putResult.bodyXmlStr() << endl;
-
-            if (putResult.code_ != 200) {
-                part.etag = "ERROR";
-                cerr << putResult.bodyXmlStr() << endl;
-                throw ML::Exception("put didn't work: %d", (int)putResult.code_);
-            }
-
-
-
-            ML::atomic_add(bytesDone, part.size);
-
-            // double seconds = Date::now().secondsSince(start);
-            // cerr << "uploaded " << bytesDone / 1024 / 1024 << " MB in "
-            // << seconds << " s at "
-            // << bytesDone / 1024.0 / 1024 / seconds
-            // << " MB/second" << endl;
-
-            //cerr << putResult.header_ << endl;
-
-            string etag = putResult.getHeader("etag");
-
-            //cerr << "etag = " << etag << endl;
-
-            part.etag = etag;
-        };
-
-    int currentPart = 0;
-
-    start = Date::now();
-
-    auto doPartThread = [&] ()
-        {
-            for (;;) {
-                if (currentPart >= parts.size()) break;
-                int partToDo = __sync_fetch_and_add(&currentPart, 1);
-                if (partToDo >= parts.size()) break;
-                doPart(partToDo);
-            }
-        };
-
-    if (numInParallel == -1)
-        numInParallel = 16;
-
-    boost::thread_group tg;
-    for (unsigned i = 0;  i < numInParallel;  ++i)
-        tg.create_thread(doPartThread);
-
-    tg.join_all();
-
-    vector<string> etags;
-    for (unsigned i = 0;  i < parts.size();  ++i) {
-        etags.push_back(parts[i].etag);
-    }
-    string finalEtag = finishMultiPartUpload(bucket, resource,
-                                             uploadId, etags);
-    return finalEtag;
+    return uploader.close();
 }
 
 std::string
 S3Api::
 upload(const char * data,
-       size_t bytes,
-       const std::string & uri,
+       size_t dataSize,
+       const std::string & bucket,
+       const std::string & resource,
        CheckMethod check,
-       const ObjectMetadata & metadata,
+       ObjectMetadata metadata,
        int numInParallel)
 {
-    string bucket, object;
-    std::tie(bucket, object) = parseUri(uri);
-    return upload(data, bytes, bucket, "/" + object, check, metadata,
+    string urlStr("s3://" + bucket + "/" + resource);
+    return upload(data, dataSize, urlStr, check, move(metadata),
                   numInParallel);
 }
 
@@ -2064,9 +2137,10 @@ rethrowIfSet()
 struct StreamingDownloadSource {
     StreamingDownloadSource(const std::string & urlStr)
     {
-        reader.reset(new S3Downloader(urlStr));
+        downloader.reset(new S3Downloader(urlStr));
     }
 
+    typedef char char_type;
     struct category
         : //input_seekable,
         boost::iostreams::input,
@@ -2074,26 +2148,24 @@ struct StreamingDownloadSource {
         boost::iostreams::closable_tag
     { };
 
-    typedef S3Downloader::char_type char_type;
-
     std::streamsize read(char_type * s, std::streamsize n)
     {
-        return reader->read(s, n);
+        return downloader->read(s, n);
     }
 
     bool is_open() const
     {
-        return !!reader;
+        return !!downloader;
     }
 
     void close()
     {
-        reader->close();
-        reader.reset();
+        downloader->close();
+        downloader.reset();
     }
 
 private:
-    std::shared_ptr<S3Downloader> reader;
+    std::shared_ptr<S3Downloader> downloader;
 };
 
 std::unique_ptr<std::streambuf>
@@ -2113,19 +2185,18 @@ makeStreamingDownload(const std::string & bucket,
     return makeStreamingDownload("s3://" + bucket + "/" + object);
 }
 
+
+/****************************************************************************/
+/* STREAMING UPLOAD SOURCE                                                  */
+/****************************************************************************/
+
 struct StreamingUploadSource {
 
     StreamingUploadSource(const std::string & urlStr,
                           const ML::OnUriHandlerException & excCallback,
                           const S3Api::ObjectMetadata & metadata)
     {
-        impl.reset(new Impl());
-        impl->owner = getS3ApiForUri(urlStr);
-        std::tie(impl->bucket, impl->object) = S3Api::parseUri(urlStr);
-        impl->metadata = metadata;
-        impl->onException = excCallback;
-
-        impl->start();
+        uploader.reset(new S3Uploader(urlStr, excCallback, metadata));
     }
 
     typedef char char_type;
@@ -2136,191 +2207,24 @@ struct StreamingUploadSource {
     {
     };
 
-    struct Impl {
-        ~Impl()
-        {
-            //cerr << "destroying streaming upload at " << object << endl;
-            stop();
-        }
-
-        shared_ptr<S3Api> owner;
-        std::string bucket;
-        std::string object;
-        S3Api::ObjectMetadata metadata;
-        ML::OnUriHandlerException onException;
-
-        size_t maxChunkSize;
-        std::string uploadId;
-
-        /* state variables, used between "start" and "stop" */
-        ExceptionPtrHandler excPtrHandler;
-
-        string current; /* current chunk data */
-        size_t chunkSize; /* current chunk size */
-        std::vector<std::string> etags; /* etags of individual  chunks */
-        unsigned int currentRq;  /* number of done requests */
-        atomic<unsigned int> activeRqs; /* number of pending http requests */
-
-        /* cleanup all the variables that are used during reading, the
-           "static" ones are left untouched */
-        void reset()
-        {
-            maxChunkSize = 0;
-            uploadId.clear();
-            excPtrHandler.clear();
-            current.clear();
-            chunkSize = 8 * 1024 * 1024;  // start with 8MB and ramp up
-            etags.resize(0);
-            currentRq = 0;
-            activeRqs = 0;
-        }
-
-        void start()
-        {
-            reset();
-
-            /* Maximum chunk size is what we can do in 3 seconds, up to 1% of
-               system memory. */
-#if 0
-            maxChunkSize = (owner->bandwidthToServiceMbps
-                            * 3.0 * 1000000);
-            size_t sysMemory = getTotalSystemMemory();
-            maxChunkSize = std::min(maxChunkSize, sysMemory / 100);
-#else
-            maxChunkSize = 64 * 1024 * 1024;
-#endif
-
-            try {
-                S3Api::MultiPartUpload upload = owner->obtainMultiPartUpload(bucket, "/" + object,
-                                                                             metadata,
-                                                                             S3Api::UR_EXCLUSIVE);
-                uploadId = upload.id;
-            }
-            catch (...) {
-                onException();
-                throw;
-            }
-        }
-
-        std::streamsize write(const char_type * s, std::streamsize n)
-        {
-            std::streamsize done(0);
-
-            size_t remaining = chunkSize - current.size();
-            while (n > 0) {
-                excPtrHandler.rethrowIfSet();
-                size_t toDo = min(remaining, (size_t) n);
-                if (toDo < n) {
-                    flush();
-                    remaining = chunkSize - current.size();
-                }
-                current.append(s, toDo);
-                s += toDo;
-                n -= toDo;
-                done += toDo;
-                remaining -= toDo;
-            }
-
-            return done;
-        }
-
-        void flush()
-        {
-            ExcAssert(current.size() > 0);
-            while (activeRqs == metadata.numRequests) {
-                ML::futex_wait(activeRqs, activeRqs, 0.2);
-            }
-            excPtrHandler.rethrowIfSet();
-
-            unsigned int rqNbr(currentRq);
-            auto onResponse = [&, rqNbr] (S3Api::Response && response) {
-                this->handleResponse(rqNbr, std::move(response));
-            };
-
-            unsigned int partNumber = currentRq + 1;
-            if (etags.size() < partNumber) {
-                etags.resize(partNumber);
-            }
-
-            activeRqs++;
-            owner->putAsync(onResponse, bucket, "/" + object,
-                            ML::format("partNumber=%d&uploadId=%s",
-                                       partNumber, uploadId),
-                            {}, {}, current);
-
-            if (currentRq % 5 == 0 && chunkSize < maxChunkSize)
-                chunkSize *= 2;
-
-            current.clear();
-            currentRq = partNumber;
-        }
-
-        void handleResponse(unsigned int rqNbr, S3Api::Response && response)
-        {
-            try {
-                if (response.errorCondition_) {
-                    throw ML::Exception("S3 operation failed");
-                }
-                if (response.code_ != 200) {
-                    cerr << response.bodyXmlStr() << endl;
-                    throw ML::Exception("put didn't work: %d", (int)response.code_);
-                }
-
-                string etag = response.getHeader("etag");
-                ExcAssert(etag.size() > 0);
-                etags[rqNbr] = etag;
-            }
-            catch (const std::exception & exc) {
-                excPtrHandler.takeCurrentException();
-            }
-            activeRqs--;
-            ML::futex_wake(activeRqs);
-        }
-
-        void stop()
-        {
-            if (uploadId.empty()) {
-                return;
-
-            }
-            if (current.size() > 0) {
-                flush();
-            }
-            while (activeRqs > 0) {
-                ML::futex_wait(activeRqs, 0, 0.2);
-            }
-            excPtrHandler.rethrowIfSet();
-
-            try {
-                owner->finishMultiPartUpload(bucket, "/" + object,
-                                             uploadId,
-                                             etags);
-            }
-            catch (...) {
-                onException();
-                throw;
-            }
-            reset();
-        }
-    };
-
-    std::shared_ptr<Impl> impl;
-
     std::streamsize write(const char_type* s, std::streamsize n)
     {
-        return impl->write(s, n);
+        return uploader->write(s, n);
     }
 
     bool is_open() const
     {
-        return !!impl;
+        return !!uploader;
     }
 
     void close()
     {
-        impl->stop();
-        impl.reset();
+        uploader->close();
+        uploader.reset();
     }
+
+private:
+    std::shared_ptr<S3Uploader> uploader;
 };
 
 std::unique_ptr<std::streambuf>

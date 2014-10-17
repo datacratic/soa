@@ -394,14 +394,14 @@ struct S3Api : public AwsApi {
                        const std::string & bucket,
                        const std::string & resource,
                        CheckMethod check = CM_SIZE,
-                       const ObjectMetadata & md = ObjectMetadata(),
+                       ObjectMetadata md = ObjectMetadata(),
                        int numInParallel = -1);
 
     std::string upload(const char * data,
                        size_t bytes,
                        const std::string & uri,
                        CheckMethod check = CM_SIZE,
-                       const ObjectMetadata & md = ObjectMetadata(),
+                       ObjectMetadata md = ObjectMetadata(),
                        int numInParallel = -1);
 
     typedef std::function<void (const char * chunk,
