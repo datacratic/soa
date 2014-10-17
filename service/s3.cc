@@ -505,8 +505,7 @@ inline void touchByte(const char * c)
 
 inline void touch(const char * start, size_t size)
 {
-    const char * current = start;
-    current = (const char *) ((intptr_t) current % 4096);
+    const char * current = start - (intptr_t) start % 4096;
     if (current < start) {
         current += 4096;
     }
@@ -548,7 +547,9 @@ struct S3Uploader {
             uploadId = upload.id;
         }
         catch (...) {
-            onException();
+            if (onException) {
+                onException();
+            }
             throw;
         }
     }
@@ -572,7 +573,7 @@ struct S3Uploader {
 
         size_t remaining = chunkSize - current.size();
         while (n > 0) {
-            if (excPtrHandler.hasException()) {
+            if (excPtrHandler.hasException() && onException) {
                 onException();
             }
             excPtrHandler.rethrowIfSet();
@@ -597,7 +598,7 @@ struct S3Uploader {
         while (activeRqs == metadata.numRequests) {
             ML::futex_wait(activeRqs, activeRqs, 0.2);
         }
-        if (excPtrHandler.hasException()) {
+        if (excPtrHandler.hasException() && onException) {
             onException();
         }
         excPtrHandler.rethrowIfSet();
@@ -656,7 +657,7 @@ struct S3Uploader {
         while (activeRqs > 0) {
             ML::futex_wait(activeRqs, 0, 0.2);
         }
-        if (excPtrHandler.hasException()) {
+        if (excPtrHandler.hasException() && onException) {
             onException();
         }
         excPtrHandler.rethrowIfSet();
@@ -667,7 +668,9 @@ struct S3Uploader {
                                                      uploadId, etags);
         }
         catch (...) {
-            onException();
+            if (onException) {
+                onException();
+            }
             throw;
         }
 
@@ -1007,7 +1010,6 @@ s3EscapeResource(const std::string & str)
 
     std::string result;
     for (auto c: str) {
-
         if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' || c == '/')
             result += c;
         else result += ML::format("%%%02X", c);
@@ -1604,17 +1606,15 @@ upload(const char * data,
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
         string bucket, resource;
         std::tie(bucket, resource) = parseUri(uri);
-        string escapedResource = s3EscapeResource(resource);
         // Contains the resource without the leading slash
-        string outputPrefix(resource, 1);
 
         auto existingResource
             = get(bucket, "/", 8192, "", {},
-                  { { "prefix", outputPrefix } })
+                  { { "prefix", resource } })
             .bodyXml();
 
-        //cerr << "existing" << endl;
-        //existingResource->Print();
+        cerr << "existing" << endl;
+        existingResource->Print();
 
         auto foundContent
             = tinyxml2::XMLHandle(*existingResource)
@@ -1637,7 +1637,7 @@ upload(const char * data,
     if (numInParallel != -1) {
         metadata.numRequests = numInParallel;
     }
-    S3Uploader uploader(uri, ML::OnUriHandlerException(), metadata);
+    S3Uploader uploader(uri, nullptr, metadata);
 
     /* The size of the slices we pass as argument to S3Uploader::write.
        Internally, S3Uploader will uses its own chunk size when performing the
@@ -1663,7 +1663,7 @@ upload(const char * data,
        ObjectMetadata metadata,
        int numInParallel)
 {
-    string urlStr("s3://" + bucket + "/" + resource);
+    string urlStr("s3://" + bucket + resource);
     return upload(data, dataSize, urlStr, check, move(metadata),
                   numInParallel);
 }
