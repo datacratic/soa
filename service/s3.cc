@@ -1606,15 +1606,14 @@ upload(const char * data,
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
         string bucket, resource;
         std::tie(bucket, resource) = parseUri(uri);
-        // Contains the resource without the leading slash
 
         auto existingResource
             = get(bucket, "/", 8192, "", {},
                   { { "prefix", resource } })
             .bodyXml();
 
-        cerr << "existing" << endl;
-        existingResource->Print();
+        //cerr << "existing" << endl;
+        //existingResource->Print();
 
         auto foundContent
             = tinyxml2::XMLHandle(*existingResource)
