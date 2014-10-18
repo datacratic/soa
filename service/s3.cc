@@ -299,7 +299,7 @@ struct S3Downloader {
     {
         closed = true;
         while (activeRqs > 0) {
-            ML::futex_wait(activeRqs, activeRqs, 0.2);
+            ML::futex_wait(activeRqs, activeRqs);
         }
         excPtrHandler.rethrowIfSet();
     }
@@ -592,11 +592,13 @@ struct S3Uploader {
         return done;
     }
 
-    void flush()
+    void flush(bool force = false)
     {
-        ExcAssert(current.size() > 0);
+        if (!force) {
+            ExcAssert(current.size() > 0);
+        }
         while (activeRqs == metadata.numRequests) {
-            ML::futex_wait(activeRqs, activeRqs, 0.2);
+            ML::futex_wait(activeRqs, activeRqs);
         }
         if (excPtrHandler.hasException() && onException) {
             onException();
@@ -654,8 +656,12 @@ struct S3Uploader {
         if (current.size() > 0) {
             flush();
         }
+        else if (currentRq == 0) {
+            /* for empty files, force the creation of a single empty part */
+            flush(true);
+        }
         while (activeRqs > 0) {
-            ML::futex_wait(activeRqs, 0, 0.2);
+            ML::futex_wait(activeRqs, activeRqs);
         }
         if (excPtrHandler.hasException() && onException) {
             onException();
