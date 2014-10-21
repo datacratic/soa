@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -172,7 +173,7 @@ struct S3Api : public AwsApi {
     /** The response of a request.  Has a return code and a body. */
     struct Response {
         Response()
-            : code_(0), errorCondition_(false)
+            : code_(0)
         {
         }
 
@@ -214,7 +215,7 @@ struct S3Api : public AwsApi {
         }
 
         long code_;
-        bool errorCondition_;
+        std::exception_ptr excPtr_;
         std::string body_;
         HttpHeader header_;
     };

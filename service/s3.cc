@@ -421,9 +421,10 @@ private:
                         S3Api::Response && response)
     {
         try {
-            if (response.errorCondition_) {
-                throw ML::Exception("S3 operation failed");
+            if (response.excPtr_) {
+                rethrow_exception(response.excPtr_);
             }
+
             if (response.code_ != 206) {
                 throw ML::Exception("http error "
                                     + to_string(response.code_)
@@ -631,9 +632,10 @@ struct S3Uploader {
     void handleResponse(unsigned int rqNbr, S3Api::Response && response)
     {
         try {
-            if (response.errorCondition_) {
-                throw ML::Exception("S3 operation failed");
+            if (response.excPtr_) {
+                rethrow_exception(response.excPtr_);
             }
+
             if (response.code_ != 200) {
                 cerr << response.bodyXmlStr() << endl;
                 throw ML::Exception("put didn't work: %d", (int)response.code_);
@@ -843,11 +845,12 @@ S3RequestCallbacks::
 onDone(const HttpRequest & rq, HttpClientError errorCode)
 {
     bool restart(false);
+    bool errorCondition(false);
     string message;
 
     if (errorCode == HttpClientError::None) {
         if (response_.code_ >= 300 && response_.code_ != 404) {
-            response_.errorCondition_ = true;
+            errorCondition = true;
             message = ("S3 operation failed with HTTP code "
                        + to_string(response_.code_) + "\n");
 
@@ -862,8 +865,6 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         }
     }
     else {
-        response_.errorCondition_ = true;
-        cerr << "curl error: " + errorMessage(errorCode) + "\n";
         restart = true;
         if (state_->rq->params.useRange()) {
             state_->range.adjust(state_->requestBody.size());
@@ -879,6 +880,7 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
             message += "Will retry operation.\n";
         }
         else {
+            errorCondition = true;
             message += "Too many retries.\n";
             restart = false;
         }
@@ -896,9 +898,14 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
     else {
         response_.header_.parse(header_, false);
         header_.clear();
-        state_->body.append(state_->requestBody);
+        if (errorCondition) {
+            response_.excPtr_ = make_exception_ptr(ML::Exception(message));
+        }
+        else {
+            state_->body.append(state_->requestBody);
+            response_.body_ = std::move(state_->body);
+        }
         state_->requestBody.clear();
-        response_.body_ = std::move(state_->body);
         state_->onResponse(std::move(response_));
     }
 }
@@ -1110,9 +1117,8 @@ performSync(const shared_ptr<SignedRequest> & rq) const
     while (!done) {
         ML::futex_wait(done, false);
     }
-
-    if (response.errorCondition_) {
-        throw ML::Exception("S3 operation failed");
+    if (response.excPtr_) {
+        rethrow_exception(response.excPtr_);
     }
 
     return response;
@@ -1219,8 +1225,8 @@ getEscaped(const std::string & bucket,
     while (!done) {
         ML::futex_wait(done, false);
     }
-    if (response.errorCondition_) {
-        throw ML::Exception("S3 operation failed");
+    if (response.excPtr_) {
+        rethrow_exception(response.excPtr_);
     }
 
     return response;
@@ -1294,8 +1300,8 @@ putEscaped(const std::string & bucket,
     while (!done) {
         ML::futex_wait(done, false);
     }
-    if (response.errorCondition_) {
-        throw ML::Exception("S3 operation failed");
+    if (response.excPtr_) {
+        rethrow_exception(response.excPtr_);
     }
 
     return response;
