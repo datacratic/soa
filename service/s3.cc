@@ -896,15 +896,15 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         scheduleRestart();
     }
     else {
-        response_.header_.parse(header_, false);
-        header_.clear();
         if (errorCondition) {
             response_.excPtr_ = make_exception_ptr(ML::Exception(message));
         }
         else {
+            response_.header_.parse(header_, false);
             state_->body.append(state_->requestBody);
             response_.body_ = std::move(state_->body);
         }
+        header_.clear();
         state_->requestBody.clear();
         state_->onResponse(std::move(response_));
     }
