@@ -102,8 +102,9 @@ struct S3Api : public AwsApi {
             : offset(aOffset), size(aSize)
         {}
 
-        uint64_t endPos()
-            const
+        static Range Full;
+
+        uint64_t endPos() const
         { return (offset + size - 1); }
 
         void adjust(size_t downloaded)
@@ -124,6 +125,12 @@ struct S3Api : public AwsApi {
                     + "-"
                     + std::to_string(endPos()));
         }
+
+        bool operator == (const Range & other) const
+        { return offset == other.offset && size == other.size; }
+
+        bool operator != (const Range & other) const
+        { return !(*this == other); }
 
         uint64_t offset;
         uint64_t size;
@@ -150,7 +157,12 @@ struct S3Api : public AwsApi {
         bool useRange()
             const
         {
-            return (verb == "GET");
+            /* The "Range" header is only useful with GET and when the range
+               is explicitly specified. The use of Range::Full means that we
+               always request the full body, even during retries. This is
+               mainly useful for requests on non-object urls, where that
+               header is ignored by the S3 servers. */
+            return (verb == "GET" && downloadRange != Range::Full);
         };
 
         RestParams headers;

@@ -1002,6 +1002,8 @@ double
 S3Api::
 defaultBandwidthToServiceMbps = 20.0;
 
+S3Api::Range S3Api::Range::Full(0);
+
 std::string
 S3Api::
 s3EscapeResource(const std::string & str)
@@ -1380,7 +1382,7 @@ S3Api::isMultiPartUploadInProgress(
     string outputPrefix(resource, 1);
 
     // Check if there is already a multipart upload in progress
-    auto inProgressReq = get(bucket, "/", 8192, "uploads", {},
+    auto inProgressReq = get(bucket, "/", Range::Full, "uploads", {},
                              { { "prefix", outputPrefix } });
 
     //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -1435,7 +1437,7 @@ obtainMultiPartUpload(const std::string & bucket,
     if (requirements != UR_FRESH) {
 
         // Check if there is already a multipart upload in progress
-        auto inProgressReq = get(bucket, "/", 8192, "uploads", {},
+        auto inProgressReq = get(bucket, "/", Range::Full, "uploads", {},
                                  { { "prefix", outputPrefix } });
 
         //cerr << "in progress requests:" << endl;
@@ -1477,7 +1479,7 @@ obtainMultiPartUpload(const std::string & bucket,
             continue;
 
             // TODO: check metadata, etc
-            auto inProgressInfo = getEscaped(bucket, escapedResource, 8192,
+            auto inProgressInfo = getEscaped(bucket, escapedResource, Range::Full,
                                              "uploadId=" + uploadId)
                 .bodyXml();
 
@@ -1614,7 +1616,7 @@ upload(const char * data,
         std::tie(bucket, resource) = parseUri(uri);
 
         auto existingResource
-            = get(bucket, "/", 8192, "", {},
+            = get(bucket, "/", Range::Full, "", {},
                   { { "prefix", resource } })
             .bodyXml();
 
@@ -1713,8 +1715,6 @@ forEachObject(const std::string & bucket,
 {
     using namespace tinyxml2;
 
-    // cerr << "forEachObject under " << prefix << endl;
-
     string marker = startAt;
     // bool firstIter = true;
     do {
@@ -1728,7 +1728,7 @@ forEachObject(const std::string & bucket,
         if (marker != "")
             queryParams.push_back({"marker", marker});
 
-        auto listingResult = get(bucket, "/", 8192, "",
+        auto listingResult = get(bucket, "/", Range::Full, "",
                                  {}, queryParams);
         auto listingResultXml = listingResult.bodyXml();
 
@@ -1847,7 +1847,7 @@ getObjectInfoFull(const std::string & bucket, const std::string & object)
     RestParams queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = getEscaped(bucket, "/", 8192, "", {}, queryParams);
+    auto listingResult = getEscaped(bucket, "/", Range::Full, "", {}, queryParams);
 
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
@@ -1911,7 +1911,7 @@ tryGetObjectInfoFull(const std::string & bucket, const std::string & object)
     RestParams queryParams;
     queryParams.push_back({"prefix", object});
 
-    auto listingResult = get(bucket, "/", 8192, "", {}, queryParams);
+    auto listingResult = get(bucket, "/", Range::Full, "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
         throw ML::Exception("error getting object request: %d",
@@ -2278,7 +2278,7 @@ forEachBucket(const OnBucket & onBucket) const
 
     //cerr << "forEachObject under " << prefix << endl;
 
-    auto listingResult = get("", "/", 8192, "");
+    auto listingResult = get("", "/", Range::Full, "");
     auto listingResultXml = listingResult.bodyXml();
 
     //listingResultXml->Print();
@@ -2394,7 +2394,8 @@ void registerS3Bucket(const std::string & bucketName,
     info.api = std::make_shared<S3Api>(accessKeyId, accessKey,
                                        bandwidthToServiceMbps,
                                        protocol, serviceUri);
-    info.api->getEscaped("", "/" + bucketName + "/", 8192);//throws if !accessible
+    info.api->getEscaped("", "/" + bucketName + "/",
+                         S3Api::Range::Full); //throws if !accessible
     s3Buckets[bucketName] = info;
 
     if (accessKeyId.size() > 0 && accessKey.size() > 0) {
@@ -2714,7 +2715,8 @@ std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri)
     }
 
     auto api = make_shared<S3Api>(accessKeyId, accessKey);
-    api->getEscaped("", "/" + bucketName + "/", 8192);//throws if !accessible
+    api->getEscaped("", "/" + bucketName + "/",
+                    S3Api::Range::Full); //throws if !accessible
 
     return api;
 }
