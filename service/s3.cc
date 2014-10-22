@@ -313,7 +313,7 @@ struct S3Downloader {
     std::streamsize read(char * s, std::streamsize n)
     {
         if (closed) {
-            throw ML::Exception("invoking read() on a shutted down download");
+            throw ML::Exception("invoking read() on a closed download");
         }
 
         if (endOfDownload()) {
