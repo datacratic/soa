@@ -6,7 +6,7 @@
 */
 
 /* last known compatible commit in master branch:
- * 3af7972ebb11eb7fadf9a4d255ed6df7d778e2a9 */
+ * dda48cb65cf6a1689efa9d6c7949fd0d43c964d7 */
 
 #include <atomic>
 #include <mutex>
