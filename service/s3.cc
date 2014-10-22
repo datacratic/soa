@@ -110,6 +110,63 @@ getS3Globals()
 
 
 /****************************************************************************/
+/* SYNC RESPONSE                                                            */
+/****************************************************************************/
+
+/* This class provides a standard way of propagating the response to an async
+ * requests from the worker thread to the caller. */
+
+struct SyncResponse {
+    SyncResponse()
+        : data_(new Data())
+    {
+    }
+
+    S3Api::Response response()
+    {
+        return std::move(data_->response());
+    }
+
+    void operator () (S3Api::Response && response)
+    {
+        data_->setResponse(std::move(response));
+    }
+
+private:
+    struct Data {
+        Data()
+            : done_(false)
+        {
+        }
+
+        S3Api::Response response()
+        {
+            while (!done_) {
+                ML::futex_wait(done_, false);
+            }
+            if (response_.excPtr_) {
+                rethrow_exception(response_.excPtr_);
+            }
+
+            return std::move(response_);
+        }
+
+        void setResponse(S3Api::Response && response)
+        {
+            response_ = std::move(response);
+            done_ = true;
+            ML::futex_wake(done_);
+        }
+
+        int done_;
+        S3Api::Response response_;
+    };
+
+    shared_ptr<Data> data_;
+};
+
+
+/****************************************************************************/
 /* S3 URL FS HANDLER                                                        */
 /****************************************************************************/
 
@@ -798,7 +855,7 @@ struct S3RequestCallbacks : public HttpClientCallbacks {
 void
 performStateRequest(const shared_ptr<S3RequestState> & state)
 {
-    auto client = getS3Globals().getClient(state->rq->params.bucket);
+    auto & client = getS3Globals().getClient(state->rq->params.bucket);
 
     const S3Api::RequestParams & params = state->rq->params;
     auto callbacks = make_shared<S3RequestCallbacks>(state);
@@ -1105,23 +1162,9 @@ S3Api::Response
 S3Api::
 performSync(const shared_ptr<SignedRequest> & rq) const
 {
-    Response response;
-
-    int done(false);
-    auto onResponse = [&] (Response && newResponse) {
-        response = std::move(newResponse);
-        done = true;
-        ML::futex_wake(done);
-    };
-    perform(onResponse, rq);
-    while (!done) {
-        ML::futex_wait(done, false);
-    }
-    if (response.excPtr_) {
-        rethrow_exception(response.excPtr_);
-    }
-
-    return response;
+    SyncResponse syncResponse;
+    perform(syncResponse, rq);
+    return syncResponse.response();
 }
 
 std::string
@@ -1212,24 +1255,10 @@ getEscaped(const std::string & bucket,
            const RestParams & headers,
            const RestParams & queryParams) const
 {
-    Response response;
-
-    int done(false);
-    auto onResponse = [&] (Response && newResponse) {
-        response = std::move(newResponse);
-        done = true;
-        ML::futex_wake(done);
-    };
-    getEscapedAsync(onResponse, bucket, resource, downloadRange, subResource,
-                    headers, queryParams);
-    while (!done) {
-        ML::futex_wait(done, false);
-    }
-    if (response.excPtr_) {
-        rethrow_exception(response.excPtr_);
-    }
-
-    return response;
+    SyncResponse syncResponse;
+    getEscapedAsync(syncResponse, bucket, resource, downloadRange,
+                    subResource, headers, queryParams);
+    return syncResponse.response();
 }
 
 void
@@ -1287,24 +1316,10 @@ putEscaped(const std::string & bucket,
            const RestParams & queryParams,
            const HttpRequest::Content & content) const
 {
-    Response response;
-
-    int done(false);
-    auto onResponse = [&] (Response && newResponse) {
-        response = std::move(newResponse);
-        done = true;
-        ML::futex_wake(done);
-    };
-    putEscapedAsync(onResponse, bucket, resource, subResource, headers,
+    SyncResponse syncResponse;
+    putEscapedAsync(syncResponse, bucket, resource, subResource, headers,
                     queryParams, content);
-    while (!done) {
-        ML::futex_wait(done, false);
-    }
-    if (response.excPtr_) {
-        rethrow_exception(response.excPtr_);
-    }
-
-    return response;
+    return syncResponse.response();
 }
 
 void
