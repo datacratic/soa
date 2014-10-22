@@ -449,11 +449,11 @@ private:
                 break;
             }
 
-            ensureRequest(chunk);
+            ensureRequest();
         }
     }
 
-    void ensureRequest(Chunk & chunk)
+    void ensureRequest()
     {
         size_t chunkSize = getChunkSize(currentRq);
         uint64_t end = requestedBytes + chunkSize;
@@ -464,8 +464,9 @@ private:
 
         activeRqs++;
 
-        auto onResponse = [&, chunkSize] (S3Api::Response && response) {
-            this->handleResponse(chunk, chunkSize, std::move(response));
+        unsigned int chunkNr = currentRq % maxRqs;
+        auto onResponse = [&, chunkNr, chunkSize] (S3Api::Response && response) {
+            this->handleResponse(chunkNr, chunkSize, std::move(response));
         };
         owner->getAsync(onResponse, bucket, "/" + object,
                         S3Api::Range(offset + requestedBytes, chunkSize));
@@ -474,7 +475,7 @@ private:
         requestedBytes += chunkSize;
     }
 
-    void handleResponse(Chunk & chunk, size_t chunkSize,
+    void handleResponse(unsigned int chunkNr, size_t chunkSize,
                         S3Api::Response && response)
     {
         try {
@@ -501,6 +502,7 @@ private:
                                     object.c_str());
             }
             ExcAssertEqual(response.body().size(), chunkSize);
+            Chunk & chunk = chunks[chunkNr];
             chunk.assign(std::move(response.body_));
         }
         catch (const std::exception & exc) {
