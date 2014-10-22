@@ -1656,29 +1656,10 @@ upload(const char * data,
         string bucket, resource;
         std::tie(bucket, resource) = parseUri(uri);
 
-        auto existingResource
-            = get(bucket, "/", Range::Full, "", {},
-                  { { "prefix", resource } })
-            .bodyXml();
-
-        //cerr << "existing" << endl;
-        //existingResource->Print();
-
-        auto foundContent
-            = tinyxml2::XMLHandle(*existingResource)
-            .FirstChildElement("ListBucketResult")
-            .FirstChildElement("Contents")
-            .ToElement();
-
-        if (foundContent) {
-            uint64_t size = extract<uint64_t>(foundContent, "Size");
-            std::string etag = extract<string>(foundContent, "ETag");
-            std::string lastModified = extract<string>(foundContent, "LastModified");
-
-            if (size == dataSize) {
-                //cerr << "already uploaded" << endl;
-                return etag;
-            }
+        auto info = tryGetObjectInfo(bucket, url.path().substr(1));
+        if (info.size == dataSize) {
+            //cerr << "already uploaded" << endl;
+            return info.etag;
         }
     }
 
