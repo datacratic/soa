@@ -308,6 +308,8 @@ enum struct HttpClientError {
     Timeout,
     HostNotFound,
     CouldNotConnect,
+    SendError,
+    RecvError
 };
 
 std::ostream & operator << (std::ostream & stream, HttpClientError error);
