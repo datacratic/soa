@@ -17,6 +17,7 @@
 #include "soa/types/url.h"
 #include "soa/utils/print_utils.h"
 #include "jml/arch/futex.h"
+#include "jml/arch/threads.h"
 #include "jml/utils/exc_assert.h"
 #include "jml/utils/pair_utils.h"
 #include "jml/utils/vector_utils.h"
@@ -364,66 +365,80 @@ struct S3Downloader {
 private:
     /* download Chunk */
     struct Chunk {
+        enum State {
+            IDLE,
+            QUERY,
+            RESPONSE
+        };
+
         Chunk() noexcept
+            : state(IDLE)
         {
-            clear();
         }
 
         Chunk(Chunk && other) noexcept
-            : ready(other.ready.load()),
-              data(move(other.data))
+            : state(other.state.load()),
+              data(std::move(other.data))
         {
         }
 
-        void clear()
+        void setQuerying()
         {
-            ready = false;
-            data.clear();
+            ExcAssertEqual(state, IDLE);
+            setState(QUERY);
         }
 
         void assign(string newData)
         {
-            ExcAssertEqual(ready, false);
+            ExcAssertEqual(state, QUERY);
             data = move(newData);
-            ready = true;
-            ML::futex_wake(ready);
+            setState(RESPONSE);
+            ML::futex_wake(state);
         }
 
         std::string retrieve()
         {
+            ExcAssertEqual(state, RESPONSE);
             string chunkData = std::move(data);
-            ready = false;
-            ML::futex_wake(ready);
-            return chunkData;
+            setState(IDLE);
+            return std::move(chunkData);
         }
 
-        bool isReady()
+        void setState(int newState)
+        {
+            state = newState;
+            ML::futex_wake(state);
+        }
+
+        bool isIdle()
             const
         {
-            return ready;
+            return (state == IDLE);
         }
 
-        bool waitReady(double timeout)
+        bool waitResponse(double timeout)
             const
         {
             if (timeout > 0.0) {
-                if (!ready) {
-                    ML::futex_wait(ready, false, timeout);
+                int old = state;
+                if (state != RESPONSE) {
+                    ML::futex_wait(state, old, timeout);
                 }
             }
 
-            return ready;
+            return (state == RESPONSE);
         }
 
     private:
-        std::atomic<int> ready;
+        std::atomic<int> state;
         string data;
     };
 
     void waitNextPart()
     {
-        Chunk & chunk = chunks[currentChunk % maxRqs];
-        while (!excPtrHandler.hasException() && !chunk.waitReady(1.0));
+        unsigned int chunkNr(currentChunk % maxRqs);
+        Chunk & chunk = chunks[chunkNr];
+        while (!excPtrHandler.hasException() && !chunk.waitResponse(1.0));
         excPtrHandler.rethrowIfSet();
         readPart = chunk.retrieve();
         readPartOffset = 0;
@@ -436,16 +451,17 @@ private:
             if (excPtrHandler.hasException()) {
                 break;
             }
-            if (activeRqs >= maxRqs) {
+            if (activeRqs == maxRqs) {
                 break;
             }
-            ExcAssert(requestedBytes <= downloadSize);
+            ExcAssert(activeRqs < maxRqs);
             if (requestedBytes == downloadSize) {
                 break;
             }
+            ExcAssert(requestedBytes < downloadSize);
 
             Chunk & chunk = chunks[currentRq % maxRqs];
-            if (chunk.isReady()) {
+            if (!chunk.isIdle()) {
                 break;
             }
 
@@ -462,14 +478,16 @@ private:
             chunkSize = end - requestedBytes;
         }
 
-        activeRqs++;
-
         unsigned int chunkNr = currentRq % maxRqs;
+        Chunk & chunk = chunks[chunkNr];
+        activeRqs++;
+        chunk.setQuerying();
+
         auto onResponse = [&, chunkNr, chunkSize] (S3Api::Response && response) {
             this->handleResponse(chunkNr, chunkSize, std::move(response));
         };
-        owner->getAsync(onResponse, bucket, "/" + object,
-                        S3Api::Range(offset + requestedBytes, chunkSize));
+        S3Api::Range range(offset + requestedBytes, chunkSize);
+        owner->getAsync(onResponse, bucket, "/" + object, range);
         ExcAssertLess(currentRq, UINT_MAX);
         currentRq++;
         requestedBytes += chunkSize;
