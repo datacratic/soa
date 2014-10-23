@@ -1656,7 +1656,7 @@ upload(const char * data,
         string bucket, resource;
         std::tie(bucket, resource) = parseUri(uri);
 
-        auto info = tryGetObjectInfo(bucket, url.path().substr(1));
+        auto info = tryGetObjectInfo(bucket, resource);
         if (info.size == dataSize) {
             //cerr << "already uploaded" << endl;
             return info.etag;
