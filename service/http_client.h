@@ -417,6 +417,14 @@ struct HttpClient : public MessageLoop {
                               queryParams, headers, timeout);
     }
 
+    bool enqueueRequest(const std::string & verb,
+                        const std::string & resource,
+                        const std::shared_ptr<HttpClientCallbacks> & callbacks,
+                        const MimeContent & content,
+                        const RestParams & queryParams,
+                        const RestParams & headers,
+                        int timeout = -1);
+
     size_t queuedRequests()
     {
         return queue_.size();
@@ -426,16 +434,6 @@ struct HttpClient : public MessageLoop {
     HttpClient & operator = (const HttpClient & other) = delete;
 
 private:
-
-    /* Local */
-    bool enqueueRequest(const std::string & verb,
-                        const std::string & resource,
-                        const std::shared_ptr<HttpClientCallbacks> & callbacks,
-                        const MimeContent & content,
-                        const RestParams & queryParams,
-                        const RestParams & headers,
-                        int timeout = -1);
-
     void handleQueueEvent();
 
     void handleHttpConnectionDone(HttpConnection * connection, int result);
