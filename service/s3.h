@@ -152,7 +152,7 @@ struct S3Api : public AwsApi {
 
         std::string contentType;
         std::string contentMd5;
-        HttpRequest::Content content;
+        MimeContent content;
         Range downloadRange;
 
         bool useRange()
@@ -341,7 +341,7 @@ struct S3Api : public AwsApi {
                   const std::string & subResource = "",
                   const RestParams & headers = RestParams(),
                   const RestParams & queryParams = RestParams(),
-                  const HttpRequest::Content & content = HttpRequest::Content())
+                  const MimeContent & content = MimeContent())
         const
     {
         return postEscaped(bucket, s3EscapeResource(resource), subResource,
@@ -354,8 +354,8 @@ struct S3Api : public AwsApi {
                  const std::string & subResource = "",
                  const RestParams & headers = RestParams(),
                  const RestParams & queryParams = RestParams(),
-                 const HttpRequest::Content & content
-                 = HttpRequest::Content())
+                 const MimeContent & content
+                 = MimeContent())
         const
     {
         return putEscaped(bucket, s3EscapeResource(resource), subResource,
@@ -369,7 +369,7 @@ struct S3Api : public AwsApi {
                   const std::string & subResource = "",
                   const RestParams & headers = RestParams(),
                   const RestParams & queryParams = RestParams(),
-                  const HttpRequest::Content & content = HttpRequest::Content())
+                  const MimeContent & content = MimeContent())
         const
     {
         return putEscapedAsync(onResponse, bucket, s3EscapeResource(resource),
@@ -631,7 +631,7 @@ struct S3Api : public AwsApi {
                          const std::string & subResource = "",
                          const RestParams & headers = RestParams(),
                          const RestParams & queryParams = RestParams(),
-                         const HttpRequest::Content & content = HttpRequest::Content()) const;
+                         const MimeContent & content = MimeContent()) const;
 
     /* put */
     Response putEscaped(const std::string & bucket,
@@ -639,15 +639,15 @@ struct S3Api : public AwsApi {
                         const std::string & subResource = "",
                         const RestParams & headers = RestParams(),
                         const RestParams & queryParams = RestParams(),
-                        const HttpRequest::Content & content = HttpRequest::Content()) const;
+                        const MimeContent & content = MimeContent()) const;
     void putEscapedAsync(const OnResponse & onResponse,
                          const std::string & bucket,
                          const std::string & resource,
                          const std::string & subResource = "",
                          const RestParams & headers = RestParams(),
                          const RestParams & queryParams = RestParams(),
-                         const HttpRequest::Content & content
-                         = HttpRequest::Content()) const;
+                         const MimeContent & content
+                         = MimeContent()) const;
 
     /* erase */
     Response eraseEscaped(const std::string & bucket,

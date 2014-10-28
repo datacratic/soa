@@ -86,7 +86,6 @@ struct S3Globals {
         auto & client = clients[hostname];
         if (!client) {
             client.reset(new HttpClient(hostname, 30));
-            client->sendExpect100Continue(false);
             loop.addSource("s3-client-" + hostname, client);
         }
 
@@ -694,10 +693,11 @@ struct S3Uploader {
         }
 
         activeRqs++;
+        MimeContent content(std::move(current), "application/binary");
         owner->putAsync(onResponse, bucket, "/" + object,
                         ML::format("partNumber=%d&uploadId=%s",
                                    partNumber, uploadId),
-                        {}, {}, current);
+                        {}, {}, content);
 
         if (currentRq % 5 == 0 && chunkSize < maxChunkSize)
             chunkSize *= 2;
@@ -790,13 +790,13 @@ struct AtInit {
     }
 } atInit;
 
-HttpRequest::Content
+MimeContent
 makeXmlContent(const tinyxml2::XMLDocument & xmlDocument)
 {
     tinyxml2::XMLPrinter printer;
     const_cast<tinyxml2::XMLDocument &>(xmlDocument).Print(&printer);
 
-    return HttpRequest::Content(string(printer.CStr()), "application/xml");
+    return MimeContent(string(printer.CStr()), "application/xml");
 }
 
 
@@ -861,7 +861,7 @@ struct S3RequestCallbacks : public HttpClientCallbacks {
     virtual void onData(const HttpRequest & rq,
                         const char * data, size_t size);
     virtual void onDone(const HttpRequest & rq,
-                        HttpClientError errorCode);
+                        int errorCode);
 
     void appendErrorContext(string & message) const;
     void scheduleRestart() const;
@@ -919,13 +919,13 @@ onData(const HttpRequest & rq, const char * data, size_t size)
 
 void
 S3RequestCallbacks::
-onDone(const HttpRequest & rq, HttpClientError errorCode)
+onDone(const HttpRequest & rq, int errorCode)
 {
     bool restart(false);
     bool errorCondition(false);
     string message;
 
-    if (errorCode == HttpClientError::None) {
+    if (errorCode == TcpConnectionCode::Success) {
         if (response_.code_ >= 300 && response_.code_ != 404) {
             errorCondition = true;
             message = ("S3 operation failed with HTTP code "
@@ -949,7 +949,7 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         state_->body.append(state_->requestBody);
         state_->requestBody.clear();
         message = ("S3 operation failed with internal error: "
-                   + errorMessage(errorCode) + "\n");
+                   + to_string(errorCode) + "\n");
     }
 
     if (restart) {
@@ -1195,7 +1195,7 @@ signature(const RequestParams & request) const
         = S3Api::getStringToSignV2Multi(request.verb,
                                         request.bucket,
                                         request.resource, request.subResource,
-                                        request.content.contentType, request.contentMd5,
+                                        request.content.contentType(), request.contentMd5,
                                         request.date, request.headers);
     
     //cerr << "digest = " << digest << endl;
@@ -1312,7 +1312,7 @@ postEscaped(const std::string & bucket,
             const std::string & subResource,
             const RestParams & headers,
             const RestParams & queryParams,
-            const HttpRequest::Content & content) const
+            const MimeContent & content) const
 {
     RequestParams request;
     request.verb = "POST";
@@ -1334,7 +1334,7 @@ putEscaped(const std::string & bucket,
            const std::string & subResource,
            const RestParams & headers,
            const RestParams & queryParams,
-           const HttpRequest::Content & content) const
+           const MimeContent & content) const
 {
     SyncResponse syncResponse;
     putEscapedAsync(syncResponse, bucket, resource, subResource, headers,
@@ -1350,7 +1350,7 @@ putEscapedAsync(const OnResponse & onResponse,
                 const std::string & subResource,
                 const RestParams & headers,
                 const RestParams & queryParams,
-                const HttpRequest::Content & content)
+                const MimeContent & content)
     const
 {
     RequestParams request;
