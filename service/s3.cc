@@ -1425,7 +1425,8 @@ S3Api::isMultiPartUploadInProgress(
     // Check if there is already a multipart upload in progress
     auto inProgressReq = get(bucket, "/", Range::Full, "uploads", {},
                              { { "prefix", outputPrefix } });
-
+    if (inProgressReq.code_ != 200)
+        throw ML::Exception("invalid http code returned");
     //cerr << inProgressReq.bodyXmlStr() << endl;
 
     auto inProgress = inProgressReq.bodyXml();
@@ -1480,6 +1481,8 @@ obtainMultiPartUpload(const std::string & bucket,
         // Check if there is already a multipart upload in progress
         auto inProgressReq = get(bucket, "/", Range::Full, "uploads", {},
                                  { { "prefix", outputPrefix } });
+        if (inProgressReq.code_ != 200)
+            throw ML::Exception("invalid http code returned");
 
         //cerr << "in progress requests:" << endl;
         //cerr << inProgressReq.bodyXmlStr() << endl;
@@ -1520,9 +1523,12 @@ obtainMultiPartUpload(const std::string & bucket,
             continue;
 
             // TODO: check metadata, etc
-            auto inProgressInfo = getEscaped(bucket, escapedResource, Range::Full,
-                                             "uploadId=" + uploadId)
-                .bodyXml();
+            auto inProgressRq = getEscaped(bucket, escapedResource, Range::Full,
+                                           "uploadId=" + uploadId);
+            if (inProgressReq.code_ != 200)
+                throw ML::Exception("invalid http code returned");
+
+            auto inProgressInfo = inProgressReq.bodyXml();
 
             inProgressInfo->Print();
 
@@ -1565,12 +1571,16 @@ obtainMultiPartUpload(const std::string & bucket,
 
         RestParams headers = metadata.getRequestHeaders();
         auto result = postEscaped(bucket, escapedResource,
-                                  "uploads", headers).bodyXml();
+                                  "uploads", headers);
+        if (result.code_ != 200)
+            throw ML::Exception("invalid http code returned");
+
+        auto xmlResult = result.bodyXml();
         //result->Print();
         //cerr << "result = " << result << endl;
 
         uploadId
-            = extract<string>(result, "InitiateMultipartUploadResult/UploadId");
+            = extract<string>(xmlResult, "InitiateMultipartUploadResult/UploadId");
 
         //cerr << "new upload = " << uploadId << endl;
     }
@@ -1610,6 +1620,8 @@ finishMultiPartUpload(const std::string & bucket,
     auto joinResponse
         = postEscaped(bucket, escapedResource, "uploadId=" + uploadId,
                       {}, {}, makeXmlContent(joinRequest));
+    if (joinResponse.code_ != 200)
+        throw ML::Exception("invalid http code returned");
 
     //cerr << joinResponse.bodyXmlStr() << endl;
 
@@ -1752,6 +1764,8 @@ forEachObject(const std::string & bucket,
 
         auto listingResult = get(bucket, "/", Range::Full, "",
                                  {}, queryParams);
+        if (listingResult.code_ != 200)
+            throw ML::Exception("invalid http code returned");
         auto listingResultXml = listingResult.bodyXml();
 
         //listingResultXml->Print();
@@ -2301,6 +2315,8 @@ forEachBucket(const OnBucket & onBucket) const
     //cerr << "forEachObject under " << prefix << endl;
 
     auto listingResult = get("", "/", Range::Full, "");
+    if (listingResult.code_ != 200)
+        throw ML::Exception("invalid http code returned");
     auto listingResultXml = listingResult.bodyXml();
 
     //listingResultXml->Print();
