@@ -255,10 +255,12 @@ size_t getTotalSystemMemory()
 }
 
 struct S3Downloader {
-    S3Downloader(const string & urlStr,
+    S3Downloader(const S3Api * api,
+                 const string & bucket,
+                 const string & resource, // starts with "/", unescaped (buggy)
                  ssize_t startOffset = 0, ssize_t endOffset = -1)
-        : owner(getS3ApiForUri(urlStr)),
-          info(owner->getObjectInfo(urlStr)),
+        : api(api),
+          bucket(bucket), resource(resource),
           offset(startOffset),
           baseChunkSize(1024*1024), // start with 1MB and ramp up
           closed(false),
@@ -269,11 +271,11 @@ struct S3Downloader {
           currentRq(0),
           activeRqs(0)
     {
+        info = api->getObjectInfo(bucket, resource.substr(1));
         if (!info) {
-            throw ML::Exception("missing object: " + urlStr);
+            throw ML::Exception("missing object: " + resource);
         }
 
-        std::tie(bucket, object) = S3Api::parseUri(urlStr);
         if (endOffset == -1 || endOffset > info.size) {
             endOffset = info.size;
         }
@@ -281,7 +283,7 @@ struct S3Downloader {
 
         /* Maximum chunk size is what we can do in 3 seconds, up to 1% of
            system memory. */
-        maxChunkSize = owner->bandwidthToServiceMbps * 3.0 * 1000000;
+        maxChunkSize = api->bandwidthToServiceMbps * 3.0 * 1000000;
         size_t sysMemory = getTotalSystemMemory();
         maxChunkSize = std::min(maxChunkSize, sysMemory / 100);
 
@@ -487,7 +489,7 @@ private:
             this->handleResponse(chunkNr, chunkSize, std::move(response));
         };
         S3Api::Range range(offset + requestedBytes, chunkSize);
-        owner->getAsync(onResponse, bucket, "/" + object, range);
+        api->getAsync(onResponse, bucket, resource, range);
         ExcAssertLess(currentRq, UINT_MAX);
         currentRq++;
         requestedBytes += chunkSize;
@@ -517,7 +519,7 @@ private:
                                     " %s: file <%s> has changed during"
                                     " download",
                                     chunkEtag.c_str(), info.etag.c_str(),
-                                    object.c_str());
+                                    resource.c_str());
             }
             ExcAssertEqual(response.body().size(), chunkSize);
             Chunk & chunk = chunks[chunkNr];
@@ -539,9 +541,9 @@ private:
     }
 
     /* static variables, set during or right after construction */
-    shared_ptr<S3Api> owner;
+    const S3Api * api;
     std::string bucket;
-    std::string object;
+    std::string resource;
     S3Api::ObjectInfo info;
     uint64_t offset; /* the lower position in the file from which the download
                       * is started */
@@ -593,11 +595,15 @@ inline void touch(const char * start, size_t size)
     }
 }
 
+
 struct S3Uploader {
-    S3Uploader(const std::string & urlStr,
+    S3Uploader(const S3Api * api,
+               const string & bucket,
+               const string & resource, // starts with "/", unescaped (buggy)
                const ML::OnUriHandlerException & excCallback,
                const S3Api::ObjectMetadata & objectMetadata)
-        : owner(getS3ApiForUri(urlStr)),
+        : api(api),
+          bucket(bucket), resource(resource),
           metadata(objectMetadata),
           onException(excCallback),
           closed(false),
@@ -605,13 +611,10 @@ struct S3Uploader {
           currentRq(0),
           activeRqs(0)
     {
-        std::tie(bucket, object) = S3Api::parseUri(urlStr);
-
         /* Maximum chunk size is what we can do in 3 seconds, up to 1% of
            system memory. */
 #if 0
-        maxChunkSize = (owner->bandwidthToServiceMbps
-                        * 3.0 * 1000000);
+        maxChunkSize = api->bandwidthToServiceMbps * 3.0 * 1000000;
         size_t sysMemory = getTotalSystemMemory();
         maxChunkSize = std::min(maxChunkSize, sysMemory / 100);
 #else
@@ -619,9 +622,9 @@ struct S3Uploader {
 #endif
 
         try {
-            S3Api::MultiPartUpload upload = owner->obtainMultiPartUpload(bucket, "/" + object,
-                                                                         metadata,
-                                                                         S3Api::UR_EXCLUSIVE);
+            S3Api::MultiPartUpload upload
+              = api->obtainMultiPartUpload(bucket, resource, metadata,
+                                           S3Api::UR_EXCLUSIVE);
             uploadId = upload.id;
         }
         catch (...) {
@@ -694,10 +697,10 @@ struct S3Uploader {
         }
 
         activeRqs++;
-        owner->putAsync(onResponse, bucket, "/" + object,
-                        ML::format("partNumber=%d&uploadId=%s",
-                                   partNumber, uploadId),
-                        {}, {}, current);
+        api->putAsync(onResponse, bucket, resource,
+                      ML::format("partNumber=%d&uploadId=%s",
+                                 partNumber, uploadId),
+                      {}, {}, current);
 
         if (currentRq % 5 == 0 && chunkSize < maxChunkSize)
             chunkSize *= 2;
@@ -749,8 +752,8 @@ struct S3Uploader {
 
         string finalEtag;
         try {
-            finalEtag = owner->finishMultiPartUpload(bucket, "/" + object,
-                                                     uploadId, etags);
+            finalEtag = api->finishMultiPartUpload(bucket, resource,
+                                                   uploadId, etags);
         }
         catch (...) {
             if (onException) {
@@ -763,9 +766,9 @@ struct S3Uploader {
     }
 
 private:
-    shared_ptr<S3Api> owner;
+    const S3Api * api;
     std::string bucket;
-    std::string object;
+    std::string resource;
     S3Api::ObjectMetadata metadata;
     ML::OnUriHandlerException onException;
 
@@ -1643,7 +1646,8 @@ std::string
 S3Api::
 upload(const char * data,
        size_t dataSize,
-       const std::string & uri,
+       const std::string & bucket,
+       const std::string & resource, // starts with "/", unescaped (buggy),
        CheckMethod check,
        ObjectMetadata metadata,
        int numInParallel)
@@ -1653,10 +1657,8 @@ upload(const char * data,
     // Check if it's already there
 
     if (check == CM_SIZE || check == CM_MD5_ETAG) {
-        string bucket, resource;
-        std::tie(bucket, resource) = parseUri(uri);
-
-        auto info = tryGetObjectInfo(bucket, resource);
+        string object = s3EscapeResource(resource);
+        auto info = tryGetObjectInfo(bucket, object.substr(1));
         if (info.size == dataSize) {
             //cerr << "already uploaded" << endl;
             return info.etag;
@@ -1666,7 +1668,7 @@ upload(const char * data,
     if (numInParallel != -1) {
         metadata.numRequests = numInParallel;
     }
-    S3Uploader uploader(uri, nullptr, metadata);
+    S3Uploader uploader(this, bucket, resource, nullptr, metadata);
 
     /* The size of the slices we pass as argument to S3Uploader::write.
        Internally, S3Uploader will uses its own chunk size when performing the
@@ -1686,15 +1688,15 @@ std::string
 S3Api::
 upload(const char * data,
        size_t dataSize,
-       const std::string & bucket,
-       const std::string & resource,
+       const std::string & uri,
        CheckMethod check,
        ObjectMetadata metadata,
        int numInParallel)
 {
-    string urlStr("s3://" + bucket + resource);
-    return upload(data, dataSize, urlStr, check, move(metadata),
-                  numInParallel);
+    string bucket, resource;
+    std::tie(bucket, resource) = parseUri(uri);
+    return upload(data, dataSize, bucket, "/" + resource,
+                  check, move(metadata), numInParallel);
 }
 
 S3Api::ObjectInfo::
@@ -2062,12 +2064,12 @@ getPublicUri(const std::string & bucket,
 
 void
 S3Api::
-download(const std::string & uri,
+download(const std::string & bucket,
+         const string & resource, // starts with "/", unescaped (buggy),
          const OnChunk & onChunk,
-         ssize_t startOffset,
-         ssize_t endOffset) const
+         ssize_t startOffset, ssize_t endOffset) const
 {
-    S3Downloader downloader(uri, startOffset, endOffset);
+    S3Downloader downloader(this, bucket, resource, startOffset, endOffset);
     uint64_t downloadSize = downloader.getDownloadSize();
     uint64_t downloaded(0);
     int chunkIndex(0);
@@ -2083,13 +2085,14 @@ download(const std::string & uri,
 
 void
 S3Api::
-download(const std::string & bucket, const std::string & object,
+download(const std::string & uri,
          const OnChunk & onChunk,
-         ssize_t startOffset,
-         ssize_t endOffset) const
+         ssize_t startOffset, ssize_t endOffset) const
 {
-    string urlStr("s3://" + bucket + "/" + object);
-    download(urlStr, onChunk, startOffset, endOffset);
+    string bucket, resource;
+
+    std::tie(bucket, resource) = parseUri(uri);
+    download(bucket, "/" + resource, onChunk, startOffset, endOffset);
 }
 
 /**
@@ -2164,7 +2167,12 @@ rethrowIfSet()
 struct StreamingDownloadSource {
     StreamingDownloadSource(const std::string & urlStr)
     {
-        downloader.reset(new S3Downloader(urlStr));
+        owner = getS3ApiForUri(urlStr);
+
+        string bucket, resource;
+        std::tie(bucket, resource) = S3Api::parseUri(urlStr);
+        downloader.reset(new S3Downloader(owner.get(),
+                                          bucket, "/" + resource));
     }
 
     typedef char char_type;
@@ -2192,6 +2200,7 @@ struct StreamingDownloadSource {
     }
 
 private:
+    std::shared_ptr<S3Api> owner;
     std::shared_ptr<S3Downloader> downloader;
 };
 
@@ -2223,7 +2232,12 @@ struct StreamingUploadSource {
                           const ML::OnUriHandlerException & excCallback,
                           const S3Api::ObjectMetadata & metadata)
     {
-        uploader.reset(new S3Uploader(urlStr, excCallback, metadata));
+        owner = getS3ApiForUri(urlStr);
+
+        string bucket, resource;
+        std::tie(bucket, resource) = S3Api::parseUri(urlStr);
+        uploader.reset(new S3Uploader(owner.get(), bucket, "/" + resource,
+                                      excCallback, metadata));
     }
 
     typedef char char_type;
@@ -2251,6 +2265,7 @@ struct StreamingUploadSource {
     }
 
 private:
+    std::shared_ptr<S3Api> owner;
     std::shared_ptr<S3Uploader> uploader;
 };
 
