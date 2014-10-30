@@ -186,8 +186,6 @@ struct S3Api : public AwsApi {
 
         std::unique_ptr<tinyxml2::XMLDocument> bodyXml() const
         {
-            if (code_ != 200)
-                throw ML::Exception("invalid http code returned");
             std::unique_ptr<tinyxml2::XMLDocument> result(new tinyxml2::XMLDocument());
             result->Parse(body_.c_str());
             return result;
