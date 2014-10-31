@@ -243,8 +243,12 @@ parseHeaders(BufferState & state)
         throw ML::Exception("expected \\n");
     }
     state.ptr++;
-
     state.commit();
+
+    if (onHeader) {
+        onHeader("\r\n", 2);
+    }
+
     return true;
 }
 

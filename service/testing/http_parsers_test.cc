@@ -80,8 +80,9 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(headers[2], "Header3: Val3\r\n");
     parser.feed("ontent-Length: 10\r\n\r");
     parser.feed("\n");
-    BOOST_CHECK_EQUAL(headers.size(), 4);
+    BOOST_CHECK_EQUAL(headers.size(), 5);
     BOOST_CHECK_EQUAL(headers[3], "Content-Length: 10\r\n");
+    BOOST_CHECK_EQUAL(headers[4], "\r\n");
     BOOST_CHECK_EQUAL(parser.remainingBody(), 10);
 
     /* body */
@@ -96,8 +97,9 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
                 "MyHeader: my value1\r\n\r\nHTTP");
 
     BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/204");
-    BOOST_CHECK_EQUAL(headers.size(), 1);
+    BOOST_CHECK_EQUAL(headers.size(), 2);
     BOOST_CHECK_EQUAL(headers[0], "MyHeader: my value1\r\n");
+    BOOST_CHECK_EQUAL(headers[1], "\r\n");
     BOOST_CHECK_EQUAL(body, "");
     BOOST_CHECK_EQUAL(done, true);
     BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
@@ -106,9 +108,10 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
                 "Connection: close\r\n"
                 "Header: value\r\n\r\n");
     BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/666");
-    BOOST_CHECK_EQUAL(headers.size(), 2);
+    BOOST_CHECK_EQUAL(headers.size(), 3);
     BOOST_CHECK_EQUAL(headers[0], "Connection: close\r\n");
     BOOST_CHECK_EQUAL(headers[1], "Header: value\r\n");
+    BOOST_CHECK_EQUAL(headers[2], "\r\n");
     BOOST_CHECK_EQUAL(body, "");
     BOOST_CHECK_EQUAL(done, true);
     BOOST_CHECK_EQUAL(shouldClose, true);
@@ -159,8 +162,9 @@ BOOST_AUTO_TEST_CASE( http_parser_multiline_header_test )
     BOOST_CHECK_EQUAL(headers.size(), 3);
     BOOST_CHECK_EQUAL(headers[2], "Header3: Val3 with tab and space\r\n");
     parser.feed("eader4: Value4\r\n \r\n\r\n");
-    BOOST_CHECK_EQUAL(headers.size(), 4);
+    BOOST_CHECK_EQUAL(headers.size(), 5);
     BOOST_CHECK_EQUAL(headers[3], "Header4: Value4\r\n");
+    BOOST_CHECK_EQUAL(headers[4], "\r\n");
 }
 #endif
 
