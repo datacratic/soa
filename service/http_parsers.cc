@@ -222,12 +222,12 @@ parseHeaders(BufferState & state)
         }
         else {
             if (numLines == 0) {
-                handleHeader(state.data + linePtr, state.ptr - linePtr - 2);
+                handleHeader(state.data + linePtr, state.ptr - linePtr);
                 state.commit();
             }
             else {
                 multiline.append(state.data + linePtr,
-                                 state.ptr - linePtr - 2);
+                                 state.ptr - linePtr);
                 handleHeader(multiline.c_str(), multiline.size());
                 multiline.clear();
                 state.commit();
@@ -296,7 +296,7 @@ handleHeader(const char * data, size_t dataSize)
     }
     else if (matchString("Content-Length", 14)) {
         skipToValue();
-        remainingBody_ = ML::antoi(data + ptr, data + dataSize);
+        remainingBody_ = ML::antoi(data + ptr, data + dataSize - 2);
     }
     else if (matchString("Transfer-Encoding", 15)) {
         skipToValue();

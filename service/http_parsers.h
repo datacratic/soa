@@ -86,7 +86,8 @@ private:
         /* pointer to the current byte ptr */
         const char * currentDataPtr() const { return data + ptr; }
 
-        /* commit the value of ptr */
+        /* commit the value of ptr so that the next parsing iteration can
+         * start from there */
         void commit()
         {
             commited = ptr;

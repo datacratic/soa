@@ -62,7 +62,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(headers.size(), 0);
     parser.feed("er1: value1\r\nHeader2: value2");
     BOOST_CHECK_EQUAL(headers.size(), 1);
-    BOOST_CHECK_EQUAL(headers[0], "Header1: value1");
+    BOOST_CHECK_EQUAL(headers[0], "Header1: value1\r\n");
     parser.feed("\r");
     BOOST_CHECK_EQUAL(headers.size(), 1);
 
@@ -72,16 +72,16 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
     BOOST_CHECK_EQUAL(headers.size(), 1);
     parser.feed("H");
     BOOST_CHECK_EQUAL(headers.size(), 2);
-    BOOST_CHECK_EQUAL(headers[1], "Header2: value2");
+    BOOST_CHECK_EQUAL(headers[1], "Header2: value2\r\n");
     parser.feed("ead");
     BOOST_CHECK_EQUAL(headers.size(), 2);
     parser.feed("er3: Val3\r\nC");
     BOOST_CHECK_EQUAL(headers.size(), 3);
-    BOOST_CHECK_EQUAL(headers[2], "Header3: Val3");
+    BOOST_CHECK_EQUAL(headers[2], "Header3: Val3\r\n");
     parser.feed("ontent-Length: 10\r\n\r");
     parser.feed("\n");
     BOOST_CHECK_EQUAL(headers.size(), 4);
-    BOOST_CHECK_EQUAL(headers[3], "Content-Length: 10");
+    BOOST_CHECK_EQUAL(headers[3], "Content-Length: 10\r\n");
     BOOST_CHECK_EQUAL(parser.remainingBody(), 10);
 
     /* body */
@@ -97,7 +97,7 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
 
     BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/204");
     BOOST_CHECK_EQUAL(headers.size(), 1);
-    BOOST_CHECK_EQUAL(headers[0], "MyHeader: my value1");
+    BOOST_CHECK_EQUAL(headers[0], "MyHeader: my value1\r\n");
     BOOST_CHECK_EQUAL(body, "");
     BOOST_CHECK_EQUAL(done, true);
     BOOST_CHECK_EQUAL(parser.remainingBody(), 0);
@@ -107,8 +107,8 @@ BOOST_AUTO_TEST_CASE( http_response_parser_test )
                 "Header: value\r\n\r\n");
     BOOST_CHECK_EQUAL(statusLine, "HTTP/1.1/666");
     BOOST_CHECK_EQUAL(headers.size(), 2);
-    BOOST_CHECK_EQUAL(headers[0], "Connection: close");
-    BOOST_CHECK_EQUAL(headers[1], "Header: value");
+    BOOST_CHECK_EQUAL(headers[0], "Connection: close\r\n");
+    BOOST_CHECK_EQUAL(headers[1], "Header: value\r\n");
     BOOST_CHECK_EQUAL(body, "");
     BOOST_CHECK_EQUAL(done, true);
     BOOST_CHECK_EQUAL(shouldClose, true);
@@ -150,17 +150,17 @@ BOOST_AUTO_TEST_CASE( http_parser_multiline_header_test )
 
     parser.feed("Header1: value1\r\nH");
     BOOST_CHECK_EQUAL(headers.size(), 1);
-    BOOST_CHECK_EQUAL(headers[0], "Header1: value1");
+    BOOST_CHECK_EQUAL(headers[0], "Header1: value1\r\n");
 
     parser.feed("eader2: value2\r\n  with another line\r\nH");
     BOOST_CHECK_EQUAL(headers.size(), 2);
-    BOOST_CHECK_EQUAL(headers[1], "Header2: value2 with another line");
+    BOOST_CHECK_EQUAL(headers[1], "Header2: value2 with another line\r\n");
     parser.feed("eader3: Val3\r\n\t with tab\r\n  and space\r\nH");
     BOOST_CHECK_EQUAL(headers.size(), 3);
-    BOOST_CHECK_EQUAL(headers[2], "Header3: Val3 with tab and space");
+    BOOST_CHECK_EQUAL(headers[2], "Header3: Val3 with tab and space\r\n");
     parser.feed("eader4: Value4\r\n \r\n\r\n");
     BOOST_CHECK_EQUAL(headers.size(), 4);
-    BOOST_CHECK_EQUAL(headers[3], "Header4: Value4");
+    BOOST_CHECK_EQUAL(headers[3], "Header4: Value4\r\n");
 }
 #endif
 
