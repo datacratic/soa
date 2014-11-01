@@ -374,12 +374,12 @@ armRequestTimer()
                 this->handleTimeoutEvent(event);
             };
             registerFdCallback(timeoutFd_, handleTimeoutEventCb);
-            cerr << " timeoutFd_: "  + to_string(timeoutFd_) + "\n";
+            // cerr << " timeoutFd_: "  + to_string(timeoutFd_) + "\n";
             addFdOneShot(timeoutFd_, true, false);
-            cerr << "timer armed\n";
+            // cerr << "timer armed\n";
         }
         else {
-            cerr << "timer rearmed\n";
+            // cerr << "timer rearmed\n";
             modifyFdOneShot(timeoutFd_, true, false);
         }
 
