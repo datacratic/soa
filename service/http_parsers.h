@@ -42,6 +42,11 @@ struct HttpResponseParser {
         clear();
     }
 
+    /* Indicates whether to expect a body during the parsing of the next
+       response. */
+    void setExpectBody(bool expBody)
+    { expectBody_ = expBody; }
+
     /* Feed the parsing with a 0-ended data chunk. Slightly slower than the
        explicitly sized version, but useful for testing. Avoid in production
        code. */
@@ -109,6 +114,8 @@ private:
 
     void handleHeader(const char * data, size_t dataSize);
     void finalizeParsing();
+
+    bool expectBody_;
 
     int stage_;
     std::string buffer_;

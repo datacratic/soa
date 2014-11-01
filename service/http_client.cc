@@ -240,6 +240,7 @@ void
 HttpConnection::
 startSendingRequest()
 {
+    parser_.setExpectBody(request_.getExpectResponseBody());
     string rqData = request_.requestStr();
     const MimeContent & content = request_.content();
     if (content.size() > 0) {

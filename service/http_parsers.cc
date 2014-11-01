@@ -25,6 +25,7 @@ HttpResponseParser::
 clear()
     noexcept
 {
+    expectBody_ = true;
     stage_ = 0;
     buffer_.clear();
     remainingBody_ = 0;
@@ -105,7 +106,8 @@ feed(const char * bufferData, size_t bufferSize)
         else if (stage_ == 1) {
             stageDone = parseHeaders(state);
             if (stageDone) {
-                if (remainingBody_ == 0 && !useChunkedEncoding_) {
+                if (!expectBody_
+                    || (remainingBody_ == 0 && !useChunkedEncoding_)) {
                     finalizeParsing();
                     stage_ = 0;
                 }

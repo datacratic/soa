@@ -224,6 +224,12 @@ struct HttpRequest {
         requestStr_.clear();
     }
 
+    bool getExpectResponseBody()
+        const
+    {
+        return (verb_ != "HEAD");
+    }
+
     const std::string & requestStr()
         const
     {
