@@ -181,8 +181,12 @@ std::string
 Url::
 path() const
 {
-    if (url->scheme() == "file")
-        return url->host() + url->path();
+    if (url->scheme() == "file") {
+        return string(original, 7);  // truncate "file://"
+        if (url->path() != "/")
+            return url->host() + url->path();
+        else return url->host();
+    }
     else return url->path();
 }
 
