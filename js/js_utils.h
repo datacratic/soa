@@ -1420,5 +1420,8 @@ std::ostream & operator << (std::ostream & stream,
     return stream;
 }
 
+// Exception tracer for v8 exception handler
+bool nodeExceptionTracer(void * object, const std::type_info * tinfo);
+
 } // namespace JS
 } // namespace Datacratic
