@@ -21,6 +21,8 @@
 #include "jml/utils/file_functions.h"
 #include "jml/utils/info.h"
 #include "xml_helpers.h"
+#include "soa/credentials/credentials.h"
+#include "soa/credentials/credential_provider.h"
 
 #define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
 #include "crypto++/sha.h"
@@ -56,14 +58,14 @@ struct S3UrlFsHandler : public UrlFsHandler {
     virtual FsObjectInfo getInfo(const Url & url) const
     {
         string bucket = url.host();
-        auto api = getS3ApiForBucket(bucket);
+        auto api = getS3ApiForUri(url.toString());
         return api->getObjectInfo(bucket, url.path().substr(1));
     }
 
     virtual FsObjectInfo tryGetInfo(const Url & url) const
     {
         string bucket = url.host();
-        auto api = getS3ApiForBucket(bucket);
+        auto api = getS3ApiForUri(url.toString());
         return api->tryGetObjectInfo(bucket, url.path().substr(1));
     }
 
@@ -74,7 +76,7 @@ struct S3UrlFsHandler : public UrlFsHandler {
     virtual bool erase(const Url & url, bool throwException) const
     {
         string bucket = url.host();
-        auto api = getS3ApiForBucket(bucket);
+        auto api = getS3ApiForUri(url.toString());
         if (throwException) {
             api->eraseObject(bucket, url.path());
             return true;
@@ -91,7 +93,7 @@ struct S3UrlFsHandler : public UrlFsHandler {
                          const std::string & startAt) const
     {
         string bucket = prefix.host();
-        auto api = getS3ApiForBucket(bucket);
+        auto api = getS3ApiForUri(prefix.toString());
 
         bool result = true;
 
@@ -206,6 +208,7 @@ init(const std::string & accessKeyId,
     this->bandwidthToServiceMbps = bandwidthToServiceMbps;
 }
 
+#if 0
 void
 S3Api::init()
 {
@@ -222,6 +225,7 @@ S3Api::init()
     
     this->init(keyId, key);
 }
+#endif
 
 S3Api::Content::
 Content(const tinyxml2::XMLDocument & xml)
@@ -452,10 +456,13 @@ performSync() const
             ::fprintf(stderr, "%s\n", message.c_str());
 
             /* retry on 50X range errors (recoverable) */
-            if (responseCode >= 500 and responseCode < 505) {
+            if (responseCode >= 500 && responseCode < 505) {
                 continue;
             }
             else {
+                cerr << "Unrecoverable S3 error: code " << responseCode
+                     << endl;
+                cerr << string(body, 0, 4096) << endl;
                 throw ML::Exception("S3 error is unrecoverable");
             }
         }
@@ -2278,6 +2285,7 @@ parseUri(const std::string & uri)
     return make_pair(bucket, object);
 }
 
+#if 0
 void
 S3Handle::
 initS3(const std::string & accessKeyId,
@@ -2295,7 +2303,7 @@ getS3Buffer(const std::string & filename, char** outBuffer){
     if (this->s3UriPrefix == "") {
         // not initialized; use defaults
         string bucket = S3Api::parseUri(filename).first;
-        auto api = getS3ApiForBucket(bucket);
+        auto api = getS3ApiForUri(filename);
         size_t size = api->getObjectInfo(filename).size;
 
         // cerr << "size = " << size << endl;
@@ -2352,6 +2360,8 @@ getS3Buffer(const std::string & filename, char** outBuffer){
     return stats.size;
 
 }
+
+#endif
 
 bool
 S3Api::
@@ -2432,6 +2442,7 @@ getDefaultRedundancy()
     return defaultRedundancy;
 }
 
+#if 0
 namespace {
 
 struct S3BucketInfo {
@@ -2444,52 +2455,77 @@ std::unordered_map<std::string, S3BucketInfo> s3Buckets;
 
 } // file scope
 
-/** S3 support for filter_ostream opens.  Register the bucket name here, and
-    you can open it directly from s3.
-*/
+#endif
 
-void registerS3Bucket(const std::string & bucketName,
-                      const std::string & accessKeyId,
-                      const std::string & accessKey,
-                      double bandwidthToServiceMbps,
-                      const std::string & protocol,
-                      const std::string & serviceUri)
+std::string getEnv(const char * varName)
 {
-    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
-
-    auto it = s3Buckets.find(bucketName);
-    if(it != s3Buckets.end()){
-        shared_ptr<S3Api> api = it->second.api;
-        //if the info is different, raise an exception, otherwise return
-        if (api->accessKeyId != accessKeyId
-            || api->accessKey != accessKey
-            || api->bandwidthToServiceMbps != bandwidthToServiceMbps
-            || api->defaultProtocol != protocol
-            || api->serviceUri != serviceUri)
-        {
-            return;
-            throw ML::Exception("Trying to re-register a bucket with different "
-                "parameters");
-        }
-        return;
-    }
-
-    S3BucketInfo info;
-    info.s3Bucket = bucketName;
-    info.api = std::make_shared<S3Api>(accessKeyId, accessKey,
-                                       bandwidthToServiceMbps,
-                                       protocol, serviceUri);
-    info.api->getEscaped("", "/" + bucketName + "/",
-                         S3Api::Range::Full); //throws if !accessible
-    s3Buckets[bucketName] = info;
-
-    if (accessKeyId.size() > 0 && accessKey.size() > 0) {
-        registerAwsCredentials(accessKeyId, accessKey);
-    }
+    const char * val = getenv(varName);
+    return val ? val : "";
 }
 
-/** Register S3 with the filter streams API so that a filter_stream can be used to
-    treat an S3 object as a simple stream.
+
+struct S3ExplicitCredentialProvider: public CredentialProvider {
+
+    std::vector<std::string> buckets;
+    Credential cred;
+
+    S3ExplicitCredentialProvider()
+    {
+    }
+
+    S3ExplicitCredentialProvider(std::string provider,
+                                 std::string id,
+                                 std::string secret,
+                                 std::vector<std::string> buckets,
+                                 double bandwidthToServiceMbps,
+                                 const std::string & protocol,
+                                 const std::string & serviceUri)
+    {
+        init(provider, id, secret, buckets, bandwidthToServiceMbps, protocol, serviceUri);
+    }
+
+    void init(std::string provider,
+              std::string id,
+              std::string secret,
+              std::vector<std::string> buckets,
+              double bandwidthToServiceMbps = S3Api::defaultBandwidthToServiceMbps,
+              const std::string & protocol = "http",
+              const std::string & serviceUri = "s3.amazonaws.com")
+    {
+        cred.provider = provider;
+        cred.protocol = protocol;
+        cred.location = serviceUri;
+        cred.id = id;
+        cred.secret = secret;
+        cred.extra["bandwithToServiceMbps"] = bandwidthToServiceMbps;
+        this->buckets = buckets;
+    }
+
+
+    virtual std::vector<std::string>
+    getResourceTypePrefixes() const
+    {
+        return { "aws:s3" };
+    }
+
+    virtual std::vector<Credential>
+    getSync(const std::string & resourceType,
+            const std::string & resource,
+            const CredentialContext & context,
+            Json::Value extraData) const
+    {
+        string bucket = S3Api::parseUri(resource).first;
+        if (!buckets.empty()
+            && (std::find(buckets.begin(), buckets.end(), bucket)
+                == buckets.end()))
+            return {};
+
+        return { cred };
+    }
+};
+
+/** Register S3 with the filter streams API so that a filter_stream can be
+    used to treat an S3 object as a simple stream.
 */
 struct RegisterS3Handler {
     static std::pair<std::streambuf *, bool>
@@ -2559,104 +2595,202 @@ struct RegisterS3Handler {
         else throw ML::Exception("no way to create s3 handler for non in/out");
     }
 
-    void registerBuckets()
-    {
-    }
+    /** Parse the ~/.cloud_credentials file and add those buckets in.
+
+        The format of that file is as follows:
+        1.  One entry per line
+        2.  Tab separated
+        3.  Comments are '#' in the first position
+        4.  First entry is the name of the URI scheme (here, s3)
+        5.  Second entry is the "version" of the configuration (here, 1)
+            for forward compatibility
+        6.  The rest of the entries depend upon the scheme; for s3 they are
+            tab-separated and include the following:
+            - Access key ID
+            - Access key
+            - Bandwidth from this machine to the server (MBPS)
+            - Protocol (http)
+            - S3 machine host name (s3.amazonaws.com)
+    */
+    struct CloudCredentialProvider: public CredentialProvider {
+
+        CloudCredentialProvider()
+        {
+            // Parse cloud credentials file
+
+            string filename = "";
+            const char * home = getenv("HOME");
+            if (home != NULL)
+                filename = home + string("/.cloud_credentials");
+            if (filename != "" && ML::fileExists(filename)) {
+                std::ifstream stream(filename.c_str());
+                int lineNum = 1;
+                for (; stream;  ++lineNum) {
+                    string line;
+
+                    getline(stream, line);
+                    if (line.empty() || line[0] == '#')
+                        continue;
+                    if (line.find("s3") != 0)
+                        continue;
+
+                    vector<string> fields = ML::split(line, '\t');
+
+                    if (fields[0] != "s3")
+                        continue;
+
+                    if (fields.size() < 4) {
+                        cerr << "warning: skipping invalid line in ~/.cloud_credentials: "
+                             << line << endl;
+                        continue;
+                    }
+                
+                    fields.resize(7);
+
+                    string version = fields[1];
+                    if (version != "1") {
+                        cerr << "warning: ignoring unknown version "
+                             << version <<  " in ~/.cloud_credentials: "
+                             << line << endl;
+                        continue;
+                    }
+                
+                    string keyId = fields[2];
+                    string key = fields[3];
+                    string bandwidth = fields[4];
+                    string protocol = fields[5];
+                    string serviceUri = fields[6];
+
+                    double bw = S3Api::defaultBandwidthToServiceMbps;
+                    if (bandwidth != "")
+                        bw = boost::lexical_cast<double>(bandwidth);
+                    if (protocol == "")
+                        protocol = "http";
+                    if (serviceUri == "")
+                        serviceUri = "s3.amazonaws.com";
+
+                    Credential cred;
+                    cred.provider = "S3CloudCredentials " + filename + ":" + std::to_string(lineNum);
+                    cred.id = keyId;
+                    cred.secret = key;
+                    cred.protocol = protocol;
+                    cred.location = serviceUri;
+                    cred.extra["bandwidthToServiceMbps"] = bw;
+
+                    creds.push_back(cred);
+                }
+            }
+        }
+
+        std::vector<Credential> creds;
+
+        virtual std::vector<std::string>
+        getResourceTypePrefixes() const
+        {
+            return { "aws:s3" };
+        }
+
+        virtual std::vector<Credential>
+        getSync(const std::string & resourceType,
+                const std::string & resource,
+                const CredentialContext & context,
+                Json::Value extraData) const
+        {
+            return creds;
+        }
+    };
+
+    struct S3EnvironmentCredentialProvider: public S3ExplicitCredentialProvider {
+
+        std::vector<std::string> buckets;
+        Credential cred;
+
+        S3EnvironmentCredentialProvider()
+        {
+            init("S3EnvironmentCredentialProvider",
+                 getEnv("S3_KEY_ID"),
+                 getEnv("S3_KEY"),
+                 ML::split(getEnv("S3_BUCKETS"), ','));
+        }
+    };
 
     RegisterS3Handler()
     {
         ML::registerUriHandler("s3", getS3Handler);
+        CredentialProvider::registerProvider
+            ("s3CloudCredentials",
+             std::make_shared<CloudCredentialProvider>());
+
+        if (getenv("S3_KEY_ID"))
+            CredentialProvider::registerProvider
+                ("s3FromEnvironment",
+                 std::make_shared<S3EnvironmentCredentialProvider>());
     }
 
 } registerS3Handler;
 
+#if 0
 bool defaultBucketsRegistered = false;
 std::mutex registerBucketsMutex;
+#endif
 
-tuple<string, string, string, string, string> getCloudCredentials()
-{
-    string filename = "";
-    char* home;
-    home = getenv("HOME");
-    if (home != NULL)
-        filename = home + string("/.cloud_credentials");
-    if (filename != "" && ML::fileExists(filename)) {
-        std::ifstream stream(filename.c_str());
-        while (stream) {
-            string line;
 
-            getline(stream, line);
-            if (line.empty() || line[0] == '#')
-                continue;
-            if (line.find("s3") != 0)
-                continue;
-
-            vector<string> fields = ML::split(line, '\t');
-
-            if (fields[0] != "s3")
-                continue;
-
-            if (fields.size() < 4) {
-                cerr << "warning: skipping invalid line in ~/.cloud_credentials: "
-                     << line << endl;
-                continue;
-            }
-                
-            fields.resize(7);
-
-            string version = fields[1];
-            if (version != "1") {
-                cerr << "warning: ignoring unknown version "
-                     << version <<  " in ~/.cloud_credentials: "
-                     << line << endl;
-                continue;
-            }
-                
-            string keyId = fields[2];
-            string key = fields[3];
-            string bandwidth = fields[4];
-            string protocol = fields[5];
-            string serviceUri = fields[6];
-
-            return make_tuple(keyId, key, bandwidth, protocol, serviceUri);
-        }
-    }
-    return make_tuple("", "", "", "", "");
-}
-
-std::string getEnv(const char * varName)
-{
-    const char * val = getenv(varName);
-    return val ? val : "";
-}
-
-tuple<string, string, std::vector<std::string> >
-getS3CredentialsFromEnvVar()
-{
-    return make_tuple(getEnv("S3_KEY_ID"), getEnv("S3_KEY"),
-                      ML::split(getEnv("S3_BUCKETS"), ','));
-}
-
-/** Parse the ~/.cloud_credentials file and add those buckets in.
-
-    The format of that file is as follows:
-    1.  One entry per line
-    2.  Tab separated
-    3.  Comments are '#' in the first position
-    4.  First entry is the name of the URI scheme (here, s3)
-    5.  Second entry is the "version" of the configuration (here, 1)
-        for forward compatibility
-    6.  The rest of the entries depend upon the scheme; for s3 they are
-        tab-separated and include the following:
-        - Access key ID
-        - Access key
-        - Bandwidth from this machine to the server (MBPS)
-        - Protocol (http)
-        - S3 machine host name (s3.amazonaws.com)
-
-    If S3_KEY_ID and S3_KEY environment variables are specified,
-    they will be used first.
+/** S3 support for filter_ostream opens.  Register the bucket name here, and
+    you can open it directly from s3.
 */
+
+void registerS3Bucket(const std::string & bucketName,
+                      const std::string & accessKeyId,
+                      const std::string & accessKey,
+                      double bandwidthToServiceMbps,
+                      const std::string & protocol,
+                      const std::string & serviceUri)
+{
+    CredentialProvider::registerProvider
+        ("s3UserRegisteredBucket",
+         std::make_shared<S3ExplicitCredentialProvider>
+         ("registerS3Bucket()", accessKeyId, accessKey,
+          vector<string>({ bucketName }),
+          bandwidthToServiceMbps, protocol, serviceUri));
+
+#if 0
+    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
+
+    auto it = s3Buckets.find(bucketName);
+    if(it != s3Buckets.end()){
+        shared_ptr<S3Api> api = it->second.api;
+        //if the info is different, raise an exception, otherwise return
+        if (api->accessKeyId != accessKeyId
+            || api->accessKey != accessKey
+            || api->bandwidthToServiceMbps != bandwidthToServiceMbps
+            || api->defaultProtocol != protocol
+            || api->serviceUri != serviceUri)
+        {
+            return;
+            throw ML::Exception("Trying to re-register a bucket with different "
+                "parameters");
+        }
+        return;
+    }
+
+    S3BucketInfo info;
+    info.s3Bucket = bucketName;
+    info.api = std::make_shared<S3Api>(accessKeyId, accessKey,
+                                       bandwidthToServiceMbps,
+                                       protocol, serviceUri);
+    info.api->getEscaped("", "/" + bucketName + "/",
+                         S3Api::Range::Full); //throws if !accessible
+    s3Buckets[bucketName] = info;
+#endif
+
+#if 0
+    if (accessKeyId.size() > 0 && accessKey.size() > 0) {
+        registerAwsCredentials(accessKeyId, accessKey);
+    }
+#endif
+}
+
+#if 0
 void registerDefaultBuckets()
 {
     if (defaultBucketsRegistered)
@@ -2731,40 +2865,45 @@ void registerDefaultBuckets()
 #endif
 }
 
+#endif
+
 void registerS3Buckets(const std::string & accessKeyId,
                        const std::string & accessKey,
                        double bandwidthToServiceMbps,
                        const std::string & protocol,
                        const std::string & serviceUri)
 {
-    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
-    int bucketCount(0);
     auto api = std::make_shared<S3Api>(accessKeyId, accessKey,
                                        bandwidthToServiceMbps,
                                        protocol, serviceUri);
 
+    vector<string> bucketNames;
+
     auto onBucket = [&] (const std::string & bucketName)
         {
-            //cerr << "got bucket " << bucketName << endl;
-
-            S3BucketInfo info;
-            info.s3Bucket = bucketName;
-            info.api = api;
-            s3Buckets[bucketName] = info;
-            bucketCount++;
-
+            bucketNames.push_back(bucketName);
             return true;
         };
 
     api->forEachBucket(onBucket);
 
-    if (bucketCount == 0) {
-        cerr << "registerS3Buckets: no bucket registered\n";
+    if (bucketNames.empty()) {
+        cerr << "warning: no bucket names registered";
+    } else {
+        CredentialProvider::registerProvider
+            ("s3UserRegisteredBucket",
+             std::make_shared<S3ExplicitCredentialProvider>
+             ("registerS3Buckets()", accessKeyId, accessKey,
+              bucketNames, bandwidthToServiceMbps, protocol, serviceUri));
     }
 }
 
+#if 0
 std::shared_ptr<S3Api> getS3ApiForBucket(const std::string & bucketName)
 {
+    auto creds = getCredential("aws:s3", uri);
+    return std::make_shared<S3Api>(creds.id, creds.secret);
+
     std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
     auto it = s3Buckets.find(bucketName);
     if (it == s3Buckets.end()) {
@@ -2777,8 +2916,24 @@ std::shared_ptr<S3Api> getS3ApiForBucket(const std::string & bucketName)
     }
     return it->second.api;
 }
+#endif
+
+double getBandwidth(const Credential & cred)
+{
+    if (cred.extra.isMember("bandwidthToServiceMbps"))
+        return cred.extra["bandwidthToServiceMbps"].asDouble();
+    else return S3Api::defaultBandwidthToServiceMbps;
+}
 
 std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri)
+{
+    // Get the credentials
+    auto creds = getCredential("aws:s3", uri);
+    return std::make_shared<S3Api>(creds.id, creds.secret, getBandwidth(creds),
+                                   creds.protocol, creds.location);
+}
+
+#if 0
 {
     Url url(uri);
 
@@ -2794,11 +2949,11 @@ std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri)
     }
 
     auto api = make_shared<S3Api>(accessKeyId, accessKey);
-    api->getEscaped("", "/" + bucketName + "/",
-                    S3Api::Range::Full); //throws if !accessible
+    //api->getEscaped("", "/" + bucketName + "/",
+    //                S3Api::Range::Full); //throws if !accessible
 
     return api;
 }
-
+#endif
 
 } // namespace Datacratic

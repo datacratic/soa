@@ -23,14 +23,14 @@
 using namespace std;
 using namespace ML;
 
-
+#if 0
 namespace {
 
 std::mutex awsCredentialsLock;
 std::map<string, std::string> awsCredentials;
 
 } // file scope
-
+#endif
 
 namespace Datacratic {
 
@@ -595,6 +595,7 @@ performGet(RestParams && params,
                            resultSelector);
 }
 
+#if 0
 void registerAwsCredentials(const string & accessKeyId,
                             const string & accessKey)
 {
@@ -622,5 +623,6 @@ string getAwsAccessKey(const string & accessKeyId)
 
     return it->second;
 }
+#endif
 
 } // namespace Datacratic

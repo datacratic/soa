@@ -77,8 +77,12 @@ struct S3Api : public AwsApi {
           const std::string & defaultProtocol = "http",
           const std::string & serviceUri = "s3.amazonaws.com");
 
+    /** Set up the API, getting its credentials from the default credentials
+        handler.
+    */
+    //void init();
+
     /** Set up the API to called with the given credentials. */
-    void init();
     void init(const std::string & accessKeyId,
               const std::string & accessKey,
               double bandwidthToServiceMbps = defaultBandwidthToServiceMbps,
@@ -632,17 +636,6 @@ private:
 
 };
 
-struct S3Handle{
-    S3Api s3;
-    std::string s3UriPrefix;
-
-    void initS3(const std::string & accessKeyId,
-                const std::string & accessKey,
-                const std::string & uriPrefix);
-
-    size_t getS3Buffer(const std::string & filename, char** outBuffer);
-};
-
 /** S3 support for filter_ostream opens.  Register the bucket name here, and
     you can open it directly from s3.
 */
@@ -665,10 +658,13 @@ void registerS3Buckets(const std::string & accessKeyId,
                        const std::string & protocol = "http",
                        const std::string & serviceUri = "s3.amazonaws.com");
 
+#if 0
 std::shared_ptr<S3Api> getS3ApiForBucket(const std::string & bucketName);
+#endif
 
 std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri);
 
+#if 0
 std::tuple<std::string, std::string, std::string, std::string, std::string> 
     getCloudCredentials();
 
@@ -679,6 +675,8 @@ std::tuple<std::string, std::string, std::string, std::string, std::string>
 */
 std::tuple<std::string, std::string, std::vector<std::string> >
 getS3CredentialsFromEnvVar();
+
+#endif
 
 // std::pair<std::string, std::string> getDefaultCredentials();
 
