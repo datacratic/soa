@@ -22,13 +22,6 @@ namespace ML {
 
 __thread BacktraceInfo * current_backtrace = nullptr;
 
-void cleanup_current_backtrace(void * arg)
-{
-    BacktraceInfo * p = (BacktraceInfo *)arg;
-    delete p;
-    p = nullptr;
-}
-
 } // namespace ML
 
 namespace Datacratic {
