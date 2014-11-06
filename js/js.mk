@@ -15,8 +15,4 @@ LIBJS_LINK := jsoncpp $(NODE_V8_LIB) arch utils types
 
 $(eval $(call library,js,$(LIBJS_SOURCES),$(LIBJS_LINK)))
 
-$(eval $(call library,node_exception_tracing, \
-	node_exception_tracing.cc, \
-	js exception_hook arch))
-
 $(eval $(call include_sub_make,js_testing,testing,js_testing.mk))
