@@ -658,26 +658,12 @@ void registerS3Buckets(const std::string & accessKeyId,
                        const std::string & protocol = "http",
                        const std::string & serviceUri = "s3.amazonaws.com");
 
-#if 0
-std::shared_ptr<S3Api> getS3ApiForBucket(const std::string & bucketName);
-#endif
-
-std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri);
-
-#if 0
-std::tuple<std::string, std::string, std::string, std::string, std::string> 
-    getCloudCredentials();
-
-/** Returns the keyId, key and list of buckets to register (can be empty,
-    which means all) from the environment variables
-
-    S3_KEY_ID, S3_KEY and S3_BUCKETS
+/** Returns an S3Api constructed to access the given URI.  Will look up its
+    own credentials using registered credential providers, or one which was
+    registered using registerS3Bucket or registerS3Buckets, or
+    ~/.cloud_credentials, or S3_KEY_ID, S3_KEY and S3_BUCKETS environment
+    variables.
 */
-std::tuple<std::string, std::string, std::vector<std::string> >
-getS3CredentialsFromEnvVar();
-
-#endif
-
-// std::pair<std::string, std::string> getDefaultCredentials();
+std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri);
 
 } // namespace Datacratic

@@ -23,15 +23,6 @@
 using namespace std;
 using namespace ML;
 
-#if 0
-namespace {
-
-std::mutex awsCredentialsLock;
-std::map<string, std::string> awsCredentials;
-
-} // file scope
-#endif
-
 namespace Datacratic {
 
 template<class Hash>
@@ -594,35 +585,5 @@ performGet(RestParams && params,
     return extract<string>(*performGet(std::move(params), resource, timeoutSeconds),
                            resultSelector);
 }
-
-#if 0
-void registerAwsCredentials(const string & accessKeyId,
-                            const string & accessKey)
-{
-    unique_lock<mutex> guard(awsCredentialsLock);
-
-    string & entry = awsCredentials[accessKeyId];
-    if (entry.empty()) {
-        entry = accessKey;
-    }
-    else {
-        if (entry != accessKey) {
-            throw ML::Exception("access key id '%s' already registered with a"
-                                " different key", accessKeyId.c_str());
-        }
-    }
-}
-
-string getAwsAccessKey(const string & accessKeyId)
-{
-    auto it = awsCredentials.find(accessKeyId);
-    if (it == awsCredentials.end()) {
-        throw ML::Exception("no access key registered for id '%s'",
-                            accessKeyId.c_str());
-    }
-
-    return it->second;
-}
-#endif
 
 } // namespace Datacratic
