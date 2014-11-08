@@ -351,10 +351,9 @@ HttpConnection::
 onClosed(bool fromPeer, const std::vector<std::string> & msgs)
 {
     if (fromPeer) {
-        ;
+        handleEndOfRq(TcpConnectionCode::ConnectionEnded, false);
     }
     else {
-        // cerr << "disconnected...\n";
         finalizeEndOfRq(lastCode_);
     }
 }

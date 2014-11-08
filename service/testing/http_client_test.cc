@@ -514,3 +514,135 @@ BOOST_AUTO_TEST_CASE( test_http_client_unlimited_queue )
     client->waitConnectionState(AsyncEventSource::DISCONNECTED);
 }
 #endif
+
+#if 1
+/* Test connection restoration after a timeout occurs. */
+BOOST_AUTO_TEST_CASE( test_http_client_connection_timeout )
+{
+    ML::Watchdog watchdog(30);
+    auto proxies = make_shared<ServiceProxies>();
+
+    HttpGetService service(proxies);
+    service.addResponse("GET", "/", 200, "coucou");
+    service.start();
+    service.waitListening();
+
+    MessageLoop loop;
+    loop.start();
+
+    string baseUrl("http://127.0.0.1:" + to_string(service.port()));
+
+    auto client = make_shared<HttpClient>(baseUrl, 1);
+    loop.addSource("client", client);
+
+    int done(0);
+    auto onDone = [&] (const HttpRequest & rq,
+                       int errorCode, int status,
+                       string && headers, string && body) {
+        done++;
+        ML::futex_wake(done);
+    };
+    auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
+    client->get("/timeout", cbs, {}, {}, 1);
+    client->get("/", cbs, {}, {}, 1);
+
+    while (done < 2) {
+        ML::futex_wait(done, done);
+    }
+
+    loop.removeSourceSync(client.get());
+}
+#endif
+
+#if 1
+/* Test connection restoration after the server closes the connection, under
+ * various circumstances. */
+BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
+{
+    ML::Watchdog watchdog(30);
+    auto proxies = make_shared<ServiceProxies>();
+
+    HttpGetService service(proxies);
+    service.portToUse = 8080;
+    service.addResponse("GET", "/", 200, "coucou");
+    service.start();
+    service.waitListening();
+
+    MessageLoop loop;
+    loop.start();
+
+    string baseUrl("http://127.0.0.1:" + to_string(service.port()));
+
+    /* response sent, "Connection: close" header */
+    {
+        cerr << "* connection-close\n";
+        auto client = make_shared<HttpClient>(baseUrl, 1);
+        loop.addSource("client", client);
+
+        int done(0);
+        auto onDone = [&] (const HttpRequest & rq,
+                           int errorCode, int status,
+                           string && headers, string && body) {
+            done++;
+            ML::futex_wake(done);
+        };
+        auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
+        client->get("/connection-close", cbs);
+        client->get("/", cbs);
+
+        while (done < 2) {
+            ML::futex_wait(done, done);
+        }
+
+        loop.removeSourceSync(client.get());
+    }
+
+    /* response sent, no "Connection: close" header */
+    {
+        cerr << "* no connection-close\n";
+        auto client = make_shared<HttpClient>(baseUrl, 1);
+        loop.addSource("client", client);
+
+        int done(0);
+        auto onDone = [&] (const HttpRequest & rq,
+                           int errorCode, int status,
+                           string && headers, string && body) {
+            done++;
+            ML::futex_wake(done);
+        };
+        auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
+        client->get("/quiet-connection-close", cbs);
+        client->get("/", cbs);
+
+        while (done < 2) {
+            ML::futex_wait(done, done);
+        }
+
+        loop.removeSourceSync(client.get());
+    }
+
+    /* response not sent */
+    {
+        cerr << "* no response at all\n";
+        auto client = make_shared<HttpClient>(baseUrl, 1);
+        loop.addSource("client", client);
+
+        int done(0);
+        auto onDone = [&] (const HttpRequest & rq,
+                           int errorCode, int status,
+                           string && headers, string && body) {
+            done++;
+            ML::futex_wake(done);
+        };
+        auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
+        client->get("/abrupt-connection-close", cbs);
+        client->get("/", cbs);
+
+        while (done < 2) {
+            ML::futex_wait(done, done);
+        }
+
+        loop.removeSourceSync(client.get());
+    }
+}
+#endif

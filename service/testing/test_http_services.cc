@@ -92,6 +92,14 @@ handleHttpPayload(HttpTestConnHandler & handler,
         handler.send("HTTP/1.1 204 No contents\r\nConnection: close\r\n\r\n",
                      PassiveConnectionHandler::NextAction::NEXT_CLOSE);
     }
+    else if (header.resource == "/quiet-connection-close") {
+        handler.send("HTTP/1.1 204 No contents\r\n\r\n",
+                     PassiveConnectionHandler::NextAction::NEXT_CLOSE);
+    }
+    else if (header.resource == "/abrupt-connection-close") {
+        handler.send("",
+                     PassiveConnectionHandler::NextAction::NEXT_CLOSE);
+    }
     else {
         const auto & it = responses_.find(key);
         if (it == responses_.end()) {

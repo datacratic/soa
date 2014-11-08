@@ -31,7 +31,8 @@ enum TcpConnectionCode {
     UnknownError = 1,
     ConnectionFailure = 2,
     HostUnknown = 3,
-    Timeout = 4
+    Timeout = 4,
+    ConnectionEnded = 5
 };
 
 
