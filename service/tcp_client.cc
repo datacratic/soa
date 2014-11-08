@@ -90,7 +90,7 @@ TcpClient::
 connect(const OnConnectionResult & onConnectionResult)
 {
     // cerr << "connect...\n";
-    ExcCheck(state() == Disconnected, "socket is not closed");
+    ExcCheck(getFd() == -1, "socket is not closed");
     ExcCheck(!hostname_.empty(), "no hostname set");
 
     state_ = TcpClientState::Connecting;
