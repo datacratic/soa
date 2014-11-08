@@ -18,6 +18,7 @@
 #include "soa/utils/print_utils.h"
 #include "jml/arch/futex.h"
 #include "jml/arch/threads.h"
+#include "jml/arch/timers.h"
 #include "jml/utils/exc_assert.h"
 #include "jml/utils/pair_utils.h"
 #include "jml/utils/vector_utils.h"
@@ -890,8 +891,9 @@ performStateRequest(const shared_ptr<S3RequestState> & state)
                                    {},
                                    headers,
                                    timeout)) {
-        /* TODO: should invoke onResponse with "too many requests" */
-        throw ML::Exception("the http client could not enqueue the request");
+        ML::sleep(0.1);
+	// /* TODO: should invoke onResponse with "too many requests" */
+	// throw ML::Exception("the http client could not enqueue the request");
     }
 }
 
