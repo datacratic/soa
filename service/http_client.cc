@@ -402,7 +402,7 @@ cancelRequestTimer()
     if (timeoutFd_ != -1) {
         // cerr << "  was active\n";
         removeFd(timeoutFd_);
-        unregisterFdCallback(timeoutFd_);
+        unregisterFdCallback(timeoutFd_, true);
         ::close(timeoutFd_);
         timeoutFd_ = -1;
     }
@@ -415,6 +415,10 @@ void
 HttpConnection::
 handleTimeoutEvent(const ::epoll_event & event)
 {
+    if (timeoutFd_ == -1) {
+        return;
+    }
+
     if ((event.events & EPOLLIN) != 0) {
         while (true) {
             uint64_t expiries;
