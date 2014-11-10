@@ -657,6 +657,9 @@ bootstrap(const Json::Value& config)
 
     if (config.isMember("portRanges"))
         usePortRanges(config["portRanges"]);
+
+    if (config.isMember("analytics-uri"))
+        analyticsUri = config["analytics-uri"].asString();
 }
 
 /*****************************************************************************/

@@ -403,6 +403,8 @@ struct ServiceProxies {
     /** Zeromq context for communication. */
     std::shared_ptr<zmq::context_t> zmqContext;
 
+    std::string analyticsUri;
+
     template<typename Configuration> 
     JML_ALWAYS_INLINE
     std::shared_ptr<Configuration> configAs() 
