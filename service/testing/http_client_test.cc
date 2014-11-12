@@ -459,6 +459,66 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
 #endif
 
 #if 1
+/* Ensure that the move constructor and assignment operator behave
+   reasonably well. */
+BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
+{
+    cerr << "move_constructor\n";
+    ML::Watchdog watchdog(30);
+    auto proxies = make_shared<ServiceProxies>();
+
+    HttpGetService service(proxies);
+    service.addResponse("GET", "/", 200, "coucou");
+    service.start();
+    service.waitListening();
+
+    MessageLoop loop;
+    loop.start();
+
+    string baseUrl("http://127.0.0.1:"
+                   + to_string(service.port()));
+
+    auto doGet = [&] (HttpClient & getClient) {
+        loop.addSource("client", getClient);
+        getClient.waitConnectionState(AsyncEventSource::CONNECTED);
+
+        int done(false);
+
+        auto onDone = [&] (const HttpRequest & rq,
+                           HttpClientError errorCode, int status,
+                           string && headers, string && body) {
+            done = true;
+            ML::futex_wake(done);
+        };
+        auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
+
+        getClient.get("/", cbs);
+        while (!done) {
+            int old = done;
+            ML::futex_wait(done, old);
+        }
+
+        loop.removeSource(&getClient);
+        getClient.waitConnectionState(AsyncEventSource::DISCONNECTED);
+    };
+
+    /* move constructor */
+    cerr << "testing move constructor\n";
+    auto makeClient = [&] () {
+        return HttpClient(baseUrl, 1);
+    };
+    HttpClient client1(move(makeClient()));
+    doGet(client1);
+
+    /* move assignment operator */
+    cerr << "testing move assignment op.\n";
+    HttpClient client2("http://nowhere", 1);
+    client2 = move(client1);
+    doGet(client2);
+}
+#endif
+
+#if 1
 /* Ensure that an infinite number of requests can be queued when queue size is
  * 0, even from within callbacks. */
 BOOST_AUTO_TEST_CASE( test_http_client_unlimited_queue )
