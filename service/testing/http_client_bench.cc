@@ -39,16 +39,18 @@ AsyncModelBench(HttpMethod method,
                 int maxReqs, int concurrency)
 {
     int numReqs, numResponses(0), numMissed(0);
+    MessageLoop loop(1, 0, -1);
+
+    loop.start();
 
     auto client = make_shared<HttpClient>(baseUrl, concurrency);
-    client->start();
+    loop.addSource("httpClient", client);
 
-    auto onResponse = [&] (const HttpRequest & rq, int errorCode_,
+    auto onResponse = [&] (const HttpRequest & rq, HttpClientError errorCode_,
                            int status, string && headers, string && body) {
         numResponses++;
-        // cerr << "received response: /"  + body + "/\n";
         // if (numResponses % 1000) {
-        //     cerr << "resps: "  + to_string(numResponses) + "\n";
+            // cerr << "resps: "  + to_string(numResponses) + "\n";
         // }
         if (numResponses == maxReqs) {
             // cerr << "received all responses\n";
@@ -56,7 +58,7 @@ AsyncModelBench(HttpMethod method,
         }
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
-    MimeContent content(payload, "application/binary");
+    HttpRequest::Content content(payload, "application/binary");
 
     auto & clientRef = *client.get();
     string url("/");
@@ -94,6 +96,9 @@ AsyncModelBench(HttpMethod method,
         ML::futex_wait(numResponses, old);
     }
     Date end = Date::now();
+
+    loop.removeSource(client.get());
+    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
 
     cerr << "num misses: "  + to_string(numMissed) + "\n";
 
