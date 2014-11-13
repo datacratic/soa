@@ -2,165 +2,98 @@
 #include <sys/timerfd.h>
 
 #include "jml/arch/exception.h"
+#include "jml/utils/exc_assert.h"
 
 #include "soa/types/url.h"
 #include "soa/service/message_loop.h"
 #include "soa/service/http_header.h"
 #include "soa/service/http_parsers.h"
 
-#include "http_client.h"
+#include "http_client_v2.h"
 
 
 using namespace std;
 using namespace Datacratic;
 
 
-/* HTTP REQUEST */
+namespace {
 
-void
-HttpRequest::
-makeRequestStr()
-    noexcept
+HttpClientError
+translateError(TcpConnectionCode code)
 {
-    Url url(url_);
-    requestStr_.reserve(10000);
-    requestStr_ = verb_ + " " + url.path();
+    HttpClientError error;
+
+    switch (code) {
+    case Success:
+        error = HttpClientError::None;
+        break;
+    case Timeout:
+        error = HttpClientError::Timeout;
+        break;
+    case HostUnknown:
+        error = HttpClientError::HostNotFound;
+        break;
+    case ConnectionFailure:
+        error = HttpClientError::CouldNotConnect;
+        break;
+    case ConnectionEnded:
+        error = HttpClientError::Unknown;
+        break;
+    default:
+        ::fprintf(stderr, "returning 'unknown' for code %d\n", code);
+        error = HttpClientError::Unknown;
+    }
+
+    return error;
+}
+
+bool getExpectResponseBody(const HttpRequest & request)
+{
+    return (request.verb_ != "HEAD");
+}
+
+string
+makeRequestStr(const HttpRequest & request)
+{
+    string requestStr;
+    requestStr.reserve(10000);
+
+    Url url(request.url_);
+    requestStr = request.verb_ + " " + url.path();
     string query = url.query();
     if (query.size() > 0) {
-        requestStr_ += "?" + query;
+        requestStr += "?" + query;
     }
-    requestStr_ += " HTTP/1.1\r\n";
-    requestStr_ += "Host: "+ url.host();
+    requestStr += " HTTP/1.1\r\n";
+    requestStr += "Host: "+ url.host();
     int port = url.port();
     if (port > 0) {
-        requestStr_ += ":" + to_string(port);
+        requestStr += ":" + to_string(port);
     }
-    requestStr_ += "\r\nAccept: */*\r\n";
-    for (const auto & header: headers_) {
-        requestStr_ += header.first + ":" + header.second + "\r\n";
+    requestStr += "\r\nAccept: */*\r\n";
+    for (const auto & header: request.headers_) {
+        requestStr += header.first + ":" + header.second + "\r\n";
     }
-    if (!content_.isVoid()) {
-        requestStr_ += ("Content-Length: "
-                        + to_string(content_.size()) + "\r\n");
-        requestStr_ += "Content-Type: " + content_.contentType() + "\r\n";
+    const auto & content = request.content_;
+    if (!content.str.empty()) {
+        requestStr += ("Content-Length: "
+                       + to_string(content.str.size()) + "\r\n");
+        requestStr += "Content-Type: " + content.contentType + "\r\n";
     }
-    requestStr_ += "\r\n";
+    requestStr += "\r\n";
+
+    return requestStr;
 }
 
-
-#if 0
-/* HTTPCLIENTERROR */
-
-std::ostream &
-Datacratic::
-operator << (std::ostream & stream, HttpClientError error)
-{
-    return stream << HttpClientCallbacks::errorMessage(error);
-}
-
-
-/* HTTPCLIENTCALLBACKS */
-
-const string &
-HttpClientCallbacks::
-errorMessage(HttpClientError errorCode)
-{
-    static const string none = "No error";
-    static const string unknown = "Unknown error";
-    static const string hostNotFound = "Host not found";
-    static const string couldNotConnect = "Could not connect";
-    static const string timeout = "Request timed out";
-
-    switch (errorCode) {
-    case HttpClientError::None:
-        return none;
-    case HttpClientError::Unknown:
-        return unknown;
-    case HttpClientError::Timeout:
-        return timeout;
-    case HttpClientError::HostNotFound:
-        return hostNotFound;
-    case HttpClientError::CouldNotConnect:
-        return couldNotConnect;
-    default:
-        throw ML::Exception("invalid error code");
-    };
-}
-#endif
-
-void
-HttpClientCallbacks::
-startResponse(const HttpRequest & rq,
-              const std::string & httpVersion,
-              int code)
-{
-    // ::fprintf(stderr, "%p: startResponse\n", this);
-    onResponseStart(rq, httpVersion, code);
-}
-
-void
-HttpClientCallbacks::
-feedHeader(const HttpRequest & rq,
-               const char * data, size_t size)
-{
-    onHeader(rq, data, size);
-}
-
-void
-HttpClientCallbacks::
-feedBodyData(const HttpRequest & rq,
-             const char * data, size_t size)
-{
-    onData(rq, data, size);
-}
-
-void
-HttpClientCallbacks::
-endResponse(const HttpRequest & rq, int errorCode)
-{
-    // ::fprintf(stderr, "%p: endResponse\n", this);
-    onDone(rq, errorCode);
-}
-
-void
-HttpClientCallbacks::
-onResponseStart(const HttpRequest & rq,
-                const string & httpVersion, int code)
-{
-    if (onResponseStart_)
-        onResponseStart_(rq, httpVersion, code);
-}
-
-void
-HttpClientCallbacks::
-onHeader(const HttpRequest & rq, const char * data, size_t size)
-{
-    if (onHeader_)
-        onHeader_(rq, data, size);
-}
-
-void
-HttpClientCallbacks::
-onData(const HttpRequest & rq, const char * data, size_t size)
-{
-    if (onData_)
-        onData_(rq, data, size);
-}
-
-void
-HttpClientCallbacks::
-onDone(const HttpRequest & rq, int errorCode)
-{
-    if (onDone_)
-        onDone_(rq, errorCode);
-}
+} // file scope
 
 
 /* HTTP CONNECTION */
 
 HttpConnection::
 HttpConnection()
-    : responseState_(IDLE), requestEnded_(false), lastCode_(0), timeoutFd_(-1)
+    : responseState_(IDLE), requestEnded_(false), lastCode_(Success),
+      timeoutFd_(-1)
 {
     // cerr << "HttpConnection(): " << this << "\n";
 
@@ -204,7 +137,7 @@ clear()
     responseState_ = IDLE;
     requestEnded_ = false;
     request_.clear();
-    lastCode_ = 0;
+    lastCode_ = Success;
 }
 
 void
@@ -240,11 +173,11 @@ void
 HttpConnection::
 startSendingRequest()
 {
-    parser_.setExpectBody(request_.getExpectResponseBody());
-    string rqData = request_.requestStr();
-    const MimeContent & content = request_.content();
-    if (content.size() > 0) {
-        rqData.append(content.data(), content.size());
+    parser_.setExpectBody(getExpectResponseBody(request_));
+    string rqData = makeRequestStr(request_);
+    const HttpRequest::Content & content = request_.content_;
+    if (content.str.size() > 0) {
+        rqData.append(content.str);
     }
     responseState_ = PENDING;
 
@@ -286,7 +219,7 @@ HttpConnection::
 onParserResponseStart(const string & httpVersion, int code)
 {
     // ::fprintf(stderr, "%p: onParserResponseStart\n", this);
-    request_.callbacks().startResponse(request_, httpVersion, code);
+    request_.callbacks_->onResponseStart(request_, httpVersion, code);
 }
 
 void
@@ -294,7 +227,7 @@ HttpConnection::
 onParserHeader(const char * data, size_t size)
 {
     // cerr << "onParserHeader: " << this << endl;
-    request_.callbacks().feedHeader(request_, data, size);
+    request_.callbacks_->onHeader(request_, data, size);
 }
 
 void
@@ -302,14 +235,14 @@ HttpConnection::
 onParserData(const char * data, size_t size)
 {
     // cerr << "onParserData: " << this << endl;
-    request_.callbacks().feedBodyData(request_, data, size);
+    request_.callbacks_->onData(request_, data, size);
 }
 
 void
 HttpConnection::
 onParserDone(bool doClose)
 {
-    handleEndOfRq(0, doClose);
+    handleEndOfRq(Success, doClose);
 }
 
 /* This method handles end of requests: callback invocation, timer
@@ -318,7 +251,7 @@ onParserDone(bool doClose)
  * finalizeEndOfRq is invoked. */
 void
 HttpConnection::
-handleEndOfRq(int code, bool requireClose)
+handleEndOfRq(TcpConnectionCode code, bool requireClose)
 {
     if (requestEnded_) {
         // cerr << "ignoring extraneous end of request\n";
@@ -339,9 +272,9 @@ handleEndOfRq(int code, bool requireClose)
 
 void
 HttpConnection::
-finalizeEndOfRq(int code)
+finalizeEndOfRq(TcpConnectionCode code)
 {
-    request_.callbacks().endResponse(request_, code);
+    request_.callbacks_->onDone(request_, translateError(code));
     clear();
     onDone(code);
 }
@@ -351,7 +284,7 @@ HttpConnection::
 onClosed(bool fromPeer, const std::vector<std::string> & msgs)
 {
     if (fromPeer) {
-        handleEndOfRq(TcpConnectionCode::ConnectionEnded, false);
+        handleEndOfRq(ConnectionEnded, false);
     }
     else {
         finalizeEndOfRq(lastCode_);
@@ -362,7 +295,7 @@ void
 HttpConnection::
 armRequestTimer()
 {
-    if (request_.timeout() > 0) {
+    if (request_.timeout_ > 0) {
         if (timeoutFd_ == -1) {
             timeoutFd_ = timerfd_create(CLOCK_MONOTONIC,
                                         TFD_NONBLOCK | TFD_CLOEXEC);
@@ -386,7 +319,7 @@ armRequestTimer()
         ::memset(&spec, 0, sizeof(itimerspec));
 
         spec.it_interval.tv_sec = 0;
-        spec.it_value.tv_sec = request_.timeout();
+        spec.it_value.tv_sec = request_.timeout_;
         int res = timerfd_settime(timeoutFd_, 0, &spec, nullptr);
         if (res == -1) {
             throw ML::Exception(errno, "timerfd_settime");
@@ -431,65 +364,91 @@ handleTimeoutEvent(const ::epoll_event & event)
                 throw ML::Exception(errno, "read");
             }
         }
-        handleEndOfRq(TcpConnectionCode::Timeout, true);
+        handleEndOfRq(Timeout, true);
     }
 }
 
 
 /* HTTPCLIENT */
 
-HttpClient::
-HttpClient(const string & baseUrl, int numParallel, size_t queueSize)
-    : MessageLoop(1, 0, -1),
-      noSSLChecks(false),
+HttpClientV2::
+HttpClientV2(const string & baseUrl, int numParallel, size_t queueSize)
+    : HttpClientImpl(baseUrl, numParallel, queueSize),
+      loop_(1, 0, -1),
       baseUrl_(baseUrl),
-      debug_(false),
       avlConnections_(numParallel),
       nextAvail_(0),
       queue_([&]() { this->handleQueueEvent(); return false; }, queueSize)
 {
+    ExcAssert(baseUrl.compare(0, 8, "https://") != 0);
+
     /* available connections */
     for (size_t i = 0; i < numParallel; i++) {
         HttpConnection * connPtr = new HttpConnection();
         shared_ptr<HttpConnection> connection(connPtr);
         connection->init(baseUrl);
-        connection->onDone = [&, connPtr] (int result) {
+        connection->onDone = [&, connPtr] (TcpConnectionCode result) {
             handleHttpConnectionDone(connPtr, result);
         };
-        addSource("connection" + to_string(i), connection);
+        loop_.addSource("connection" + to_string(i), connection);
         avlConnections_[i] = connPtr;
     }
-    addSource("queue", queue_);
+    loop_.addSource("queue", queue_);
 }
 
-HttpClient::
-~HttpClient()
+HttpClientV2::
+~HttpClientV2()
 {
     // cerr << "~HttpClient: " << this << "\n";
-    shutdown();
 }
 
-void
-HttpClient::
-enablePipelining()
+int
+HttpClientV2::
+selectFd()
+    const
 {
-    throw ML::Exception("unimplemented");
-    // ::curl_multi_setopt(handle_, CURLMOPT_PIPELINING, 1);
-}
-
-void
-HttpClient::
-debug(bool debugOn)
-{
-    debug_ = debugOn;
-    MessageLoop::debug(debugOn);
+    return loop_.selectFd();
 }
 
 bool
-HttpClient::
+HttpClientV2::
+processOne()
+{
+    return loop_.processOne();
+}
+
+void
+HttpClientV2::
+enableSSLChecks(bool value)
+{
+}
+
+void
+HttpClientV2::
+enableTcpNoDelay(bool value)
+{
+}
+
+void
+HttpClientV2::
+sendExpect100Continue(bool value)
+{
+}
+
+void
+HttpClientV2::
+enablePipelining(bool value)
+{
+    if (value) {
+        throw ML::Exception("pipeline is not supported");
+    }
+}
+
+bool
+HttpClientV2::
 enqueueRequest(const string & verb, const string & resource,
                const shared_ptr<HttpClientCallbacks> & callbacks,
-               const MimeContent & content,
+               const HttpRequest::Content & content,
                const RestParams & queryParams, const RestParams & headers,
                int timeout)
 {
@@ -500,7 +459,7 @@ enqueueRequest(const string & verb, const string & resource,
 }
 
 void
-HttpClient::
+HttpClientV2::
 handleQueueEvent()
 {
     size_t numConnections = avlConnections_.size() - nextAvail_;
@@ -523,8 +482,9 @@ handleQueueEvent()
 }
 
 void
-HttpClient::
-handleHttpConnectionDone(HttpConnection * connection, int result)
+HttpClientV2::
+handleHttpConnectionDone(HttpConnection * connection,
+                         TcpConnectionCode result)
 {
     auto requests = queue_.pop_front(1);
     if (requests.size() > 0) {
@@ -537,7 +497,7 @@ handleHttpConnectionDone(HttpConnection * connection, int result)
 }
 
 HttpConnection *
-HttpClient::
+HttpClientV2::
 getConnection()
 {
     HttpConnection * conn;
@@ -556,63 +516,11 @@ getConnection()
 }
 
 void
-HttpClient::
+HttpClientV2::
 releaseConnection(HttpConnection * oldConnection)
 {
     if (nextAvail_ > 0) {
         nextAvail_--;
         avlConnections_[nextAvail_] = oldConnection;
     }
-}
-
-
-/* HTTPCLIENTSIMPLECALLBACKS */
-
-HttpClientSimpleCallbacks::
-HttpClientSimpleCallbacks(const OnResponse & onResponse)
-    : onResponse_(onResponse), statusCode_(0)
-{
-}
-
-void
-HttpClientSimpleCallbacks::
-onResponseStart(const HttpRequest & rq,
-                const string & httpVersion, int code)
-{
-    statusCode_ = code;
-}
-
-void
-HttpClientSimpleCallbacks::
-onHeader(const HttpRequest & rq, const char * data, size_t size)
-{
-    headers_.append(data, size);
-}
-
-void
-HttpClientSimpleCallbacks::
-onData(const HttpRequest & rq, const char * data, size_t size)
-{
-    body_.append(data, size);
-}
-
-void
-HttpClientSimpleCallbacks::
-onDone(const HttpRequest & rq, int error)
-{
-    onResponse(rq, error, statusCode_, move(headers_), move(body_));
-}
-
-void
-HttpClientSimpleCallbacks::
-onResponse(const HttpRequest & rq,
-           int error, int status,
-           string && headers, string && body)
-{
-    if (onResponse_) {
-        onResponse_(rq, error, status, move(headers), move(body));
-    }
-    statusCode_ = 0;
-    headers_.clear();
-    body_.clear();
 }
