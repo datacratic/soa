@@ -213,6 +213,9 @@ HttpClientSimpleCallbacks::
 onDone(const HttpRequest & rq, HttpClientError error)
 {
     onResponse(rq, error, statusCode_, move(headers_), move(body_));
+    statusCode_ = 0;
+    headers_ = "";
+    body_ = "";
 }
 
 void

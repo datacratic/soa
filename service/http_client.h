@@ -31,7 +31,6 @@ namespace Datacratic {
 /* Forward declarations */
 
 struct HttpClientCallbacks;
-struct HttpClientImpl;
 
 
 /****************************************************************************/
@@ -99,6 +98,49 @@ struct HttpRequest {
     Content content_;
     RestParams headers_;
     int timeout_;
+};
+
+
+/****************************************************************************/
+/* HTTP CLIENT IMPL                                                         */
+/****************************************************************************/
+
+struct HttpClientImpl : public AsyncEventSource {
+    HttpClientImpl(const std::string & baseUrl,
+                   int numParallel = 4, int queueSize = 0)
+        : AsyncEventSource()
+    {
+    }
+
+    HttpClientImpl(HttpClientImpl && other) = default;
+
+    virtual ~HttpClientImpl()
+    {}
+
+    /** SSL checks */
+    virtual void enableSSLChecks(bool value) = 0;
+
+    /** Enable the TCP_NODELAY option, also known as the Nagle's algorithm */
+    virtual void enableTcpNoDelay(bool value) = 0;
+
+    /** Enable the requesting of "100 Continue" responses in preparation of
+     * a PUT request */
+    virtual void sendExpect100Continue(bool value) = 0;
+
+    /** Use with servers that support HTTP pipelining */
+    virtual void enablePipelining(bool value) = 0;
+
+    /** Enqueue (or perform) the specified request */
+    virtual bool enqueueRequest(const std::string & verb,
+                                const std::string & resource,
+                                const std::shared_ptr<HttpClientCallbacks> & callbacks,
+                                const HttpRequest::Content & content,
+                                const RestParams & queryParams,
+                                const RestParams & headers,
+                                int timeout = -1) = 0;
+
+    /* Returns the number of requests in the queue */
+    virtual size_t queuedRequests() const = 0;
 };
 
 
@@ -272,49 +314,6 @@ struct HttpClient : public AsyncEventSource {
 
 private:
     std::unique_ptr<HttpClientImpl> impl;
-};
-
-
-/****************************************************************************/
-/* HTTP CLIENT IMPL                                                         */
-/****************************************************************************/
-
-struct HttpClientImpl : public AsyncEventSource {
-    HttpClientImpl(const std::string & baseUrl,
-                   int numParallel = 4, int queueSize = 0)
-        : AsyncEventSource()
-    {
-    }
-
-    HttpClientImpl(HttpClientImpl && other) = default;
-
-    virtual ~HttpClientImpl()
-    {}
-
-    /** SSL checks */
-    virtual void enableSSLChecks(bool value) = 0;
-
-    /** Enable the TCP_NODELAY option, also known as the Nagle's algorithm */
-    virtual void enableTcpNoDelay(bool value) = 0;
-
-    /** Enable the requesting of "100 Continue" responses in preparation of
-     * a PUT request */
-    virtual void sendExpect100Continue(bool value) = 0;
-
-    /** Use with servers that support HTTP pipelining */
-    virtual void enablePipelining(bool value) = 0;
-
-    /** Enqueue (or perform) the specified request */
-    virtual bool enqueueRequest(const std::string & verb,
-                                const std::string & resource,
-                                const std::shared_ptr<HttpClientCallbacks> & callbacks,
-                                const HttpRequest::Content & content,
-                                const RestParams & queryParams,
-                                const RestParams & headers,
-                                int timeout = -1) = 0;
-
-    /* Returns the number of requests in the queue */
-    virtual size_t queuedRequests() const = 0;
 };
 
 
