@@ -2418,6 +2418,8 @@ struct S3ExplicitCredentialProvider: public CredentialProvider {
     }
 };
 
+bool disableCloudCredentials = false;
+
 /** Register S3 with the filter streams API so that a filter_stream can be
     used to treat an S3 object as a simple stream.
 */
@@ -2590,6 +2592,8 @@ struct RegisterS3Handler {
                 const CredentialContext & context,
                 Json::Value extraData) const
         {
+            if (disableCloudCredentials)
+                return {};
             return creds;
         }
     };
