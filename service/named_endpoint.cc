@@ -39,7 +39,9 @@ NamedEndpoint::
 publishAddress(const std::string & address,
                const Json::Value & addressConfig)
 {
-    ExcAssert(config);
+    // If we didn't set up a configuration endpoint or name, then just no-op
+    if (!config)
+        return;
 
     //cerr << "publishing " << address << " with " << addressConfig << endl;
     config->setUnique(endpointName + "/" + address,
