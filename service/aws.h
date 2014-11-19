@@ -174,12 +174,4 @@ struct AwsBasicApi : public AwsApi {
     HttpRestProxy proxy;
 };
 
-/** Register an AWS access key for future referencing in urls or association
- * with buckets */
-void registerAwsCredentials(const std::string & accessKeyId,
-                            const std::string & accessKey);
-
-/** Returns the key associated with the access key id */
-std::string getAwsAccessKey(const std::string & accessKeyId);
-
 } // namespace Datacratic

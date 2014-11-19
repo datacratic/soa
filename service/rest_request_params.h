@@ -127,7 +127,7 @@ struct RestParamDefault {
                      const std::string & description,
                      T defaultValue = T())
         : name(name), description(description), defaultValue(defaultValue),
-          defaultValueStr(boost::lexical_cast<std::string>(defaultValue))
+          defaultValueStr(Codec::encode(defaultValue))
     {
         //std::cerr << "created RestParam with " << name << " at "
         //          << this << std::endl;

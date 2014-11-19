@@ -11,6 +11,7 @@
 #include "typed_message_channel.h"
 #include <sys/utsname.h>
 #include "jml/arch/backtrace.h"
+#include <mutex>
 
 namespace Datacratic {
 

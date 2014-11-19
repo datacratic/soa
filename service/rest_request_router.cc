@@ -8,6 +8,7 @@
 #include "jml/utils/vector_utils.h"
 #include "jml/arch/exception_handler.h"
 #include "jml/utils/set_utils.h"
+#include "jml/utils/environment.h"
 
 
 using namespace std;
@@ -110,6 +111,12 @@ static std::string getVerbsStr(const std::set<std::string> & verbs)
     return verbsStr;
 }
 
+namespace {
+
+ML::Env_Option<bool, true> TRACE_REST_REQUESTS("TRACE_REST_REQUESTS", false);
+
+} // file scope
+
 RestRequestRouter::
 MatchResult
 RestRequestRouter::
@@ -117,7 +124,7 @@ processRequest(const RestServiceEndpoint::ConnectionId & connection,
                const RestRequest & request,
                RestRequestParsingContext & context) const
 {
-    bool debug = false;
+    bool debug = TRACE_REST_REQUESTS;
 
     if (debug) {
         cerr << "processing request " << request

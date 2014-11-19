@@ -336,28 +336,6 @@ struct RegisterValueDescriptionI {
     }
 
 /*****************************************************************************/
-/* PURE VALUE DESCRIPTION                                                    */
-/*****************************************************************************/
-
-template<typename T>
-struct PureValueDescription : public ValueDescription {
-    PureValueDescription() :
-        ValueDescription(ValueKind::ATOM, &typeid(T)) {
-    }
-
-    virtual void parseJson(void * val, JsonParsingContext & context) const {};
-    virtual void printJson(const void * val, JsonPrintingContext & context) const {};
-    virtual bool isDefault(const void * val) const { return false; }
-    virtual void setDefault(void * val) const {}
-    virtual void copyValue(const void * from, void * to) const {}
-    virtual void moveValue(void * from, void * to) const {}
-    virtual void swapValues(void * from, void * to) const {}
-    virtual void * constructDefault() const {return nullptr;}
-    virtual void destroy(void *) const {}
-
-};
-
-/*****************************************************************************/
 /* VALUE DESCRIPTION TEMPLATE                                                */
 /*****************************************************************************/
 
@@ -647,6 +625,28 @@ maybeGetDefaultDescriptionShared(T * = 0)
     }
     return result;
 }
+
+/*****************************************************************************/
+/* PURE VALUE DESCRIPTION                                                    */
+/*****************************************************************************/
+
+template<typename T>
+struct PureValueDescription : public ValueDescriptionT<T> {
+    PureValueDescription() :
+        ValueDescriptionT<T>(ValueKind::ATOM) {
+    }
+
+    virtual void parseJson(void * val, JsonParsingContext & context) const {};
+    virtual void printJson(const void * val, JsonPrintingContext & context) const {};
+    virtual bool isDefault(const void * val) const { return false; }
+    virtual void setDefault(void * val) const {}
+    virtual void copyValue(const void * from, void * to) const {}
+    virtual void moveValue(void * from, void * to) const {}
+    virtual void swapValues(void * from, void * to) const {}
+    virtual void * constructDefault() const {return nullptr;}
+    virtual void destroy(void *) const {}
+
+};
 
 
 /*****************************************************************************/
@@ -2028,3 +2028,9 @@ inline Json::Value jsonEncode(const char * str)
 
 #define CREATE_ENUM_DESCRIPTION(Type)                      \
     CREATE_ENUM_DESCRIPTION_NAMED(Type##Description, Type)
+
+#define HAS_NO_VALUE_DESCRIPTION(Type)        \
+    inline PureValueDescription<Type> * getDefaultDescription(Type *) \
+    {                                                          \
+        return new PureValueDescription<Type>(); \
+    }

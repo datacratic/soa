@@ -55,9 +55,10 @@ LIBSERVICES_SOURCES := \
 	http_rest_proxy.cc \
 	xml_helpers.cc \
 	nprobe.cc \
-	logs.cc
+	logs.cc \
+	remote_credential_provider.cc
 
-LIBSERVICES_LINK := opstats curl curlpp boost_regex zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description
+LIBSERVICES_LINK := opstats curl curlpp boost_regex zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description credentials
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 
