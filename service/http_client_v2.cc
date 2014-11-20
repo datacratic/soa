@@ -173,28 +173,57 @@ void
 HttpConnection::
 startSendingRequest()
 {
+    /* This controls the maximum body size from which the body will be written
+       separately from the request headers. This tend to improve performance
+       by removing a potential allocation and a large copy. 65536 appears to
+       be a reasonable value on my installation, but this would need to be
+       tested on different setups. */
+    static constexpr size_t TwoStepsThreshold(65536);
+
     parser_.setExpectBody(getExpectResponseBody(request_));
     string rqData = makeRequestStr(request_);
+
+    bool twoSteps(false);
+
     const HttpRequest::Content & content = request_.content_;
     if (content.str.size() > 0) {
-        rqData.append(content.str);
+        if (content.str.size() < TwoStepsThreshold) {
+            rqData.append(content.str);
+        }
+        else {
+            twoSteps = true;
+        }
     }
     responseState_ = PENDING;
 
-    auto onWriteResult = [&] (AsyncWriteResult result) {
+    auto onWriteResultFinal = [&] (AsyncWriteResult result) {
         if (result.error == 0) {
-            if (responseState_ == PENDING) {
-                responseState_ = IDLE;
-            }
-            else {
-                throw ML::Exception("invalid state");
-            }
+            ExcAssertEqual(responseState_, PENDING);
+            responseState_ = IDLE;
         }
         else {
             throw ML::Exception("unhandled error");
         }
     };
-    write(move(rqData), onWriteResult);
+
+    if (twoSteps) {
+        auto onWriteResultFirst
+            = [this, onWriteResultFinal] (AsyncWriteResult result) {
+            if (result.error == 0) {
+                ExcAssertEqual(responseState_, PENDING);
+                const HttpRequest::Content & content = request_.content_;
+                write(move(content.str), onWriteResultFinal);
+            }
+            else {
+                throw ML::Exception("unhandled error");
+            }
+        };
+        write(move(rqData), onWriteResultFirst);
+    }
+    else {
+        write(move(rqData), onWriteResultFinal);
+    }
+
     armRequestTimer();
 }
 
