@@ -742,13 +742,7 @@ struct StructureDescriptionBase {
     StructureDescriptionBase(const std::type_info * type,
                              ValueDescription * owner,
                              const std::string & structName = "",
-                             bool nullAccepted = false)
-        : type(type),
-          structName(structName.empty() ? ML::demangle(type->name()) : structName),
-          nullAccepted(nullAccepted),
-          owner(owner)
-    {
-    }
+                             bool nullAccepted = false);
 
     const std::type_info * type;
     std::string structName;
@@ -789,87 +783,12 @@ struct StructureDescriptionBase {
 
     struct Exception: public ML::Exception {
         Exception(JsonParsingContext & context,
-                  const std::string & message)
-            : ML::Exception("at " + context.printPath() + ": " + message)
-        {
-        }
-
-        virtual ~Exception() throw ()
-        {
-        }
+                  const std::string & message);
+        virtual ~Exception() throw ();
     };
 
-    virtual void parseJson(void * output, JsonParsingContext & context) const
-    {
-        try {
-
-            if (!onEntry(output, context)) return;
-
-            if (nullAccepted && context.isNull()) {
-                context.expectNull();
-                return;
-            }
-        
-            if (!context.isObject())
-                context.exception("expected structure of type " + structName);
-
-            auto onMember = [&] ()
-                {
-                    try {
-                        auto n = context.fieldNamePtr();
-                        auto it = fields.find(n);
-                        if (it == fields.end()) {
-                            context.onUnknownField(owner);
-                        }
-                        else {
-                            it->second.description
-                                ->parseJson(addOffset(output,
-                                                      it->second.offset),
-                                            context);
-                        }
-                    }
-                    catch (const Exception & exc) {
-                        throw;
-                    }
-                    catch (const std::exception & exc) {
-                        throw Exception(context, exc.what());
-                    }
-                    catch (...) {
-                        throw;
-                    }
-                };
-
-            context.forEachMember(onMember);
-
-            onExit(output, context);
-        }
-        catch (const Exception & exc) {
-            throw;
-        }
-        catch (const std::exception & exc) {
-            throw Exception(context, exc.what());
-        }
-        catch (...) {
-            throw;
-        }
-    }
-
-    virtual void printJson(const void * input, JsonPrintingContext & context) const
-    {
-        context.startObject();
-
-        for (const auto & it: orderedFields) {
-            auto & fd = it->second;
-
-            auto mbr = addOffset(input, fd.offset);
-            if (fd.description->isDefault(mbr))
-                continue;
-            context.startMember(it->first);
-            fd.description->printJson(mbr, context);
-        }
-        
-        context.endObject();
-    }
+    virtual void parseJson(void * output, JsonParsingContext & context) const;
+    virtual void printJson(const void * input, JsonPrintingContext & context) const;
 
     virtual bool onEntry(void * output, JsonParsingContext & context) const = 0;
     virtual void onExit(void * output, JsonParsingContext & context) const = 0;

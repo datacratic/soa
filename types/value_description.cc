@@ -108,4 +108,113 @@ convertAndCopy(const void * from,
     parseJson(to, context2);
 }
 
+/*****************************************************************************/
+/* STRUCTURE DESCRIPTION BASE                                                */
+/*****************************************************************************/
+
+
+StructureDescriptionBase::
+StructureDescriptionBase(const std::type_info * type,
+                         ValueDescription * owner,
+                         const std::string & structName,
+                         bool nullAccepted)
+    : type(type),
+      structName(structName.empty() ? ML::demangle(type->name()) : structName),
+      nullAccepted(nullAccepted),
+      owner(owner)
+{
+}
+
+StructureDescriptionBase::Exception::
+Exception(JsonParsingContext & context,
+          const std::string & message)
+    : ML::Exception("at " + context.printPath() + ": " + message)
+{
+}
+
+StructureDescriptionBase::Exception::
+~Exception() throw ()
+{
+}
+
+void
+StructureDescriptionBase::
+parseJson(void * output, JsonParsingContext & context) const
+{
+    try {
+
+        if (!onEntry(output, context)) return;
+
+        if (nullAccepted && context.isNull()) {
+            context.expectNull();
+            return;
+        }
+        
+        if (!context.isObject())
+            context.exception("expected structure of type " + structName);
+
+        auto onMember = [&] ()
+            {
+                try {
+                    auto n = context.fieldNamePtr();
+                    auto it = fields.find(n);
+                    if (it == fields.end()) {
+                        for (auto & f: fields) {
+                            using namespace std;
+                            cerr << "known field " << f.first << endl;
+                        }
+                        context.onUnknownField(owner);
+                    }
+                    else {
+                        it->second.description
+                        ->parseJson(addOffset(output,
+                                              it->second.offset),
+                                    context);
+                    }
+                }
+                catch (const Exception & exc) {
+                    throw;
+                }
+                catch (const std::exception & exc) {
+                    throw Exception(context, exc.what());
+                }
+                catch (...) {
+                    throw;
+                }
+            };
+
+        context.forEachMember(onMember);
+
+        onExit(output, context);
+    }
+    catch (const Exception & exc) {
+        throw;
+    }
+    catch (const std::exception & exc) {
+        throw Exception(context, exc.what());
+    }
+    catch (...) {
+        throw;
+    }
+}
+
+void
+StructureDescriptionBase::
+printJson(const void * input, JsonPrintingContext & context) const
+{
+    context.startObject();
+
+    for (const auto & it: orderedFields) {
+        auto & fd = it->second;
+
+        auto mbr = addOffset(input, fd.offset);
+        if (fd.description->isDefault(mbr))
+            continue;
+        context.startMember(it->first);
+        fd.description->printJson(mbr, context);
+    }
+        
+    context.endObject();
+}
+
 } // namespace Datacratic
