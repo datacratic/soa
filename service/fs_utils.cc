@@ -16,6 +16,7 @@
 #include "googleurl/src/url_util.h"
 
 #include "fs_utils.h"
+#include "jml/utils/guard.h"
 #include "jml/utils/file_functions.h"
 
 #include <sys/types.h>
@@ -313,9 +314,11 @@ string
 baseName(const std::string & filename)
 {
     char *fnCopy = ::strdup(filename.c_str());
+    ML::Call_Guard guard([&] {
+        ::free(fnCopy);
+    });
     char *dirNameC = ::basename(fnCopy);
     string dirname(dirNameC);
-    ::free(fnCopy);
 
     return dirname;
 }
@@ -324,9 +327,11 @@ string
 dirName(const std::string & filename)
 {
     char *fnCopy = ::strdup(filename.c_str());
+    ML::Call_Guard guard([&] {
+        ::free(fnCopy);
+    });
     char *dirNameC = ::dirname(fnCopy);
     string dirname(dirNameC);
-    ::free(fnCopy);
 
     return dirname;
 }

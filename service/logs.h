@@ -3,11 +3,63 @@
    Copyright (c) 2013 Datacratic.  All rights reserved.
 
    Basic log interface
+
+   To use this system, simply declare one or multiple logging categories
+   and use the LOG and THROW macro as the stream.
+
+   For example:
+
+     #include "soa/service/logs.h"
+
+     int main() {
+       Logging::Category warnings("warnings");
+       LOG(warnings) << "hello world" << std::endl;
+     }
+
+   Note that the code at the right of the LOG will NOT get executed when the
+   category is not activated.
+
+   For example:
+
+     LOG(debug) << thisCallIsExpensive() << std::endl;
+
+   Categories can be structured in trees so that it's simpler to activate
+   and deactivate branches all at once.
+
+   For example:
+
+     Logging::Category print("print");
+     Logging::Category trace("trace", &print);
+     Logging::Category debug("debug", &trace);
+
+     print.activate(false); // activate only the top level
+     trace.activate(); // activate trace & debug
+
+   It's also possible to write to a custom writer. By default, the writer
+   prints to stderr. Providing a writer simply means that you have to
+   supply an object of a type that inherit from Writer. There is also a
+   file and a JSON writer that you can use.
+
+   For example:
+
+     Logging::Category print("print");
+     print.writeTo(std::make_shared<CustomWriter>());
+
+   At the moment, there are 3 types of writers that are usable:
+
+     - ConsoleWriter
+     - FileWriter
+     - JsonWriter
+
+  NOTE: Those writers aren't thread-safe at the moment. Use with care
+  accross threads.
+
 */
 
 #pragma once
 
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include "soa/types/date.h"
 
@@ -48,7 +100,15 @@ struct Logging
         std::stringstream stream;
     };
 
-    struct JsonWriter : public Writer {
+    struct FileWriter : public Writer {
+        FileWriter(char const * filename, char const mode = 'w') {
+            open(filename, mode);
+        }
+
+        FileWriter(std::string const & filename, char const mode = 'w') {
+            open(filename.c_str(), mode);
+        }
+
         void head(char const * timestamp,
                   char const * name,
                   char const * function,
@@ -58,6 +118,27 @@ struct Logging
         void body(std::string const & content);
 
     private:
+        void open(char const * filename, char const mode);
+
+        std::ofstream file;
+        std::stringstream stream;
+    };
+
+    struct JsonWriter : public Writer {
+        JsonWriter(std::shared_ptr<Writer> const & writer = std::shared_ptr<Writer>()) :
+            writer(writer) {
+        }
+
+        void head(char const * timestamp,
+                  char const * name,
+                  char const * function,
+                  char const * file,
+                  int line);
+
+        void body(std::string const & content);
+
+    private:
+        std::shared_ptr<Writer> writer;
         std::stringstream stream;
     };
 
@@ -83,7 +164,7 @@ struct Logging
         /** Boolean conversion allows you to know if it's enabled.  Usage:
 
             Logging::Category logMyComponent("myComponent");
-            
+
             std::string output;
             Json::Value loggingInfo;
 
@@ -183,7 +264,7 @@ struct Logging
 /** Macro to call to log a message to the given group.  Usage is as follows:
 
     Logging::Category errors("errors");
-    
+
     LOG(errors) << "error frobbing: " << errorMessage << endl;
 */
 #define LOG(group, ...) \
@@ -194,7 +275,7 @@ struct Logging
     as follows:
 
     Logging::Category logMyComponent("myComponent");
-    
+
     if (badErrorCondition)
         THROW(logMyComponent) << "fatal error with bad error condition";
 */

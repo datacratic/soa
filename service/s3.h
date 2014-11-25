@@ -127,17 +127,26 @@ struct S3Api : public AwsApi {
             : offset(aOffset), size(aSize)
         {}
 
-        uint64_t endPos()
+        static Range Full;
+
+        uint64_t endPos() const
         { return (offset + size - 1); }
 
         void adjust(size_t downloaded)
         {
             if (downloaded > size) {
-                throw ML::Exception("excessive adjustment size");
+                throw ML::Exception("excessive adjustment size: downloaded %d size %d",
+                                     downloaded, size);
             }
             offset += downloaded;
             size -= downloaded;
         }
+
+        bool operator == (const Range & other) const
+        { return offset == other.offset && size == other.size; }
+
+        bool operator != (const Range & other) const
+        { return !(*this == other); }
 
         uint64_t offset;
         uint64_t size;

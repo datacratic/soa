@@ -1,3 +1,5 @@
+$(eval $(call test,epoll_test,services,boost))
+
 $(eval $(call test,named_endpoint_test,services,boost manual))
 $(eval $(call test,zmq_named_pub_sub_test,services,boost manual))
 $(eval $(call test,zmq_endpoint_test,services,boost manual))
@@ -54,3 +56,5 @@ $(eval $(call test,logs_test,services,boost))
 
 $(eval $(call test,sns_mock_test,cloud services,boost))
 $(eval $(call test,zmq_message_loop_test,services,boost))
+
+$(eval $(call test,mongo_basic_test,services boost_filesystem,boost manual))
