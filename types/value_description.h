@@ -744,6 +744,11 @@ struct StructureDescriptionBase {
                              const std::string & structName = "",
                              bool nullAccepted = false);
 
+    StructureDescriptionBase(const StructureDescriptionBase & other) = delete;
+    StructureDescriptionBase(StructureDescriptionBase && other) = delete;
+    void operator = (const StructureDescriptionBase & other);
+    void operator = (StructureDescriptionBase && other);
+
     const std::type_info * type;
     std::string structName;
     bool nullAccepted;
@@ -1828,6 +1833,7 @@ inline Json::Value jsonEncode(const char * str)
     {                                                           \
         Name newDesc;                                           \
         desc = std::move(newDesc);                              \
+        ExcAssertEqual(desc.owner, &desc);                     \
     }                                                           \
                                                                 \
 
@@ -1884,6 +1890,7 @@ inline Json::Value jsonEncode(const char * str)
     {                                                                   \
         Name newDesc;                                                   \
         desc = std::move(newDesc);                                      \
+        ExcAssertEqual(desc.owner, &desc);                     \
     }                                                                   \
                                                                         \
     Name::Regme Name::regme;                                            \

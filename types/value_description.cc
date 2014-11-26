@@ -125,6 +125,26 @@ StructureDescriptionBase(const std::type_info * type,
 {
 }
 
+void
+StructureDescriptionBase::
+operator = (const StructureDescriptionBase & other)
+{
+    type = other.type;
+    structName = other.structName;
+    nullAccepted = other.nullAccepted;
+    // Don't set owner
+}
+
+void
+StructureDescriptionBase::
+operator = (StructureDescriptionBase && other)
+{
+    type = std::move(other.type);
+    structName = std::move(other.structName);
+    nullAccepted = std::move(other.nullAccepted);
+    // Don't set owner
+}
+
 StructureDescriptionBase::Exception::
 Exception(JsonParsingContext & context,
           const std::string & message)
