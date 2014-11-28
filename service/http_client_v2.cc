@@ -1,3 +1,8 @@
+/* http_client_v2.cc
+   Wolfgang Sourdeau, April 2014
+   Copyright (c) 2014 Datacratic.  All rights reserved.
+*/
+
 #include <errno.h>
 #include <sys/timerfd.h>
 
@@ -88,7 +93,9 @@ makeRequestStr(const HttpRequest & request)
 } // file scope
 
 
-/* HTTP CONNECTION */
+/****************************************************************************/
+/* HTTP CONNECTION                                                          */
+/****************************************************************************/
 
 HttpConnection::
 HttpConnection()
@@ -398,7 +405,9 @@ handleTimeoutEvent(const ::epoll_event & event)
 }
 
 
-/* HTTPCLIENT */
+/****************************************************************************/
+/* HTTP CLIENT V2                                                           */
+/****************************************************************************/
 
 HttpClientV2::
 HttpClientV2(const string & baseUrl, int numParallel, size_t queueSize)

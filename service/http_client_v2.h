@@ -1,33 +1,15 @@
-/* http_client.h                                                   -*- C++ -*-
-   Wolfgang Sourdeau, January 2014
+/* http_client_v2.h                                                -*- C++ -*-
+   Wolfgang Sourdeau, April 2014
    Copyright (c) 2014 Datacratic.  All rights reserved.
 
-   An asynchronous HTTP client.
-
-   HttpClient is meant to provide a featureful, generic and asynchronous HTTP
-   client class. It supports strictly asynchronous (non-blocking) operations,
-   HTTP pipelining and concurrent requests while enabling streaming responses
-   via a callback mechanism. It is meant to be subclassed whenever a
-   synchronous interface or a one-shot response mechanism is required. In
-   general, the code should be complete enough that existing and similar
-   classes could be subclassed gradually (HttpRestProxy, s3 internals). As a
-   generic class, it does not make assumptions on the transferred contents.
-   Finally, it is based on the interface of HttpRestProxy.
-
-   Caveat:
-   - cannot be used with a multi-threaded loop yet
-   - has not been tweaked for performance yet
-   - since those require header interpretation, there is not support for
-     cookies per se
+   V2 of the HTTP client. Based on in-house tcp library.
+   This model uses TcpClient as transport class and HttpParser for parsing
+   requests. Faster than v1 and than curl::Easy in the thread-model.
 */
 
 #pragma once
 
 /* TODO:
-   blockers:
-   - connection timeout (Curl style)
-   - chunked encoding
-
    nice to have:
    - connect timeout
    - activity timeout
@@ -53,7 +35,9 @@
 
 namespace Datacratic {
 
-/* HTTP CONNECTION */
+/****************************************************************************/
+/* HTTP CONNECTION                                                          */
+/****************************************************************************/
 
 struct HttpConnection : TcpClient {
     typedef std::function<void (TcpConnectionCode)> OnDone;
@@ -114,7 +98,9 @@ private:
 };
 
 
-/* HTTPCLIENT */
+/****************************************************************************/
+/* HTTP CLIENT V2                                                           */
+/****************************************************************************/
 
 struct HttpClientV2 : public HttpClientImpl {
     HttpClientV2(const std::string & baseUrl,
