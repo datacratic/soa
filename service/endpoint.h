@@ -100,7 +100,7 @@ struct EndpointBase : public Epoller {
     /** Total number of seconds that this message loop has spent sleeping.
         Can be polled regularly to determine the duty cycle of the loop.
      */
-    std::vector<double> totalSleepSeconds() const { return totalSleepTime; }
+    std::vector<rusage> getResourceUsage() const { return resourceUsage; }
 
     /** Thing to notify when a connection is closed.  Will be called
         before the normal cleanup.
@@ -259,7 +259,7 @@ private:
 
     std::map<std::string, int> numTransportsByHost;
 
-    std::vector<double> totalSleepTime;
+    std::vector<rusage> resourceUsage;
 
     /** Run a thread to handle events. */
     void runEventThread(int threadNum, int numThreads);
