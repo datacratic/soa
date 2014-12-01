@@ -366,6 +366,41 @@ compoundId2() const
 }
     
     
+size_t
+Id::
+toStringLength() const
+{
+    switch (type) {
+    case NONE:
+        return 0;
+    case NULLID:
+        return 4;
+    case UUID:
+        // AGID: --> 0828398c-5965-11e0-84c8-0026b937c8e1
+        return 36;
+    case GOOG128: {
+        // Google ID: --> CAESEAYra3NIxLT9C8twKrzqaA
+        return 26;
+    }
+    case BIGDEC: {
+        // TODO: can do better than this...
+        return toString().size();
+    }
+    case BASE64_96: {
+        return 16;
+    }
+    case HEX128LC: {
+        return 32;
+    }
+    case COMPOUND2:
+        return compoundId1().toStringLength() + 1 + compoundId2().toStringLength();
+    case STR:
+        return len;
+    default:
+        throw ML::Exception("unknown ID type");
+    }
+}
+
 std::string
 Id::
 toString() const

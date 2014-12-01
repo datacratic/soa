@@ -19,6 +19,8 @@ using namespace Datacratic;
 
 void checkSerializeReconstitute(Id id)
 {
+    BOOST_CHECK_EQUAL(id.toString().size(), id.toStringLength());
+
     ostringstream oStream;
     {
         DB::Store_Writer oStore(oStream);
@@ -38,6 +40,8 @@ void checkSerializeReconstitute(Id id)
     BOOST_CHECK_EQUAL(id.toString(), id2.toString());
     BOOST_CHECK_EQUAL(id, id2);
     BOOST_CHECK_EQUAL(id.type, id2.type);
+
+    BOOST_CHECK_EQUAL(id2.toString().size(), id2.toStringLength());
 }
 
 BOOST_AUTO_TEST_CASE( test_basic_id )
@@ -182,6 +186,11 @@ BOOST_AUTO_TEST_CASE( test_id_basics )
     BOOST_CHECK_EQUAL(id4.type, Id::BASE64_96);
     BOOST_CHECK(id4.val == __uint128_t(1) << (11 * 6));
     BOOST_CHECK_LT(id3, id4);
+
+    BOOST_CHECK_EQUAL(id1.toString().size(), id1.toStringLength());
+    BOOST_CHECK_EQUAL(id2.toString().size(), id2.toStringLength());
+    BOOST_CHECK_EQUAL(id3.toString().size(), id3.toStringLength());
+    BOOST_CHECK_EQUAL(id4.toString().size(), id4.toStringLength());
 }
 
 BOOST_AUTO_TEST_CASE( test_id )

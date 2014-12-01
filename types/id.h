@@ -153,6 +153,9 @@ struct Id {
     
     std::string toString() const;
 
+    /** Return the length of the string returned by toString() */
+    size_t toStringLength() const;
+
     uint64_t toInt() const
     {
         if (type != BIGDEC)
