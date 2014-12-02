@@ -59,14 +59,16 @@ struct S3UrlFsHandler : public UrlFsHandler {
     {
         string bucket = url.host();
         auto api = getS3ApiForUri(url.toString());
-        return api->getObjectInfo(bucket, url.path().substr(1));
+        auto bucketPath = S3Api::parseUri(url.original); 
+        return api->getObjectInfo(bucket, bucketPath.second);
     }
 
     virtual FsObjectInfo tryGetInfo(const Url & url) const
     {
         string bucket = url.host();
         auto api = getS3ApiForUri(url.toString());
-        return api->tryGetObjectInfo(bucket, url.path().substr(1));
+        auto bucketPath = S3Api::parseUri(url.original);
+        return api->tryGetObjectInfo(bucket, bucketPath.second);
     }
 
     virtual void makeDirectory(const Url & url) const
@@ -77,12 +79,13 @@ struct S3UrlFsHandler : public UrlFsHandler {
     {
         string bucket = url.host();
         auto api = getS3ApiForUri(url.toString());
+        auto bucketPath = S3Api::parseUri(url.original);
         if (throwException) {
-            api->eraseObject(bucket, url.path());
+            api->eraseObject(bucket, "/" + bucketPath.second);
             return true;
         }
         else { 
-            return api->tryEraseObject(bucket, url.path());
+            return api->tryEraseObject(bucket, "/" + bucketPath.second);
         }
     }
 
