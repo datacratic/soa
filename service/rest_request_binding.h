@@ -89,12 +89,12 @@ partial_bind(const std::function<R (Arg1, Args...)> & fn, Bind1 && bind1)
     This is used to pass through direct parameter values.
 */
 template<typename T>
-std::function<T (const RestServiceEndpoint::ConnectionId & connection,
+std::function<T (RestConnection & connection,
                  const RestRequest & request,
                  const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp, const T & p, void * = 0)
 {
-    return [=] (const RestServiceEndpoint::ConnectionId & connection,
+    return [=] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         {
@@ -104,15 +104,15 @@ createParameterExtractor(Json::Value & argHelp, const T & p, void * = 0)
 #endif
 
 std::function<std::string
-              (const RestServiceEndpoint::ConnectionId & connection,
+              (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
                          const StringPayload & p, void * = 0);
 
 /** Pass the connection on */
-std::function<const RestServiceEndpoint::ConnectionId &
-              (const RestServiceEndpoint::ConnectionId & connection,
+std::function<RestConnection &
+              (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -120,7 +120,7 @@ createParameterExtractor(Json::Value & argHelp,
 
 /** Pass the connection on */
 std::function<const RestRequestParsingContext &
-              (const RestServiceEndpoint::ConnectionId & connection,
+              (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -128,7 +128,7 @@ createParameterExtractor(Json::Value & argHelp,
 
 /** Pass the connection on */
 std::function<const RestRequest &
-              (const RestServiceEndpoint::ConnectionId & connection,
+              (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -140,7 +140,7 @@ createParameterExtractor(Json::Value & argHelp,
 */
 template<typename T, typename Codec>
 static std::function<decltype(Codec::decode(std::declval<std::string>()))
-                     (const RestServiceEndpoint::ConnectionId & connection,
+                     (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -157,7 +157,7 @@ createParameterExtractor(Json::Value & argHelp,
     v2["encoding"] = "URI encoded";
     v2["location"] = "query string";
 
-    return [=] (const RestServiceEndpoint::ConnectionId & connection,
+    return [=] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         {
@@ -168,7 +168,7 @@ createParameterExtractor(Json::Value & argHelp,
 }
 
 template<typename T, typename Codec>
-static std::function<T (const RestServiceEndpoint::ConnectionId & connection,
+static std::function<T (RestConnection & connection,
                         const RestRequest & request,
                         const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -186,7 +186,7 @@ createParameterExtractor(Json::Value & argHelp,
     v2["location"] = "query string";
     v2["defaultValue"] = p.defaultValueStr;
 
-    return [=] (const RestServiceEndpoint::ConnectionId & connection,
+    return [=] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         {
@@ -206,7 +206,7 @@ createParameterExtractor(Json::Value & argHelp,
 */
 template<typename T>
 static std::function<decltype(JsonCodec<T>::decode(std::declval<Json::Value>()))
-                     (const RestServiceEndpoint::ConnectionId & connection,
+                     (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -221,7 +221,7 @@ createParameterExtractor(Json::Value & argHelp,
     v2["encoding"] = "JSON";
     v2["location"] = "Request Body";
 
-    return [=] (const RestServiceEndpoint::ConnectionId & connection,
+    return [=] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         {
@@ -236,7 +236,7 @@ createParameterExtractor(Json::Value & argHelp,
 */
 template<typename T, typename Codec>
 static std::function<decltype(Codec::decode(std::declval<std::string>()))
-                     (const RestServiceEndpoint::ConnectionId & connection,
+                     (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -251,7 +251,7 @@ createParameterExtractor(Json::Value & argHelp,
     v2["encoding"] = "URI encoded";
     v2["location"] = "URI";
 
-    return [=] (const RestServiceEndpoint::ConnectionId & connection,
+    return [=] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         {
@@ -293,13 +293,13 @@ createParameterExtractor(Json::Value & argHelp,
 */
 template<typename Fn, typename Return, typename... Args>
 std::function<std::function<Return (Args...)>
-              (const RestServiceEndpoint::ConnectionId & connection,
+              (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value argHelp,
                          const Fn & fn, std::function<Return (Args...)> * = 0)
 {
-    return [=] (const RestServiceEndpoint::ConnectionId & connection,
+    return [=] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         {
@@ -310,14 +310,14 @@ createParameterExtractor(Json::Value argHelp,
 
 template<typename Object, int Index>
 inline static std::function<Object &
-                            (const RestServiceEndpoint::ConnectionId & connection,
+                            (RestConnection & connection,
                              const RestRequest & request,
                              const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
                          const ObjectExtractor<Object, Index> & obj,
                          void * = 0)
 {
-    return [] (const RestServiceEndpoint::ConnectionId & connection,
+    return [] (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)
         -> Object &
@@ -331,7 +331,7 @@ createParameterExtractor(Json::Value & argHelp,
 typedef std::function<RestRequestRouter::MatchResult
                       (const std::string & excStr,
                        std::exception_ptr exc,
-                       const RestServiceEndpoint::ConnectionId & connection,
+                       RestConnection & connection,
                        const RestRequest & request,
                        const RestRequestParsingContext & context)> ExcFn;
 
@@ -378,7 +378,7 @@ struct CreateRestParameterGenerator<ML::PositionedDualType<Index, Arg, Param>, P
 
     //typedef std::decay<Arg> Result;
     typedef decltype(std::declval<Generator>()
-                     (std::declval<RestServiceEndpoint::ConnectionId>(),
+                     (*(RestConnection *)0,
                       std::declval<RestRequest>(),
                       std::declval<RestRequestParsingContext>())) Result;
 
@@ -399,7 +399,7 @@ struct CreateRestParameterGenerator<ML::PositionedDualType<Index, Arg, Param>, P
     */
     template<typename Generators>
     static Result apply(const Generators & gens,
-                        const RestServiceEndpoint::ConnectionId & connection,
+                        RestConnection & connection,
                         const RestRequest & request,
                         const RestRequestParsingContext & context)
     {
@@ -434,7 +434,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
@@ -478,7 +478,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
@@ -526,7 +526,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
@@ -571,7 +571,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
@@ -618,7 +618,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
@@ -661,7 +661,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
@@ -708,7 +708,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
@@ -753,7 +753,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
         RestRequestRouter::OnProcessRequest result
-            = [=] (const RestServiceEndpoint::ConnectionId & connection,
+            = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context) -> RestRequestRouter::MatchResult
             {
@@ -1037,7 +1037,7 @@ addRouteSyncJsonReturn(RestRequestRouter & router,
                        Params&&... params)
 {
     auto then = [] (const Return & ret,
-                    const RestServiceEndpoint::ConnectionId & connection,
+                    RestConnection & connection,
                     const RestRequest &,
                     const RestRequestParsingContext &)
         {

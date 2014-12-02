@@ -75,7 +75,7 @@ RestRequestRouter::
 {
 }
     
-RestServiceEndpoint::OnHandleRequest
+RestRequestRouter::OnHandleRequest
 RestRequestRouter::
 requestHandler() const
 {
@@ -87,7 +87,7 @@ requestHandler() const
 
 void
 RestRequestRouter::
-handleRequest(const RestServiceEndpoint::ConnectionId & connection,
+handleRequest(RestConnection & connection,
               const RestRequest & request) const
 {
     //JML_TRACE_EXCEPTIONS(false);
@@ -120,7 +120,7 @@ ML::Env_Option<bool, true> TRACE_REST_REQUESTS("TRACE_REST_REQUESTS", false);
 RestRequestRouter::
 MatchResult
 RestRequestRouter::
-processRequest(const RestServiceEndpoint::ConnectionId & connection,
+processRequest(RestConnection & connection,
                const RestRequest & request,
                RestRequestParsingContext & context) const
 {
@@ -233,7 +233,7 @@ RestRequestRouter::MatchResult
 RestRequestRouter::Route::
 process(const RestRequest & request,
         RestRequestParsingContext & context,
-        const RestServiceEndpoint::ConnectionId & connection) const
+        RestConnection & connection) const
 {
     using namespace std;
 
@@ -322,7 +322,7 @@ RestRequestRouter::
 addHelpRoute(PathSpec path, RequestFilter filter)
 {
     OnProcessRequest helpRoute
-        = [=] (const RestServiceEndpoint::ConnectionId & connection,
+        = [=] (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)
         {

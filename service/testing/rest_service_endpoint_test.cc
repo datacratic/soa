@@ -56,7 +56,7 @@ struct EchoService : public ServiceBase, public RestServiceEndpoint {
         shutdown();
     }
 
-    virtual void handleRequest(const ConnectionId & connection,
+    virtual void handleRequest(ConnectionId & connection,
                                const RestRequest & request) const
     {
         //cerr << "handling request " << request << endl;

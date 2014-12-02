@@ -6,13 +6,15 @@
 
 #pragma once
 
-#include "soa/service/named_endpoint.h"
-#include "soa/service/message_loop.h"
-#include "soa/service/rest_service_endpoint.h"
+#include "rest_request.h"
+#include "rest_connection.h"
+#include "soa/jsoncpp/json.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/utils/positioned_types.h"
+#include "jml/utils/exc_assert.h"
 #include "jml/arch/rtti_utils.h"
 #include "jml/arch/demangle.h"
+#include "jml/arch/exception.h"
 //#include <regex>
 #include <boost/regex.hpp>
 
@@ -154,6 +156,7 @@ struct RequestFilter {
 };
 
 std::ostream & operator << (std::ostream & stream, const RequestFilter & filter);
+
 
 /*****************************************************************************/
 /* REST REQUEST PARSING CONTEXT                                              */
@@ -359,7 +362,7 @@ std::ostream & operator << (std::ostream & stream,
 
 struct RestRequestRouter {
 
-    typedef RestServiceEndpoint::ConnectionId ConnectionId;
+    typedef RestConnection ConnectionId;
 
     enum MatchResult {
         MR_NO,     ///< Didn't match but can continue
@@ -368,7 +371,7 @@ struct RestRequestRouter {
         MR_ASYNC   ///< Handled, but asynchronously
     };    
 
-    typedef std::function<MatchResult (const RestServiceEndpoint::ConnectionId & connection,
+    typedef std::function<MatchResult (RestConnection & connection,
                                        const RestRequest & request,
                                        RestRequestParsingContext & context)>
          OnProcessRequest;
@@ -385,13 +388,16 @@ struct RestRequestRouter {
     /** Return a requestHandler that can be assigned to the
         RestServiceEndpoint.
     */
-    RestServiceEndpoint::OnHandleRequest requestHandler() const;
+    typedef std::function<void (RestConnection & connection,
+                                const RestRequest & request)> OnHandleRequest;
 
-    virtual void handleRequest(const RestServiceEndpoint::ConnectionId & connection,
+    OnHandleRequest requestHandler() const;
+
+    virtual void handleRequest(RestConnection & connection,
                                const RestRequest & request) const;
 
     virtual MatchResult
-    processRequest(const RestServiceEndpoint::ConnectionId & connection,
+    processRequest(RestConnection & connection,
                    const RestRequest & request,
                    RestRequestParsingContext & context) const;
 
@@ -407,7 +413,7 @@ struct RestRequestRouter {
         Sample usage:
         
         // Verify that the given subject is indeed present in the behaviour domain
-        auto verifySubject = [=] (const RestServiceEndpoint::ConnectionId & connection,
+        auto verifySubject = [=] (RestConnection & connection,
                                   const RestRequest & request,
                                   RestRequestParsingContext & context)
         {
@@ -434,14 +440,14 @@ struct RestRequestRouter {
                                     verifySubject);
     */
     
-    typedef std::function<void(const RestServiceEndpoint::ConnectionId & connection,
+    typedef std::function<void(RestConnection & connection,
                                const RestRequest & request,
                                RestRequestParsingContext & context)> ExtractObject;
 
     template<typename T>
     static ExtractObject addObject(T * obj)
     {
-        return [=] (const RestServiceEndpoint::ConnectionId & connection,
+        return [=] (RestConnection & connection,
                     const RestRequest & request,
                     RestRequestParsingContext & context)
             {
@@ -460,7 +466,7 @@ struct RestRequestRouter {
 
         MatchResult process(const RestRequest & request,
                             RestRequestParsingContext & context,
-                            const RestServiceEndpoint::ConnectionId & connection) const;
+                            RestConnection & connection) const;
 
         void
         options(std::set<std::string> & verbsAccepted,

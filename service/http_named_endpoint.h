@@ -9,10 +9,11 @@
 #include "jml/utils/vector_utils.h"
 #include "named_endpoint.h"
 #include "http_rest_proxy.h"
-#include <boost/make_shared.hpp>
+#include "http_rest_endpoint.h"
 
 
 namespace Datacratic {
+
 
 
 /*****************************************************************************/
@@ -21,12 +22,9 @@ namespace Datacratic {
 
 /** A message loop-compatible endpoint for http connections. */
 
-struct HttpNamedEndpoint : public NamedEndpoint, public HttpEndpoint {
+struct HttpNamedEndpoint : public NamedEndpoint, public HttpRestEndpoint {
 
     HttpNamedEndpoint();
-
-    /** Set the Access-Control-Allow-Origin: * HTTP header */
-    void allowAllOrigins();
 
     void init(std::shared_ptr<ConfigurationService> config,
               const std::string & endpointName);
@@ -57,68 +55,6 @@ struct HttpNamedEndpoint : public NamedEndpoint, public HttpEndpoint {
     std::string
     bindTcp(PortRange const & portRange, std::string host = "");
 
-    struct RestConnectionHandler: public HttpConnectionHandler {
-        RestConnectionHandler(HttpNamedEndpoint * endpoint);
-
-        HttpNamedEndpoint * endpoint;
-        std::weak_ptr<RestConnectionHandler> sharedThis;
-
-        virtual void
-        handleHttpPayload(const HttpHeader & header,
-                          const std::string & payload);
-
-        /** Called when the other end disconnects from us.  We set the
-            zombie flag and stop anything else from happening on the
-            socket once we're done.
-        */
-        virtual void handleDisconnect();
-
-        void sendErrorResponse(int code, const std::string & error);
-
-        void sendErrorResponse(int code, const Json::Value & error);
-
-        void sendResponse(int code,
-                          const Json::Value & response,
-                          const std::string & contentType = "application/json",
-                          RestParams headers = RestParams());
-
-        void sendResponse(int code,
-                          const std::string & body,
-                          const std::string & contentType,
-                          RestParams headers = RestParams());
-
-        void sendResponseHeader(int code,
-                                const std::string & contentType,
-                                RestParams headers = RestParams());
-
-        /** Send an HTTP chunk with the appropriate headers back down the
-            wire. */
-        void sendHttpChunk(const std::string & chunk,
-                           NextAction next = NEXT_CONTINUE,
-                           OnWriteFinished onWriteFinished = OnWriteFinished());
-
-        /** Send the entire HTTP payload.  Its length must match that of
-            the response header.
-        */
-        void sendHttpPayload(const std::string & str);
-
-        mutable std::mutex mutex;
-
-    public:
-        /// If this is true, the connection has no transport
-        std::atomic<bool> isZombie;
-    };
-
-    typedef std::function<void (std::shared_ptr<RestConnectionHandler> connection,
-                                const HttpHeader & header,
-                                const std::string & payload)> OnRequest;
-
-    OnRequest onRequest;
-
-    std::vector<std::pair<std::string, std::string> > extraHeaders;
-
-    virtual std::shared_ptr<ConnectionHandler>
-    makeNewHandler();
 };
 
 

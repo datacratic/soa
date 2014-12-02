@@ -16,19 +16,6 @@ namespace Datacratic {
 
 
 /*****************************************************************************/
-/* REST REQUEST                                                              */
-/*****************************************************************************/
-
-std::ostream & operator << (std::ostream & stream, const RestRequest & request)
-{
-    return stream << request.verb << " " << request.resource << endl
-                  << request.params << endl
-                  << request.payload;
-}
-
-
-
-/*****************************************************************************/
 /* REST SERVICE ENDPOINT CONNECTION ID                                       */
 /*****************************************************************************/
 
@@ -36,7 +23,7 @@ void
 RestServiceEndpoint::ConnectionId::
 sendResponse(int responseCode,
              const std::string & response,
-             const std::string & contentType) const
+             const std::string & contentType)
 {
     if (itl->responseSent)
         throw ML::Exception("response already sent");
@@ -66,7 +53,7 @@ void
 RestServiceEndpoint::ConnectionId::
 sendResponse(int responseCode,
                   const Json::Value & response,
-                  const std::string & contentType) const
+                  const std::string & contentType)
 {
     using namespace std;
     //cerr << "sent response " << responseCode << " " << response
@@ -97,7 +84,7 @@ void
 RestServiceEndpoint::ConnectionId::
 sendErrorResponse(int responseCode,
                        const std::string & error,
-                       const std::string & contentType) const
+                       const std::string & contentType)
 {
     using namespace std;
     cerr << "sent error response " << responseCode << " " << error
@@ -127,7 +114,7 @@ sendErrorResponse(int responseCode,
 
 void
 RestServiceEndpoint::ConnectionId::
-sendErrorResponse(int responseCode, const Json::Value & error) const
+sendErrorResponse(int responseCode, const Json::Value & error)
 {
     using namespace std;
     cerr << "sent error response " << responseCode << " " << error
@@ -156,7 +143,7 @@ sendErrorResponse(int responseCode, const Json::Value & error) const
 
 void
 RestServiceEndpoint::ConnectionId::
-sendRedirect(int responseCode, const std::string & location) const
+sendRedirect(int responseCode, const std::string & location)
 {
     if (itl->responseSent)
         throw ML::Exception("response already sent");
@@ -180,7 +167,7 @@ RestServiceEndpoint::ConnectionId::
 sendHttpResponse(int responseCode,
                  const std::string & response,
                  const std::string & contentType,
-                 const RestParams & headers) const
+                 const RestParams & headers)
 {
     if (itl->responseSent)
         throw ML::Exception("response already sent");
@@ -204,7 +191,7 @@ RestServiceEndpoint::ConnectionId::
 sendHttpResponseHeader(int responseCode,
                        const std::string & contentType,
                        ssize_t contentLength,
-                       const RestParams & headers_) const
+                       const RestParams & headers_)
 {
     if (itl->responseSent)
         throw ML::Exception("response already sent");
@@ -257,6 +244,14 @@ finishResponse()
     }
 
     itl->responseSent = true;
+}
+
+std::shared_ptr<RestConnection>
+RestServiceEndpoint::ConnectionId::
+capture(std::function<void ()> onDisconnect)
+{
+    throw ML::Exception("RestServiceEndpoint::ConnectionId::capture(): "
+                        "needs to be implemented");
 }
 
 
@@ -314,9 +309,10 @@ init(std::shared_ptr<ConfigurationService> config,
                 return;
             }
             //cerr << "got REST message at " << this << " " << message << endl;
-            this->doHandleRequest(ConnectionId(message.at(0),
-                                               message.at(1),
-                                               this),
+            ConnectionId connection(message.at(0),
+                                    message.at(1),
+                                    this);
+            this->doHandleRequest(connection,
                                   RestRequest(message.at(2),
                                               message.at(3),
                                               RestParams::fromBinary(message.at(4)),
@@ -331,7 +327,8 @@ init(std::shared_ptr<ConfigurationService> config,
                const std::string & payload)
         {
             std::string requestId = this->getHttpRequestId();
-            this->doHandleRequest(ConnectionId(connection, requestId, this),
+            ConnectionId connectionId(connection, requestId, this);
+            this->doHandleRequest(connectionId,
                                   RestRequest(header, payload));
         };
         
@@ -352,8 +349,8 @@ bindTcp(PortRange const & zmqRange, PortRange const & httpRange,
 
 void
 RestServiceEndpoint::
-handleRequest(const ConnectionId & connection,
-                           const RestRequest & request) const
+handleRequest(ConnectionId & connection,
+              const RestRequest & request) const
 {
     using namespace std;
 

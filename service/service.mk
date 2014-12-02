@@ -43,6 +43,8 @@ LIBSERVICES_SOURCES := \
 	async_writer_source.cc \
 	tcp_client.cc \
 	rest_service_endpoint.cc \
+	http_rest_endpoint.cc \
+	rest_request.cc \
 	http_named_endpoint.cc \
 	rest_proxy.cc \
 	rest_request_router.cc \

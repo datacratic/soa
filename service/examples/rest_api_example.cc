@@ -71,7 +71,7 @@ struct RestAPIExampleService: public ServiceBase, public RestServiceEndpoint {
            };
 
     void echoAsyncParam(const std::string & a_value,
-    		           const RestServiceEndpoint::ConnectionId & connection)
+    		           RestConnection & connection)
                {
                	std::cerr << a_value << std::endl;
                	connection.sendResponse(200, a_value, "text/plain");
@@ -100,7 +100,7 @@ struct RestAPIExampleService: public ServiceBase, public RestServiceEndpoint {
     	// Illustrates using the Router directly instead of the helper functions to add a route
     	//
         RestRequestRouter::OnProcessRequest pingRoute
-            = [] (const RestServiceEndpoint::ConnectionId & connection,
+            = [] (RestConnection & connection,
                   const RestRequest & request,
                   const RestRequestParsingContext & context) {
             connection.sendResponse(200, "1");

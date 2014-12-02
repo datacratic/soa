@@ -14,7 +14,7 @@ namespace Datacratic {
 */
 
 std::function<std::string
-              (const RestServiceEndpoint::ConnectionId & connection,
+              (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
@@ -23,7 +23,7 @@ createParameterExtractor(Json::Value & argHelp,
     Json::Value & v = argHelp["payload"];
     v["description"] = p.description;
 
-    return [=] (const RestServiceEndpoint::ConnectionId & connection,
+    return [=] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         {
@@ -32,17 +32,17 @@ createParameterExtractor(Json::Value & argHelp,
 }
 
 /** Pass the connection on */
-std::function<const RestServiceEndpoint::ConnectionId &
-                     (const RestServiceEndpoint::ConnectionId & connection,
+std::function<RestConnection &
+                     (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
                          const PassConnectionId &, void *)
 {
-    return [] (const RestServiceEndpoint::ConnectionId & connection,
+    return [] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
-        -> const RestServiceEndpoint::ConnectionId &
+        -> RestConnection &
         {
             return connection;
         };
@@ -50,13 +50,13 @@ createParameterExtractor(Json::Value & argHelp,
 
 /** Pass the connection on */
 std::function<const RestRequestParsingContext &
-                     (const RestServiceEndpoint::ConnectionId & connection,
+                     (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
                          const PassParsingContext &, void *)
 {
-    return [] (const RestServiceEndpoint::ConnectionId & connection,
+    return [] (RestConnection & connection,
                 const RestRequest & request,
                 const RestRequestParsingContext & context)
         -> const RestRequestParsingContext &
@@ -67,13 +67,13 @@ createParameterExtractor(Json::Value & argHelp,
 
 /** Pass the connection on */
 std::function<const RestRequest &
-                     (const RestServiceEndpoint::ConnectionId & connection,
+                     (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
 createParameterExtractor(Json::Value & argHelp,
                          const PassRequest &, void *)
 {
-    return [] (const RestServiceEndpoint::ConnectionId & connection,
+    return [] (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)
         -> const RestRequest &

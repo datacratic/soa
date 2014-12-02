@@ -10,46 +10,10 @@
 #include "zmq_endpoint.h"
 #include "jml/utils/vector_utils.h"
 #include "http_named_endpoint.h"
-
+#include "rest_connection.h"
+#include "rest_request.h"
 
 namespace Datacratic {
-
-
-/*****************************************************************************/
-/* REST REQUEST                                                              */
-/*****************************************************************************/
-
-struct RestRequest {
-    RestRequest()
-    {
-    }
-
-    RestRequest(const HttpHeader & header,
-                const std::string & payload)
-        : header(header),
-          verb(header.verb),
-          resource(header.resource),
-          params(header.queryParams),
-          payload(payload)
-    {
-    }
-
-    RestRequest(const std::string & verb,
-                const std::string & resource,
-                const RestParams & params,
-                const std::string & payload)
-        : verb(verb), resource(resource), params(params), payload(payload)
-    {
-    }
-
-    HttpHeader header;
-    std::string verb;
-    std::string resource;
-    RestParams params;
-    std::string payload;
-};
-
-std::ostream & operator << (std::ostream & stream, const RestRequest & request);
 
 
 /*****************************************************************************/
@@ -82,7 +46,7 @@ struct RestServiceEndpoint: public MessageLoop {
         zeromq identifier) or an http connection (identified by its
         connection handler object).
     */
-    struct ConnectionId {
+    struct ConnectionId: public RestConnection {
         /// Don't initialize for now
         ConnectionId()
         {
@@ -158,7 +122,7 @@ struct RestServiceEndpoint: public MessageLoop {
 
         void sendResponse(int responseCode,
                           const char * response,
-                          const std::string & contentType) const
+                          const std::string & contentType)
         {
             return sendResponse(responseCode, std::string(response),
                                 contentType);
@@ -167,19 +131,19 @@ struct RestServiceEndpoint: public MessageLoop {
         /** Send the given response back on the connection. */
         void sendResponse(int responseCode,
                           const std::string & response,
-                          const std::string & contentType) const;
+                          const std::string & contentType);
 
         /** Send the given response back on the connection. */
         void sendResponse(int responseCode,
                           const Json::Value & response,
-                          const std::string & contentType = "application/json") const;
+                          const std::string & contentType = "application/json");
 
-        void sendResponse(int responseCode) const
+        void sendResponse(int responseCode)
         {
             return sendResponse(responseCode, "", "");
         }
 
-        void sendRedirect(int responseCode, const std::string & location) const;
+        void sendRedirect(int responseCode, const std::string & location);
 
         /** Send an HTTP-only response with the given headers.  If it's not
             an HTTP connection, this will fail.
@@ -187,7 +151,7 @@ struct RestServiceEndpoint: public MessageLoop {
         void sendHttpResponse(int responseCode,
                               const std::string & response,
                               const std::string & contentType,
-                              const RestParams & headers) const;
+                              const RestParams & headers);
 
         enum {
             UNKNOWN_CONTENT_LENGTH = -1,
@@ -202,7 +166,7 @@ struct RestServiceEndpoint: public MessageLoop {
         void sendHttpResponseHeader(int responseCode,
                                     const std::string & contentType,
                                     ssize_t contentLength,
-                                    const RestParams & headers = RestParams()) const;
+                                    const RestParams & headers = RestParams());
 
         /** Send a payload (or a chunk of a payload) for an HTTP connection. */
         void sendPayload(const std::string & payload);
@@ -213,15 +177,15 @@ struct RestServiceEndpoint: public MessageLoop {
         /** Send the given error string back on the connection. */
         void sendErrorResponse(int responseCode,
                                const std::string & error,
-                               const std::string & contentType) const;
+                               const std::string & contentType);
 
         void sendErrorResponse(int responseCode, const char * error,
-                               const std::string & contentType) const
+                               const std::string & contentType)
         {
             sendErrorResponse(responseCode, std::string(error), "application/json");
         }
 
-        void sendErrorResponse(int responseCode, const Json::Value & error) const;
+        void sendErrorResponse(int responseCode, const Json::Value & error);
 
         bool responseSent() const
         {
@@ -234,6 +198,9 @@ struct RestServiceEndpoint: public MessageLoop {
                 return !itl->http->isZombie;  // NOTE: race condition
             else return true;  // zmq is always "connected"
         }
+
+        virtual std::shared_ptr<RestConnection>
+        capture(std::function<void ()> onDisconnect);
     };
 
     void init(std::shared_ptr<ConfigurationService> config,
@@ -265,27 +232,27 @@ struct RestServiceEndpoint: public MessageLoop {
     }
 
     /// Request handler function type
-    typedef std::function<void (ConnectionId connection,
-                                RestRequest request)> OnHandleRequest;
+    typedef std::function<void (ConnectionId & connection,
+                                const RestRequest & request)> OnHandleRequest;
 
     OnHandleRequest onHandleRequest;
 
     /** Handle a request.  Default implementation defers to onHandleRequest.
         Otherwise this method should be overridden.
     */
-    virtual void handleRequest(const ConnectionId & connection,
+    virtual void handleRequest(ConnectionId & connection,
                                const RestRequest & request) const;
 
     ZmqNamedEndpoint zmqEndpoint;
     HttpNamedEndpoint httpEndpoint;
 
-    std::function<void (const ConnectionId & conn, const RestRequest & req) > logRequest;
-    std::function<void (const ConnectionId & conn,
+    std::function<void (ConnectionId & conn, const RestRequest & req) > logRequest;
+    std::function<void (ConnectionId & conn,
                         int code,
                         const std::string & resp,
                         const std::string & contentType) > logResponse;
 
-    void doHandleRequest(const ConnectionId & connection,
+    void doHandleRequest(ConnectionId & connection,
                          const RestRequest & request)
     {
         if (logRequest)
