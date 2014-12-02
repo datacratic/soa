@@ -123,9 +123,6 @@ struct MessageLoop : public Epoller {
     */
     bool removeSourceSync(AsyncEventSource * source);
 
-    /** Re-check if anything needs to poll. */
-    void checkNeedsPoll();
-
     /** Total number of seconds that this message loop has spent sleeping.
         Can be polled regularly to determine the duty cycle of the loop.
      */

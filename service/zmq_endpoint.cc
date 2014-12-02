@@ -34,14 +34,12 @@ ZmqEventSource::
 ZmqEventSource()
     : socket_(0), socketLock_(nullptr)
 {
-    needsPoll = false;
 }
 
 ZmqEventSource::
 ZmqEventSource(zmq::socket_t & socket, SocketLock * socketLock)
     : socket_(&socket), socketLock_(socketLock)
 {
-    needsPoll = false;
     updateEvents();
 }
 
@@ -51,7 +49,6 @@ init(zmq::socket_t & socket, SocketLock * socketLock)
 {
     socket_ = &socket;
     socketLock_ = socketLock;
-    needsPoll = false;
     updateEvents();
 }
 

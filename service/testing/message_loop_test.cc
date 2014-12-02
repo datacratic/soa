@@ -15,23 +15,6 @@ using namespace std;
 using namespace Datacratic;
 
 
-/* This test ensures that adding sources works correctly when needsPoll is
- * set. Otherwise, the watchdog will be triggered. */
-BOOST_AUTO_TEST_CASE( test_addSource_with_needsPoll )
-{
-    ML::Watchdog wd(5);
-    MessageLoop loop;
-    loop.needsPoll = true;
-
-    TypedMessageSink<string> aSource(123);
-    loop.addSource("source", aSource);
-    loop.start();
-    aSource.waitConnectionState(AsyncEventSource::CONNECTED);
-
-    loop.removeSource(&aSource);
-    aSource.waitConnectionState(AsyncEventSource::DISCONNECTED);
-}
-
 /* This test ensures that adding sources works correctly independently of
  * whether the loop has been started or not, even with a ridiculous amount of
  * sources. */

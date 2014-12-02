@@ -27,12 +27,12 @@ struct AsyncEventSource {
     constexpr static int CONNECTED = 1;
 
     AsyncEventSource()
-        : needsPoll(false), debug_(false), parent_(0), connectionState_(DISCONNECTED)
+        : debug_(false), parent_(0), connectionState_(DISCONNECTED)
     {
     }
 
     AsyncEventSource(AsyncEventSource && other)
-        : needsPoll(other.needsPoll), debug_(other.debug_), parent_(nullptr), connectionState_(other.connectionState_)
+        : debug_(other.debug_), parent_(nullptr), connectionState_(other.connectionState_)
     {
         if (other.parent_ != nullptr) {
             fprintf(stderr,
@@ -49,7 +49,6 @@ struct AsyncEventSource {
                     "copied instance is attached to a MessageLoop\n");
             abort();
         }
-        needsPoll = other.needsPoll;
         debug_ = other.debug_;
 
         return *this;
@@ -117,11 +116,6 @@ struct AsyncEventSource {
 
     /** Blocks until the connection state changes to the specified value. */
     void waitConnectionState(int state) const;
-
-    /** Sets whether or not this source requires polling periodically (as
-        the selectFd may not include all events).
-    */
-    bool needsPoll;
 
     /** Sets whether this event handler is being debugged. */
     bool debug_;

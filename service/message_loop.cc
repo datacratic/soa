@@ -160,9 +160,7 @@ addSource(const std::string & name,
 
     // cerr << "addSource: " << source.get()
     //      << " (" << ML::type_name(*source) << ")"
-    //      << " needsPoll: " << source->needsPoll
     //      << " in msg loop: " << this
-    //      << " needsPoll: " << needsPoll
     //      << endl;
 
     SourceEntry entry(name, source, priority);
@@ -239,12 +237,10 @@ runWorkerThread()
 
         if (debug_) {
             cerr << "handling events from " << sources.size()
-                 << " sources with needsPoll " << needsPoll << endl;
-            for (unsigned i = 0;  i < sources.size();  ++i)
-                cerr << sources[i].name << " " << sources[i].source->needsPoll << endl;
+                 << " sources " << endl;
         }
 
-        if (!needsPoll) {
+        if (true) {
             Date beforeSleepTime;
 
             // Now we've processed what we can, let's allow a sleep
@@ -384,40 +380,14 @@ processAddSource(const SourceEntry & entry)
 
     // cerr << "processAddSource: " << entry.source.get()
     //      << " (" << ML::type_name(*entry.source) << ")"
-    //      << " needsPoll: " << entry.source->needsPoll
     //      << " in msg loop: " << this
-    //      << " needsPoll: " << needsPoll
     //      << endl;
     int fd = entry.source->selectFd();
     if (fd != -1)
         addFd(fd, entry.source.get());
 
-    if (!needsPoll && entry.source->needsPoll) {
-        needsPoll = true;
-        if (parent_) parent_->checkNeedsPoll();
-    }
-
     if (debug_) entry.source->debug(true);
     sources.push_back(entry);
-
-    if (needsPoll) {
-        string pollingSources;
-        
-        for (auto & s: sources) {
-            if (s.source->needsPoll) {
-                if (!pollingSources.empty())
-                    pollingSources += ", ";
-                pollingSources += s.name;
-            }
-        }
-        
-        double wakeupsPerSecond = 1.0 / maxAddedLatency_;
-        
-        LOG(Logs::warning)
-            << "message loop in polling mode will cause " << wakeupsPerSecond
-            << " context switches per second due to polling on sources "
-            << pollingSources << endl;
-    }
 
     entry.source->connectionState_ = AsyncEventSource::CONNECTED;
     ML::futex_wake(entry.source->connectionState_);
@@ -442,15 +412,6 @@ processRemoveSource(const SourceEntry & rmEntry)
     if (fd == -1) return;
     removeFd(fd);
 
-    // Make sure that our and our parent's value of needsPoll is up to date
-    bool sourceNeedsPoll = entry.source->needsPoll;
-    if (needsPoll && sourceNeedsPoll) {
-        bool oldNeedsPoll = needsPoll;
-        checkNeedsPoll();
-        if (oldNeedsPoll != needsPoll && parent_)
-            parent_->checkNeedsPoll();
-    }
-
     entry.source->connectionState_ = AsyncEventSource::DISCONNECTED;
     ML::futex_wake(entry.source->connectionState_);
 }
@@ -459,13 +420,7 @@ bool
 MessageLoop::
 poll() const
 {
-    if (needsPoll) {
-        for (auto & s: sources)
-            if (s.source->poll())
-                return true;
-        return false;
-    }
-    else return Epoller::poll();
+    return Epoller::poll();
 }
 
 /** This function assumes that it's called by only a single thread. This
@@ -486,7 +441,7 @@ processOne()
 
     // NOTE: this is required for some buggy sources that don't have a reliable FD to
     // sleep on.  It shouldn't be substantially less efficient.
-    if (needsPoll || true) {
+    if (true) {
         more = sourceActions_.processOne();
 
         for (unsigned i = 0;  i < sources.size();  ++i) {
@@ -512,20 +467,6 @@ MessageLoop::
 debug(bool debugOn)
 {
     debug_ = debugOn;
-}
-
-void
-MessageLoop::
-checkNeedsPoll()
-{
-    bool newNeedsPoll = false;
-    for (unsigned i = 0;  i < sources.size() && !newNeedsPoll;  ++i)
-        newNeedsPoll = sources[i].source->needsPoll;
-
-    if (newNeedsPoll == needsPoll) return;
-
-    needsPoll = newNeedsPoll;
-    if (parent_) parent_->checkNeedsPoll();
 }
 
 } // namespace Datacratic

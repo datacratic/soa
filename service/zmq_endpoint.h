@@ -150,7 +150,6 @@ struct ZmqBinaryEventSource : public AsyncEventSource {
     ZmqBinaryEventSource()
         : socket_(0)
     {
-        needsPoll = true;
     }
 
     ZmqBinaryEventSource(zmq::socket_t & socket,
@@ -158,13 +157,11 @@ struct ZmqBinaryEventSource : public AsyncEventSource {
         : messageHandler(std::move(messageHandler)),
           socket_(&socket)
     {
-        needsPoll = true;
     }
 
     void init(zmq::socket_t & socket)
     {
         socket_ = &socket;
-        needsPoll = true;
     }
 
     virtual int selectFd() const
@@ -245,7 +242,6 @@ struct ZmqBinaryTypedEventSource: public AsyncEventSource {
     ZmqBinaryTypedEventSource()
         : socket_(0)
     {
-        needsPoll = true;
     }
 
     ZmqBinaryTypedEventSource(zmq::socket_t & socket,
@@ -253,13 +249,11 @@ struct ZmqBinaryTypedEventSource: public AsyncEventSource {
         : messageHandler(std::move(messageHandler)),
           socket_(&socket)
     {
-        needsPoll = true;
     }
 
     void init(zmq::socket_t & socket)
     {
         socket_ = &socket;
-        needsPoll = true;
     }
 
     virtual int selectFd() const
