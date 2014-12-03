@@ -110,6 +110,15 @@ SERVICEDUMP_LINK = services boost_program_options
 $(eval $(call program,service_dump,$(SERVICEDUMP_LINK)))
 
 
+# ASIO
+
+LIBSERVICESASIO_SOURCES := \
+	http_client_v3.cc
+
+LIBSERVICESASIO_LINK := boost_system
+
+$(eval $(call library,services_asio,$(LIBSERVICESASIO_SOURCES),$(LIBSERVICESASIO_LINK)))
+
+
 $(eval $(call include_sub_make,service_js,js,service_js.mk))
 $(eval $(call include_sub_make,service_testing,testing,service_testing.mk))
-
