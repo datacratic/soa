@@ -42,18 +42,13 @@ AsyncModelBench(HttpMethod method,
     atomic<int> numResponses(0);
 
     io_service ioService;
-
-    auto loopFn = [&] {
-        while (numResponses < maxReqs) {
-            ioService.run();
-            ML::sleep(0.5);
-        }
-    };
-    thread loopTh(loopFn);
-
     unique_ptr<io_service::work> benchWork(new io_service::work(ioService));
 
+    auto loopFn = [&] {
+        ioService.run();
+    };
     ML::memory_barrier();
+    thread loopTh(loopFn);
 
     auto client = make_shared<HttpClientV3>(ioService, baseUrl, concurrency);
 
@@ -109,8 +104,10 @@ AsyncModelBench(HttpMethod method,
     }
     Date end = Date::now();
 
-    cerr << "num misses: "  + to_string(numMissed) + "\n";
+    // cerr << "num misses: "  + to_string(numMissed) + "\n";
+    ML::memory_barrier();
     benchWork.reset();
+    ioService.stop();
     loopTh.join();
 
     return end - start;
