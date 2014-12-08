@@ -99,6 +99,7 @@ struct HttpConnectionV3 {
     HttpState responseState_;
     HttpRequest request_;
     bool requestEnded_;
+    bool parsingEnded_;
 
     char * recvBuffer_;
     size_t recvBufferSize_;

@@ -103,7 +103,8 @@ HttpConnectionV3(io_service & ioService,
                  const ip::tcp::endpoint & endpoint)
     : socket_(ioService), connected_(false),
       endpoint_(endpoint), responseState_(IDLE),
-      requestEnded_(false), recvBufferSize_(262144), timeoutFd_(-1)
+      requestEnded_(false), parsingEnded_(false), recvBufferSize_(262144),
+      timeoutFd_(-1)
 {
     // cerr << "HttpConnectionV3(): " << this << "\n";
 
@@ -228,9 +229,11 @@ startSendingRequest()
         }
         ExcAssertEqual(responseState_, PENDING);
         responseState_ = IDLE;
+        parsingEnded_ = false;
 
-        mutable_buffers_1 buffers(recvBuffer_, recvBufferSize_);
-        socket_.async_receive(buffers, onReceivedDataFn_);
+        socket_.async_read_some(boost::asio::buffer(recvBuffer_,
+                                                    recvBufferSize_),
+                                onReceivedDataFn_);
     };
 
     if (twoSteps) {
@@ -266,8 +269,7 @@ write(const char * buffer, size_t bufferSize,
                            std::size_t written) {
         return written == bufferSize;
     };
-    async_write(socket_, writeBuffer,
-                             writeCompleteCond, onWritten);
+    async_write(socket_, writeBuffer, writeCompleteCond, onWritten);
 }
 
 void
@@ -275,6 +277,11 @@ HttpConnectionV3::
 onReceivedData(const char * data, size_t size)
 {
     parser_.feed(data, size);
+    if (!parsingEnded_) {
+        socket_.async_read_some(boost::asio::buffer(recvBuffer_,
+                                                    recvBufferSize_),
+                                onReceivedDataFn_);
+    }
 }
 
 void
@@ -313,6 +320,7 @@ void
 HttpConnectionV3::
 onParserDone(bool doClose)
 {
+    parsingEnded_ = true;
     handleEndOfRq(make_error_code(boost::system::errc::success),
                   doClose);
 }
@@ -604,7 +612,6 @@ handleQueueEvent()
                 throw ML::Exception("inconsistency in count of available"
                                     " connections");
             }
-            cerr << "perform...\n";
             conn->perform(move(request));
         }
     }
