@@ -141,7 +141,7 @@ struct LocalUrlFsHandler : public UrlFsHandler {
                                 int depth) -> ML::FileAction
             {
                 if (type == FT_FILE) {
-                    result = onObject(dir + "/" + basename,
+                    result = onObject("file://" + dir + basename,
                                       extractInfo(stats),
                                       depth);
                     if (!result)
@@ -149,9 +149,9 @@ struct LocalUrlFsHandler : public UrlFsHandler {
                     else return FA_CONTINUE;
                 }
                 else if (type == FT_DIR) {
-                    if (!onSubdir)
+                    if (!onSubdir || depth == 0)
                         return FA_CONTINUE;
-                    else if (onSubdir(dir + "/" + basename,
+                    else if (onSubdir("file://" + dir + basename,
                                       depth))
                         return FA_CONTINUE;
                     else return FA_SKIP_SUBTREE;
