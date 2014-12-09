@@ -637,7 +637,10 @@ struct PureValueDescription : public ValueDescriptionT<T> {
     }
 
     virtual void parseJson(void * val, JsonParsingContext & context) const {};
-    virtual void printJson(const void * val, JsonPrintingContext & context) const {};
+    virtual void printJson(const void * val, JsonPrintingContext & context) const
+    {
+        context.writeNull();
+    };
     virtual bool isDefault(const void * val) const { return false; }
     virtual void setDefault(void * val) const {}
     virtual void copyValue(const void * from, void * to) const {}
