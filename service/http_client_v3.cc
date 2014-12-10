@@ -1,3 +1,8 @@
+/* http_client_v3.cc
+   Wolfgang Sourdeau, December 2014
+   Copyright (c) 2014 Datacratic.  All rights reserved.
+*/
+
 #include <errno.h>
 #include <sys/timerfd.h>
 
@@ -15,6 +20,7 @@
 #include "soa/service/http_header.h"
 #include "soa/service/http_parsers.h"
 
+#include "asio_utils.h"
 #include "http_client_v3.h"
 
 using namespace std;
@@ -103,7 +109,8 @@ HttpConnectionV3(io_service & ioService,
                  const ip::tcp::endpoint & endpoint)
     : socket_(ioService), connected_(false),
       endpoint_(endpoint), responseState_(IDLE),
-      requestEnded_(false), parsingEnded_(false), recvBufferSize_(262144),
+      requestEnded_(false), parsingEnded_(false),
+      recvBuffer_(nullptr), recvBufferSize_(262144),
       timeoutFd_(-1)
 {
     // cerr << "HttpConnectionV3(): " << this << "\n";
@@ -138,7 +145,10 @@ HttpConnectionV3(io_service & ioService,
 HttpConnectionV3::
 ~HttpConnectionV3()
 {
-    delete[] recvBuffer_;
+    if (recvBuffer_) {
+        delete[] recvBuffer_;
+        recvBuffer_ = nullptr;
+    }
 
     // cerr << "~HttpConnectionV3: " << this << "\n";
     cancelRequestTimer();
@@ -201,12 +211,13 @@ startSendingRequest()
        by removing a potential allocation and a large copy. 65536 appears to
        be a reasonable value on my installation, but this would need to be
        tested on different setups. */
-    static constexpr size_t TwoStepsThreshold(65536000);
+    static constexpr size_t TwoStepsThreshold(65536);
 
     parser_.setExpectBody(getExpectResponseBody(request_));
     rqData_ = makeRequestStr(request_);
 
     bool twoSteps(false);
+    size_t totalSize(rqData_.size());
 
     const HttpRequest::Content & content = request_.content_;
     if (content.str.size() > 0) {
@@ -216,14 +227,14 @@ startSendingRequest()
         else {
             twoSteps = true;
         }
+        totalSize += content.str.size();
     }
-    responseState_ = PENDING;
 
     // cerr << " twoSteps: " << twoSteps << endl;
 
-    auto onWriteResultFinal = [&] (const boost::system::error_code & ec,
-                                   std::size_t written) {
-        // cerr << " onWriteResultFinal\n";
+    auto onWriteResult = [&] (const boost::system::error_code & ec,
+                              std::size_t written) {
+        // cerr << " onWriteResult\n";
         if (ec) {
             throw ML::Exception("unhandled error");
         }
@@ -236,40 +247,28 @@ startSendingRequest()
                                 onReceivedDataFn_);
     };
 
+    auto writeCompleteCond
+        = [&, totalSize] (const boost::system::error_code & ec,
+                          std::size_t written) {
+        // ::fprintf(stderr, "written: %d, total: %lu\n"
+        //           written, totalSize);
+        return written == totalSize;
+    };
+
+    responseState_ = PENDING;
+    const_buffers_1 writeBuffer(rqData_.c_str(), rqData_.size());
     if (twoSteps) {
-        auto onWriteResultFirst
-            = [this, onWriteResultFinal] (const boost::system::error_code & ec,
-                                          std::size_t written) {
-            cerr << " onWriteResultFirst\n";
-            if (ec) {
-                throw ML::Exception("unhandled error");
-            }
-            ExcAssertEqual(responseState_, PENDING);
-            const HttpRequest::Content & content = request_.content_;
-            write(content.str.c_str(), content.str.size(),
-                  onWriteResultFinal);
-        };
-        write(rqData_.c_str(), rqData_.size(), onWriteResultFirst);
+        const_buffers_1 writeBufferNext(content.str.c_str(),
+                                        content.str.size());
+        const_buffers_2 writeBuffers(writeBuffer, writeBufferNext);
+        async_write(socket_, writeBuffers, writeCompleteCond, onWriteResult);
     }
     else {
-        write(rqData_.c_str(), rqData_.size(), onWriteResultFinal);
+        const_buffers_1 writeBuffer(rqData_.c_str(), rqData_.size());
+        async_write(socket_, writeBuffer, writeCompleteCond, onWriteResult);
     }
 
     armRequestTimer();
-}
-
-void
-HttpConnectionV3::
-write(const char * buffer, size_t bufferSize,
-      const OnWritten & onWritten)
-{
-    const_buffers_1 writeBuffer(buffer, bufferSize);
-    auto writeCompleteCond
-        = [&, bufferSize] (const boost::system::error_code & ec,
-                           std::size_t written) {
-        return written == bufferSize;
-    };
-    async_write(socket_, writeBuffer, writeCompleteCond, onWritten);
 }
 
 void
@@ -595,10 +594,10 @@ void
 HttpClientV3::
 handleQueueEvent()
 {
-    cerr << " handleQueueEvent\n";
+    // cerr << " handleQueueEvent\n";
 
     size_t numConnections = avlConnections_.size() - nextAvail_;
-    cerr << " numConnections: "  + to_string(numConnections) + "\n";
+    // cerr << " numConnections: "  + to_string(numConnections) + "\n";
     if (numConnections > 0) {
         /* "0" has a special meaning for pop_front and must be avoided here */
         auto requests = queue_.pop_front(numConnections);
