@@ -112,7 +112,15 @@ struct RestConnection {
         captured connection must be used).  Note also that onDisconnect() will
         never be called from within the original handler function.
     */
-    virtual std::shared_ptr<RestConnection> capture(std::function<void ()> onDisconnect) = 0;
+    virtual std::shared_ptr<RestConnection>
+    capture(std::function<void ()> onDisconnect) = 0;
+
+    /** Same, but the capturing is done via taking ownership of a shared pointer
+        that points to an object.  The shared pointer will be freed when the
+        connection is closed.
+    */
+    virtual std::shared_ptr<RestConnection>
+    captureInConnection(std::shared_ptr<void> toCapture) = 0;
 };
 
 

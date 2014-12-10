@@ -201,6 +201,9 @@ struct RestServiceEndpoint: public MessageLoop {
 
         virtual std::shared_ptr<RestConnection>
         capture(std::function<void ()> onDisconnect);
+
+        virtual std::shared_ptr<RestConnection>
+        captureInConnection(std::shared_ptr<void> piggyBack);
     };
 
     void init(std::shared_ptr<ConfigurationService> config,

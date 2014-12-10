@@ -254,6 +254,14 @@ capture(std::function<void ()> onDisconnect)
                         "needs to be implemented");
 }
 
+std::shared_ptr<RestConnection>
+RestServiceEndpoint::ConnectionId::
+captureInConnection(std::shared_ptr<void> piggyBack)
+{
+    throw ML::Exception("RestServiceEndpoint::ConnectionId::captureInConnection(): "
+                        "needs to be implemented");
+}
+
 
 /*****************************************************************************/
 /* REST SERVICE ENDPOINT                                                     */
