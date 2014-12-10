@@ -104,7 +104,7 @@ Runner()
       startDate_(Date::negativeInfinity()), endDate_(startDate_),
       childPid_(-1),
       wakeup_(EFD_NONBLOCK | EFD_CLOEXEC),
-      statusRemaining_(sizeof(Task::ChildStatus))
+      statusRemaining_(sizeof(ProcessStatus))
 {
     Epoller::init(4);
 
@@ -151,11 +151,11 @@ Runner::
 handleChildStatus(const struct epoll_event & event)
 {
     // cerr << "handleChildStatus\n";
-    Task::ChildStatus status;
+    ProcessStatus status;
 
     if ((event.events & EPOLLIN) != 0) {
         while (1) {
-            char * current = (statusBuffer_ + sizeof(Task::ChildStatus)
+            char * current = (statusBuffer_ + sizeof(ProcessStatus)
                               - statusRemaining_);
             ssize_t s = ::read(task_.statusFd, current, statusRemaining_);
             if (s == -1) {
@@ -192,7 +192,7 @@ handleChildStatus(const struct epoll_event & event)
                  << " " << status.pid << " " << status.childStatus
                  << " " << status.launchErrno << " "
                  << strerror(status.launchErrno) << " "
-                 << Task::strLaunchError(status.launchErrorCode)
+                 << strLaunchError(status.launchErrorCode)
                  << endl;
 #endif
 
@@ -204,7 +204,7 @@ handleChildStatus(const struct epoll_event & event)
                 // Error
                 task_.runResult.updateFromLaunchError
                     (status.launchErrno,
-                     Task::strLaunchError(status.launchErrorCode));
+                     strLaunchError(status.launchErrorCode));
 
                 task_.postTerminate(*this);
 
@@ -218,29 +218,29 @@ handleChildStatus(const struct epoll_event & event)
             }
 
             switch (status.state) {
-            case Task::LAUNCHING:
+            case ST_LAUNCHING:
                 childPid_ = status.pid;
                 // cerr << " childPid_ = status.pid (launching)\n";
                 break;
-            case Task::RUNNING:
+            case ST_RUNNING:
                 childPid_ = status.pid;
                 // cerr << " childPid_ = status.pid (running)\n";
                 ML::futex_wake(childPid_);
                 break;
-            case Task::STOPPED:
+            case ST_STOPPED:
                 childPid_ = -3;
                 // cerr << " childPid_ = -3 (stopped)\n";
                 ML::futex_wake(childPid_);
                 task_.runResult.updateFromStatus(status.childStatus);
-                task_.statusState = Task::StatusState::DONE;
+                task_.statusState = ST_DONE;
                 if (stdInSink_ && stdInSink_->state != OutputSink::CLOSED) {
                     stdInSink_->requestClose();
                 }
                 attemptTaskTermination();
                 break;
-            case Task::DONE:
+            case ST_DONE:
                 throw ML::Exception("unexpected status DONE");
-            case Task::ST_UNKNOWN:
+            case ST_UNKNOWN:
                 throw ML::Exception("unexpected status UNKNOWN");
             }
 
@@ -350,8 +350,8 @@ attemptTaskTermination()
        - the closing child status must have been returned */
     if ((!stdInSink_ || stdInSink_->state == OutputSink::CLOSED)
         && !stdOutSink_ && !stdErrSink_ && childPid_ < 0
-        && (task_.statusState == Task::StatusState::STOPPED
-            || task_.statusState == Task::StatusState::DONE)) {
+        && (task_.statusState == ST_STOPPED
+            || task_.statusState == ST_DONE)) {
         task_.postTerminate(*this);
 
         if (stdInSink_) {
@@ -378,8 +378,8 @@ attemptTaskTermination()
         if (childPid_ >= 0) {
             cerr << "childPid_ >= 0\n";
         }
-        if (!(task_.statusState == Task::StatusState::STOPPED
-              || task_.statusState == Task::StatusState::DONE)) {
+        if (!(task_.statusState == ST_STOPPED
+              || task_.statusState == DONE)) {
             cerr << "task status != stopped/done\n";
         }
     }
@@ -428,10 +428,10 @@ run(const vector<string> & command,
     running_ = true;
     ML::futex_wake(running_);
 
-    task_.statusState = Task::StatusState::ST_UNKNOWN;
+    task_.statusState = ST_UNKNOWN;
     task_.onTerminate = onTerminate;
 
-    Task::ChildFds childFds;
+    ProcessFds childFds;
     tie(task_.statusFd, childFds.statusFd) = CreateStdPipe(false);
 
     if (stdInSink_) {
@@ -462,7 +462,7 @@ run(const vector<string> & command,
         task_.runWrapper(command, childFds);
     }
     else {
-        task_.statusState = Task::StatusState::LAUNCHING;
+        task_.statusState = ST_LAUNCHING;
 
         ML::set_file_flag(task_.statusFd, O_NONBLOCK);
         if (stdInSink_) {
@@ -568,40 +568,9 @@ Task()
       statusState(ST_UNKNOWN)
 {}
 
-std::string
-Runner::Task::
-strLaunchError(LaunchErrorCode error)
-{
-    switch (error) {
-    case E_NONE: return "no error";
-    case E_READ_STATUS_PIPE: return "read() on status pipe";
-    case E_STATUS_PIPE_WRONG_LENGTH:
-        return "wrong message size reading launch pipe";
-    case E_SUBTASK_LAUNCH: return "exec() launching subtask";
-    case E_SUBTASK_WAITPID: return "waitpid waiting for subtask";
-    case E_WRONG_CHILD: return "waitpid() returned the wrong child";
-    }
-    throw ML::Exception("unknown error launch error code %d",
-                        error);
-}
-
-std::string
-Runner::Task::
-statusStateAsString(StatusState statusState)
-{
-    switch (statusState) {
-    case ST_UNKNOWN: return "UNKNOWN";
-    case LAUNCHING: return "LAUNCHING";
-    case RUNNING: return "RUNNING";
-    case STOPPED: return "STOPPED";
-    case DONE: return "DONE";
-    }
-    throw ML::Exception("unknown status %d", statusState);
-}
-
 void
 Runner::Task::
-runWrapper(const vector<string> & command, ChildFds & fds)
+runWrapper(const vector<string> & command, ProcessFds & fds)
 {
     // Undo any SIGCHLD block from the parent process so it can
     // properly wait for the signal
@@ -634,7 +603,6 @@ runWrapper(const vector<string> & command, ChildFds & fds)
                                  ::close(childLaunchStatusFd[0]);
                              if (childLaunchStatusFd[1] != -1)
                                  ::close(childLaunchStatusFd[1]);
-
                          });
     int res = ::pipe2(childLaunchStatusFd, O_CLOEXEC);
     if (res == -1)
@@ -681,7 +649,7 @@ runWrapper(const vector<string> & command, ChildFds & fds)
         childLaunchStatusFd[1] = -1;
         // FILE * terminal = ::fopen("/dev/tty", "a");
         // ::fprintf(terminal, "wrapper: real child pid: %d\n", childPid);
-        ChildStatus status;
+        ProcessStatus status;
 
         // Write an update to the current status
         auto writeStatus = [&] ()
@@ -716,7 +684,7 @@ runWrapper(const vector<string> & command, ChildFds & fds)
                 _exit(exitCode);
             };
 
-        status.state = LAUNCHING;
+        status.state = ST_LAUNCHING;
         status.pid = childPid;
 
         writeStatus();
@@ -731,7 +699,7 @@ runWrapper(const vector<string> & command, ChildFds & fds)
         
         if (bytes == 0) {
             // Launch happened successfully (pipe was closed on exec)
-            status.state = RUNNING;
+            status.state = ST_RUNNING;
             writeStatus();
         }
         else {
@@ -776,7 +744,7 @@ runWrapper(const vector<string> & command, ChildFds & fds)
             writeError(0, E_WRONG_CHILD, 127);
         }
 
-        status.state = STOPPED;
+        status.state = ST_STOPPED;
         status.childStatus = childStatus;
         getrusage(RUSAGE_CHILDREN, &status.usage);
 
@@ -846,87 +814,6 @@ postTerminate(Runner & runner)
         onTerminate = nullptr;
     }
     runResult = RunResult();
-}
-
-
-/* CHILD::CHILDFDS */
-
-Runner::Task::ChildFds::
-ChildFds()
-    : stdIn(::fileno(stdin)),
-      stdOut(::fileno(stdout)),
-      stdErr(::fileno(stderr)),
-      statusFd(-1)
-{
-}
-
-/* child api */
-void
-Runner::Task::ChildFds::
-closeRemainingFds()
-{
-    struct rlimit limits;
-    ::getrlimit(RLIMIT_NOFILE, &limits);
-
-    for (int fd = 0; fd < limits.rlim_cur; fd++) {
-        if ((fd != STDIN_FILENO || stdIn == -1)
-            && fd != STDOUT_FILENO && fd != STDERR_FILENO
-            && fd != statusFd) {
-            ::close(fd);
-        }
-    }
-}
-
-void
-Runner::Task::ChildFds::
-dupToStdStreams()
-{
-    auto dupToStdStream = [&] (int oldFd, int newFd) {
-        if (oldFd != newFd) {
-            int rc = ::dup2(oldFd, newFd);
-            if (rc == -1) {
-                throw ML::Exception(errno,
-                                    "ChildFds::dupToStdStream dup2");
-            }
-        }
-    };
-    if (stdIn != -1) {
-        dupToStdStream(stdIn, STDIN_FILENO);
-    }
-    dupToStdStream(stdOut, STDOUT_FILENO);
-    dupToStdStream(stdErr, STDERR_FILENO);
-}
-
-/* parent & child api */
-void
-Runner::Task::ChildFds::
-close()
-{
-    auto closeIfNotEqual = [&] (int & fd, int notValue) {
-        if (fd != notValue) {
-            ::close(fd);
-        }
-    };
-    closeIfNotEqual(stdIn, STDIN_FILENO);
-    closeIfNotEqual(stdOut, STDOUT_FILENO);
-    closeIfNotEqual(stdErr, STDERR_FILENO);
-    closeIfNotEqual(statusFd, -1);
-}
-
-
-/* RUNNER TASK CHILDSTATUS */
-
-Runner::Task::ChildStatus::
-ChildStatus()
-{
-    // Doing it this way keeps ValGrind happy
-    ::memset(this, 0, sizeof(*this));
-
-    state = ST_UNKNOWN;
-    pid = -1;
-    childStatus = -1;
-    launchErrno = 0;
-    launchErrorCode = E_NONE;
 }
 
 

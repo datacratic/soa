@@ -21,6 +21,15 @@ LIBRECOSET_ZEROMQ_LINK := \
 
 $(eval $(call library,zeromq,$(LIBRECOSET_ZEROMQ_SOURCES),$(LIBRECOSET_ZEROMQ_LINK)))
 
+
+LIBRECOSET_RUNNERCOMMON_SOURCES := \
+	runner_common.cc
+
+LIBRECOSET_RUNNERCOMMON_LINK :=
+
+$(eval $(call library,runner_common,$(LIBRECOSET_RUNNERCOMMON_SOURCES),$(LIBRECOSET_RUNNERCOMMON_LINK)))
+
+
 LIBSERVICES_SOURCES := \
 	transport.cc \
 	endpoint.cc \
@@ -57,7 +66,7 @@ LIBSERVICES_SOURCES := \
 	nprobe.cc \
 	logs.cc
 
-LIBSERVICES_LINK := opstats curl curlpp boost_regex zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description
+LIBSERVICES_LINK := opstats curl curlpp boost_regex runner_common zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 
@@ -95,6 +104,7 @@ LIBREDIS_LINK := hiredis utils types boost_thread
 $(eval $(call library,redis,$(LIBREDIS_SOURCES),$(LIBREDIS_LINK)))
 
 
+$(eval $(call program,runner_helper,services))
 $(eval $(call program,s3_transfer_cmd,cloud boost_program_options boost_filesystem utils))
 $(eval $(call program,s3tee,cloud boost_program_options utils))
 $(eval $(call program,s3cp,cloud boost_program_options utils))
