@@ -444,10 +444,12 @@ performSync() const
                 continue;
             }
             else {
-                cerr << "Unrecoverable S3 error: code " << responseCode
-                     << endl;
-                cerr << string(body, 0, 4096) << endl;
-                throw ML::Exception("S3 error is unrecoverable");
+                //cerr << "Unrecoverable S3 error: code " << responseCode
+                //     << endl;
+                //cerr << string(body, 0, 4096) << endl;
+                string firstLine = string(responseHeaders, 0, responseHeaders.find('\n'));
+                throw ML::Exception("S3 error loading '%s': %s",
+                                    uri.c_str(), firstLine.c_str());
             }
         }
 
