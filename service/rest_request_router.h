@@ -112,6 +112,28 @@ std::ostream & operator << (std::ostream & stream, const PathSpec & path);
 
 
 /*****************************************************************************/
+/* REQUEST PARAM FILTER                                                      */
+/*****************************************************************************/
+
+/** Filter that allows a route to match only if a particular parameter
+    matches a given value.
+
+    This allows for there to be multiple routes that are selected based upon
+    a request parameter.
+*/
+struct RequestParamFilter {
+    RequestParamFilter(const std::string & param = "",
+                    const std::string & value = "")
+        : param(param), value(value)
+    {
+    }
+
+    std::string param;
+    std::string value;
+};
+
+
+/*****************************************************************************/
 /* REQUEST FILTER                                                            */
 /*****************************************************************************/
 
@@ -125,21 +147,46 @@ struct RequestFilter {
     RequestFilter(const std::string & verb)
     {
         verbs.insert(verb);
+        parseVerbs();
     }
 
     RequestFilter(const char * verb)
     {
         verbs.insert(verb);
+        parseVerbs();
     }
 
     RequestFilter(std::set<std::string> verbs)
         : verbs(verbs)
     {
+        parseVerbs();
     }
 
     RequestFilter(const std::initializer_list<std::string> & verbs)
         : verbs(verbs)
     {
+        parseVerbs();
+    }
+
+    void parseVerbs()
+    {
+        std::set<std::string> newVerbs;
+        
+        for (auto & v: verbs) {
+            auto i = v.find('=');
+
+            if (i == std::string::npos) {
+                newVerbs.insert(v);
+                continue;
+            }
+            
+            std::string key(v, 0, i);
+            std::string value(v, i + 1);
+
+            filters.emplace_back(key, value);
+        }
+
+        newVerbs = verbs;
     }
 
     void getHelp(Json::Value & result) const
@@ -150,9 +197,17 @@ struct RequestFilter {
                 result["verbs"][i] = *it;
             }
         }
+        if (!filters.empty()) {
+            for (auto & f: filters) {
+                result["filters"].append(f.param + "=" + f.value);
+            }
+        }
     }
 
+private:
     std::set<std::string> verbs;
+    std::vector<RequestParamFilter> filters;
+    friend class RestRequestRouter;
 };
 
 std::ostream & operator << (std::ostream & stream, const RequestFilter & filter);

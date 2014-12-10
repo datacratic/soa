@@ -247,6 +247,20 @@ process(const RestRequest & request,
         && !filter.verbs.count(request.verb))
         return MR_NO;
 
+    // Check that the parameter filters match
+    for (auto & f: filter.filters) {
+        bool matched = false;
+        for (auto & p: request.params) {
+            if (p.first == f.param && p.second == f.value) {
+                matched = true;
+                break;
+            }
+            if (matched) break;
+        }
+        if (!matched)
+            return MR_NO;
+    }
+
     // At the end, make sure we put the context back to how it was
     RestRequestParsingContext::StateGuard guard(&context);
 
