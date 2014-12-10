@@ -28,6 +28,7 @@ LIBRECOSET_RUNNERCOMMON_SOURCES := \
 LIBRECOSET_RUNNERCOMMON_LINK :=
 
 $(eval $(call library,runner_common,$(LIBRECOSET_RUNNERCOMMON_SOURCES),$(LIBRECOSET_RUNNERCOMMON_LINK)))
+$(eval $(call program,runner_helper,runner_common))
 
 
 LIBSERVICES_SOURCES := \
@@ -69,6 +70,9 @@ LIBSERVICES_SOURCES := \
 LIBSERVICES_LINK := opstats curl curlpp boost_regex runner_common zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
+$(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
+
+$(LIB)/libservices.so: $(BIN)/runner_helper
 
 
 LIBENDPOINT_SOURCES := \
@@ -77,8 +81,6 @@ LIBENDPOINT_LINK := \
 	services
 
 $(eval $(call library,endpoint,$(LIBENDPOINT_SOURCES),$(LIBENDPOINT_LINK)))
-
-
 
 
 LIBCLOUD_SOURCES := \
@@ -104,7 +106,6 @@ LIBREDIS_LINK := hiredis utils types boost_thread
 $(eval $(call library,redis,$(LIBREDIS_SOURCES),$(LIBREDIS_LINK)))
 
 
-$(eval $(call program,runner_helper,services))
 $(eval $(call program,s3_transfer_cmd,cloud boost_program_options boost_filesystem utils))
 $(eval $(call program,s3tee,cloud boost_program_options utils))
 $(eval $(call program,s3cp,cloud boost_program_options utils))

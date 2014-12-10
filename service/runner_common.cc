@@ -116,6 +116,33 @@ close()
     closeIfNotEqual(statusFd, -1);
 }
 
+void
+ProcessFds::
+encodeToBuffer(char * buffer, size_t bufferSize)
+{
+    int written = ::sprintf(buffer, "%.8x/%.8x/%.8x/%.8x",
+                            stdIn, stdOut, stdErr, statusFd);
+    if (written < 0) {
+        throw ML::Exception("encoding failed");
+    }
+
+    /* bufferSize must be equal to the number of bytes used above, plus 1 for
+       '\0' */
+    if (written >= bufferSize) {
+        throw ML::Exception("buffer overflow");
+    }
+}
+
+void
+ProcessFds::
+decodeFromBuffer(const char * buffer)
+{
+    int decoded = ::sscanf(buffer, "%x/%x/%x/%x",
+                           &stdIn, &stdOut, &stdErr, &statusFd);
+    if (decoded < 0) {
+        throw ML::Exception(errno, "decoding failed");
+    }
+}
 
 /****************************************************************************/
 /* PROCESS STATUS                                                           */

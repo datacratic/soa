@@ -22,6 +22,9 @@ struct ProcessFds {
     void dupToStdStreams();
     void close();
 
+    void encodeToBuffer(char * buffer, size_t bufferSize);
+    void decodeFromBuffer(const char * buffer);
+
     int stdIn;
     int stdOut;
     int stdErr;
