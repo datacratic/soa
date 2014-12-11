@@ -110,6 +110,78 @@ HttpClient(const string & baseUrl, int numParallel, int queueSize,
     enablePipelining(false);
 }
 
+HttpResponse
+HttpClient::getSync(
+        const std::string& resource,
+        const RestParams& queryParams,
+        const RestParams& headers,
+        int timeout)
+{
+    HttpSyncFuture future;
+    if (!get(resource,
+             std::make_shared<HttpClientSimpleCallbacks>(future),
+             queryParams, headers, timeout)) {
+        throw ML::Exception("Failed to enqueue request");
+    }
+
+    return future.get();
+}
+
+HttpResponse
+HttpClient::postSync(
+        const std::string& resource,
+        const HttpRequest::Content& content,
+        const RestParams& queryParams,
+        const RestParams& headers,
+        int timeout)
+{
+    HttpSyncFuture future;
+    if (!post(resource,
+              std::make_shared<HttpClientSimpleCallbacks>(future),
+              content,
+              queryParams, headers, timeout)) {
+        throw ML::Exception("Failed to enqueue request");
+    }
+
+    return future.get();
+}
+
+HttpResponse
+HttpClient::putSync(
+        const std::string& resource,
+        const HttpRequest::Content& content,
+        const RestParams& queryParams,
+        const RestParams& headers,
+        int timeout)
+{
+    HttpSyncFuture future;
+    if (!put(resource,
+             std::make_shared<HttpClientSimpleCallbacks>(future),
+             content,
+             queryParams, headers, timeout)) {
+        throw ML::Exception("Failed to enqueue request");
+    }
+
+    return future.get();
+}
+
+HttpResponse
+HttpClient::delSync(
+        const std::string& resource,
+        const RestParams& queryParams,
+        const RestParams& headers,
+        int timeout)
+{
+    HttpSyncFuture future;
+
+    if (!del(resource,
+             std::make_shared<HttpClientSimpleCallbacks>(future),
+             queryParams, headers, timeout)) {
+        throw ML::Exception("Failed to enqueue request");
+    }
+
+    return future.get();
+}
 
 /****************************************************************************/
 /* HTTP CLIENT CALLBACKS                                                    */
