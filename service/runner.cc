@@ -199,7 +199,8 @@ handleChildStatus(const struct epoll_event & event)
             task_.statusState = status.state;
             task_.runResult.usage = status.usage;
 
-            if (status.launchErrno || status.launchErrorCode) {
+            if (status.launchErrno
+                || status.launchErrorCode != LaunchError::NONE) {
                 //cerr << "*** launch error" << endl;
                 // Error
                 task_.runResult.updateFromLaunchError
@@ -218,33 +219,34 @@ handleChildStatus(const struct epoll_event & event)
             }
 
             switch (status.state) {
-            case ST_LAUNCHING:
+            case ProcessState::LAUNCHING:
                 childPid_ = status.pid;
                 // cerr << " childPid_ = status.pid (launching)\n";
                 break;
-            case ST_RUNNING:
+            case ProcessState::RUNNING:
                 childPid_ = status.pid;
                 // cerr << " childPid_ = status.pid (running)\n";
                 ML::futex_wake(childPid_);
                 break;
-            case ST_STOPPED:
+            case ProcessState::STOPPED:
                 childPid_ = -3;
                 // cerr << " childPid_ = -3 (stopped)\n";
                 ML::futex_wake(childPid_);
                 task_.runResult.updateFromStatus(status.childStatus);
-                task_.statusState = ST_DONE;
+                task_.statusState = ProcessState::DONE;
                 if (stdInSink_ && stdInSink_->state != OutputSink::CLOSED) {
                     stdInSink_->requestClose();
                 }
                 attemptTaskTermination();
                 break;
-            case ST_DONE:
+            case ProcessState::DONE:
                 throw ML::Exception("unexpected status DONE");
-            case ST_UNKNOWN:
+            case ProcessState::UNKNOWN:
                 throw ML::Exception("unexpected status UNKNOWN");
             }
 
-            if (status.launchErrno || status.launchErrorCode)
+            if (status.launchErrno
+                || status.launchErrorCode != LaunchError::NONE)
                 break;
         }
     }
@@ -350,8 +352,8 @@ attemptTaskTermination()
        - the closing child status must have been returned */
     if ((!stdInSink_ || stdInSink_->state == OutputSink::CLOSED)
         && !stdOutSink_ && !stdErrSink_ && childPid_ < 0
-        && (task_.statusState == ST_STOPPED
-            || task_.statusState == ST_DONE)) {
+        && (task_.statusState == ProcessState::STOPPED
+            || task_.statusState == ProcessState::DONE)) {
         task_.postTerminate(*this);
 
         if (stdInSink_) {
@@ -378,7 +380,7 @@ attemptTaskTermination()
         if (childPid_ >= 0) {
             cerr << "childPid_ >= 0\n";
         }
-        if (!(task_.statusState == ST_STOPPED
+        if (!(task_.statusState == ProcessState::STOPPED
               || task_.statusState == DONE)) {
             cerr << "task status != stopped/done\n";
         }
@@ -428,7 +430,7 @@ run(const vector<string> & command,
     running_ = true;
     ML::futex_wake(running_);
 
-    task_.statusState = ST_UNKNOWN;
+    task_.statusState = ProcessState::UNKNOWN;
     task_.onTerminate = onTerminate;
 
     ProcessFds childFds;
@@ -462,7 +464,7 @@ run(const vector<string> & command,
         task_.runWrapper(command, childFds);
     }
     else {
-        task_.statusState = ST_LAUNCHING;
+        task_.statusState = ProcessState::LAUNCHING;
 
         ML::set_file_flag(task_.statusFd, O_NONBLOCK);
         if (stdInSink_) {
@@ -565,7 +567,7 @@ Task()
       stdOutFd(-1),
       stdErrFd(-1),
       statusFd(-1),
-      statusState(ST_UNKNOWN)
+      statusState(ProcessState::UNKNOWN)
 {}
 
 void
@@ -588,12 +590,6 @@ runWrapper(const vector<string> & command, ProcessFds & fds)
         argv[2+i] = (char *) command[i].c_str();
     }
     argv[2+len] = nullptr;
-
-    // printf("runner: ");
-    // for (int i = 0; i < len+3; i++) {
-    //     printf(" %d:%s", i, argv[i]);
-    // }
-    // printf("\n");
 
     int res = execv(argv[0], argv);
     if (res == -1) {

@@ -41,14 +41,6 @@ runChild(char * execArgs[], int childLaunchStatusFd[], ProcessFds & fds)
     }
     ::close(fds.statusFd);
 
-    // printf("runChild: ");
-    // char **currentArg = execArgs;
-    // while (*currentArg) {
-    //     printf(" %s", *currentArg);
-    //     currentArg++;
-    // }
-    // printf("\n");
-
     int res = ::execv(execArgs[0], execArgs);
     if (res == -1) {
         // Report back that we couldn't launch
@@ -60,9 +52,11 @@ runChild(char * execArgs[], int childLaunchStatusFd[], ProcessFds & fds)
     }
 }
 
-void
+int
 monitorChild(int childPid, int childLaunchStatusFd[], ProcessFds & fds)
 {
+    int exitCode;
+
     ::prctl(PR_SET_PDEATHSIG, SIGHUP);
 
     ::close(childLaunchStatusFd[1]);
@@ -71,41 +65,10 @@ monitorChild(int childPid, int childLaunchStatusFd[], ProcessFds & fds)
     // ::fprintf(terminal, "wrapper: real child pid: %d\n", childPid);
     ProcessStatus status;
 
-    // Write an update to the current status
-    auto writeStatus = [&] () {
-        int res = ::write(fds.statusFd, &status, sizeof(status));
-        if (res == -1)
-            throw ML::Exception(errno, "runWrapper write status");
-        else if (res != sizeof(status))
-            throw ML::Exception("didn't completely write status");
-    };
-
-    // Write that there was an error to the calling process, and then
-    // exit
-    auto writeError = [&] (int launchErrno, LaunchErrorCode errorCode,
-                           int exitCode) {
-        status.launchErrno = launchErrno;
-        status.launchErrorCode = errorCode;
-                
-        //cerr << "sending error " << strerror(launchErrno)
-        //<< " " << strLaunchError(errorCode) << " and exiting with "
-        //<< exitCode << endl;
-
-        int res = ::write(fds.statusFd, &status, sizeof(status));
-        if (res == -1)
-            throw ML::Exception(errno, "runWrapper write status");
-        else if (res != sizeof(status))
-            throw ML::Exception("didn't completely write status");
-
-        fds.close();
-                
-        _exit(exitCode);
-    };
-
-    status.state = ST_LAUNCHING;
+    status.state = ProcessState::LAUNCHING;
     status.pid = childPid;
 
-    writeStatus();
+    fds.writeStatus(status);
 
     // ::fprintf(terminal, "wrapper: waiting child...\n");
 
@@ -117,8 +80,26 @@ monitorChild(int childPid, int childLaunchStatusFd[], ProcessFds & fds)
         
     if (bytes == 0) {
         // Launch happened successfully (pipe was closed on exec)
-        status.state = ST_RUNNING;
-        writeStatus();
+        status.state = ProcessState::RUNNING;
+        fds.writeStatus(status);
+
+        int childStatus;
+        int res;
+        while ((res = ::waitpid(childPid, &childStatus, 0)) == -1
+               && errno == EINTR);
+        if (res == -1) {
+            status.setErrorCodes(errno, LaunchError::SUBTASK_WAITPID);
+            exitCode = 127;
+        }
+        else if (res != childPid) {
+            status.setErrorCodes(0, LaunchError::WRONG_CHILD);
+            exitCode = 127;
+        }
+        else {
+            status.childStatus = childStatus;
+            getrusage(RUSAGE_CHILDREN, &status.usage);
+            exitCode = 0;
+        }
     }
     else {
         // Error launching
@@ -138,37 +119,26 @@ monitorChild(int childPid, int childLaunchStatusFd[], ProcessFds & fds)
 
         if (bytes == -1) {
             // Problem reading
-            writeError(errno, E_READ_STATUS_PIPE, 127);
+            status.setErrorCodes(errno, LaunchError::READ_STATUS_PIPE);
+            exitCode = 127;
         }
         else if (bytes != sizeof(launchErrno)) {
             // Wrong size of message
-            writeError(0, E_STATUS_PIPE_WRONG_LENGTH, 127);
+            status.setErrorCodes(0, LaunchError::STATUS_PIPE_WRONG_LENGTH);
+            exitCode = 127;
         }
         else {
             // Launch was unsuccessful; we have the errno.  Return it and
             // exit.
-            writeError(launchErrno, E_SUBTASK_LAUNCH, 126);
+            status.setErrorCodes(launchErrno, LaunchError::SUBTASK_LAUNCH);
+            exitCode = 126;
         }
     }
-
-    int childStatus;
-    int res;
-    while ((res = ::waitpid(childPid, &childStatus, 0)) == -1
-           && errno == EINTR);
-    if (res == -1) {
-        writeError(errno, E_SUBTASK_WAITPID, 127);
-    }
-    else if (res != childPid) {
-        writeError(0, E_WRONG_CHILD, 127);
-    }
-
-    status.state = ST_STOPPED;
-    status.childStatus = childStatus;
-    getrusage(RUSAGE_CHILDREN, &status.usage);
-
-    writeStatus();
-
+    status.state = ProcessState::STOPPED;
+    fds.writeStatus(status);
     fds.close();
+
+    return exitCode;
 }
 
 int main(int argc, char * argv[])
@@ -177,12 +147,6 @@ int main(int argc, char * argv[])
         ::fprintf(stderr, "missing argument\n");
         exit(-1);
     }
-
-    // printf("helper: ");
-    // for (int i = 0; i < argc; i++) {
-    //     printf(" %d:%s", i, argv[i]);
-    // }
-    // printf("\n");
 
     // Undo any SIGCHLD block from the parent process so it can
     // properly wait for the signal
@@ -228,9 +192,8 @@ int main(int argc, char * argv[])
     else if (childPid == -1) {
         throw ML::Exception(errno, "fork() in runWrapper");
     }
-    else {
-        monitorChild(childPid, childLaunchStatusFd, fds);
-    }
 
-    return 0;
+    int exitCode = monitorChild(childPid, childLaunchStatusFd, fds);
+
+    return exitCode;
 }

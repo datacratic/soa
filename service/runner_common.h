@@ -12,27 +12,6 @@
 namespace Datacratic {
 
 /****************************************************************************/
-/* PROCESS FDS                                                              */
-/****************************************************************************/
-
-struct ProcessFds {
-    ProcessFds();
-
-    void closeRemainingFds();
-    void dupToStdStreams();
-    void close();
-
-    void encodeToBuffer(char * buffer, size_t bufferSize);
-    void decodeFromBuffer(const char * buffer);
-
-    int stdIn;
-    int stdOut;
-    int stdErr;
-    int statusFd;
-};
-
-
-/****************************************************************************/
 /* LAUNCH ERROR CODE                                                        */
 /****************************************************************************/
 
@@ -42,17 +21,17 @@ struct ProcessFds {
     to memory which we could have to ensure was available in
     both the launcher process and the calling process).
 */
-enum LaunchErrorCode {
-    E_NONE,                     ///< No launch error
-    E_READ_STATUS_PIPE,         ///< Error reading status pipe
-    E_STATUS_PIPE_WRONG_LENGTH, ///< Status msg wrong length
-    E_SUBTASK_LAUNCH,           ///< Error launching subtask
-    E_SUBTASK_WAITPID,          ///< Error calling waitpid
-    E_WRONG_CHILD               ///< Wrong child was reaped
+enum struct LaunchError {
+    NONE,                     ///< No launch error
+    READ_STATUS_PIPE,         ///< Error reading status pipe
+    STATUS_PIPE_WRONG_LENGTH, ///< Status msg wrong length
+    SUBTASK_LAUNCH,           ///< Error launching subtask
+    SUBTASK_WAITPID,          ///< Error calling waitpid
+    WRONG_CHILD               ///< Wrong child was reaped
 };
 
 /** Turn a launch error code into a descriptive string. */
-std::string strLaunchError(LaunchErrorCode error);
+std::string strLaunchError(LaunchError error);
             
 
 /****************************************************************************/
@@ -60,12 +39,12 @@ std::string strLaunchError(LaunchErrorCode error);
 /****************************************************************************/
 
 /** State of the process. */
-enum ProcessState {
-    ST_UNKNOWN,    ///< Unknown status
-    ST_LAUNCHING,     ///< Being launched
-    ST_RUNNING,       ///< Currently running
-    ST_STOPPED,       ///< No longer running
-    ST_DONE           ///< Completely stopped
+enum struct ProcessState {
+    UNKNOWN,    ///< Unknown status
+    LAUNCHING,     ///< Being launched
+    RUNNING,       ///< Currently running
+    STOPPED,       ///< No longer running
+    DONE           ///< Completely stopped
 };
 
 std::string statusStateAsString(ProcessState statusState);
@@ -81,12 +60,37 @@ std::string statusStateAsString(ProcessState statusState);
 struct ProcessStatus {
     ProcessStatus();
 
+    void setErrorCodes(int newLaunchErrno, LaunchError newErrorCode);
+
     ProcessState state;
     pid_t pid;
     int childStatus;
     int launchErrno;
-    LaunchErrorCode launchErrorCode;
+    LaunchError launchErrorCode;
     rusage usage;
+};
+
+
+/****************************************************************************/
+/* PROCESS FDS                                                              */
+/****************************************************************************/
+
+struct ProcessFds {
+    ProcessFds();
+
+    void closeRemainingFds();
+    void dupToStdStreams();
+    void close();
+
+    void encodeToBuffer(char * buffer, size_t bufferSize) const;
+    void decodeFromBuffer(const char * buffer);
+
+    void writeStatus(const ProcessStatus & status) const;
+
+    int stdIn;
+    int stdOut;
+    int stdErr;
+    int statusFd;
 };
 
 }

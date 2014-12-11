@@ -19,16 +19,16 @@ using namespace Datacratic;
 namespace Datacratic {
 
 std::string
-strLaunchError(LaunchErrorCode error)
+strLaunchError(LaunchError error)
 {
     switch (error) {
-    case E_NONE: return "no error";
-    case E_READ_STATUS_PIPE: return "read() on status pipe";
-    case E_STATUS_PIPE_WRONG_LENGTH:
+    case LaunchError::NONE: return "no error";
+    case LaunchError::READ_STATUS_PIPE: return "read() on status pipe";
+    case LaunchError::STATUS_PIPE_WRONG_LENGTH:
         return "wrong message size reading launch pipe";
-    case E_SUBTASK_LAUNCH: return "exec() launching subtask";
-    case E_SUBTASK_WAITPID: return "waitpid waiting for subtask";
-    case E_WRONG_CHILD: return "waitpid() returned the wrong child";
+    case LaunchError::SUBTASK_LAUNCH: return "exec() launching subtask";
+    case LaunchError::SUBTASK_WAITPID: return "waitpid waiting for subtask";
+    case LaunchError::WRONG_CHILD: return "waitpid() returned the wrong child";
     }
     throw ML::Exception("unknown error launch error code %d",
                         error);
@@ -38,15 +38,41 @@ std::string
 statusStateAsString(ProcessState statusState)
 {
     switch (statusState) {
-    case ST_UNKNOWN: return "UNKNOWN";
-    case ST_LAUNCHING: return "LAUNCHING";
-    case ST_RUNNING: return "RUNNING";
-    case ST_STOPPED: return "STOPPED";
-    case ST_DONE: return "DONE";
+    case ProcessState::UNKNOWN: return "UNKNOWN";
+    case ProcessState::LAUNCHING: return "LAUNCHING";
+    case ProcessState::RUNNING: return "RUNNING";
+    case ProcessState::STOPPED: return "STOPPED";
+    case ProcessState::DONE: return "DONE";
     }
     throw ML::Exception("unknown status %d", statusState);
 }
 
+}
+
+
+/****************************************************************************/
+/* PROCESS STATUS                                                           */
+/****************************************************************************/
+
+ProcessStatus::
+ProcessStatus()
+{
+    // Doing it this way keeps ValGrind happy
+    ::memset(this, 0, sizeof(*this));
+
+    state = ProcessState::UNKNOWN;
+    pid = -1;
+    childStatus = -1;
+    launchErrno = 0;
+    launchErrorCode = LaunchError::NONE;
+}
+
+void
+ProcessStatus::
+setErrorCodes(int newLaunchErrno, LaunchError newErrorCode)
+{
+    launchErrno = newLaunchErrno;
+    launchErrorCode = newErrorCode;
 }
 
 
@@ -119,6 +145,7 @@ close()
 void
 ProcessFds::
 encodeToBuffer(char * buffer, size_t bufferSize)
+    const
 {
     int written = ::sprintf(buffer, "%.8x/%.8x/%.8x/%.8x",
                             stdIn, stdOut, stdErr, statusFd);
@@ -144,19 +171,14 @@ decodeFromBuffer(const char * buffer)
     }
 }
 
-/****************************************************************************/
-/* PROCESS STATUS                                                           */
-/****************************************************************************/
-
-ProcessStatus::
-ProcessStatus()
+void
+ProcessFds::
+writeStatus(const ProcessStatus & status)
+    const
 {
-    // Doing it this way keeps ValGrind happy
-    ::memset(this, 0, sizeof(*this));
-
-    state = ST_UNKNOWN;
-    pid = -1;
-    childStatus = -1;
-    launchErrno = 0;
-    launchErrorCode = E_NONE;
+    int res = ::write(statusFd, &status, sizeof(status));
+    if (res == -1)
+        throw ML::Exception(errno, "write");
+    else if (res != sizeof(status))
+        throw ML::Exception("writing of status is incomplete");
 }
