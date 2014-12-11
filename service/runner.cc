@@ -574,12 +574,43 @@ void
 Runner::Task::
 runWrapper(const vector<string> & command, ProcessFds & fds)
 {
+    static const char * appendStr = "../../../" BIN "/runner_helper";
+
+    auto dieWithErrno = [&] (const char * message) {
+        ProcessStatus status;
+
+        status.state = ProcessState::STOPPED;
+        status.setErrorCodes(errno, LaunchError::SUBTASK_LAUNCH);
+        fds.writeStatus(status);
+
+        throw ML::Exception(errno, message);
+    };
+
+    /* We need to deduce the absolute path to the helper by using the current
+       program as reference. The trick is to read the value of the
+       "/proc/self/exe" link and then to substitute the current program name
+       with a relative path to the helper program. */
+    char exeBuffer[16384];
+    ssize_t len = ::readlink("/proc/self/exe",
+                             exeBuffer, sizeof(exeBuffer) - 1);
+    if (len == -1) {
+        dieWithErrno("determining current program");
+    }
+    char * slash = ::strrchr(exeBuffer, '/');
+    slash++;
+    size_t appendSize = ::strlen(appendStr);
+    if (slash + appendSize > (exeBuffer + sizeof(exeBuffer) - 2)) {
+        dieWithErrno("preparing program value");
+    }
+    ::memcpy(slash, appendStr, appendSize);
+    slash[appendSize] = '\0';
+
     // Set up the arguments before we fork, as we don't want to call malloc()
     // from the fork, and it can be called from c_str() in theory.
-    size_t len = command.size();
+    len = command.size();
     char * argv[len + 3];
 
-    argv[0] = (char *) BIN "/runner_helper";
+    argv[0] = exeBuffer;
 
     size_t channelsSize = 4*2*4+3+1;
     char channels[channelsSize];
@@ -593,7 +624,7 @@ runWrapper(const vector<string> & command, ProcessFds & fds)
 
     int res = execv(argv[0], argv);
     if (res == -1) {
-        throw ML::Exception("You failed.");
+        dieWithErrno("launching runner helper");
     }
 
     throw ML::Exception("You are the King of Time!");
