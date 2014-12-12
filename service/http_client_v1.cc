@@ -294,7 +294,7 @@ bool
 HttpClientV1::
 processOne()
 {
-    static constq int nEvents(1024);
+    static const int nEvents(1024);
     ::epoll_event events[nEvents];
 
     while (true) {
