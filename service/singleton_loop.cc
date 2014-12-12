@@ -13,7 +13,7 @@ using namespace Datacratic;
 
 
 /****************************************************************************/
-/* HTTP CLIENT LOOP ADAPTOR                                                 */
+/* SINGLETON LOOP ADAPTOR                                                   */
 /****************************************************************************/
 
 SingletonLoopAdaptor::
@@ -50,7 +50,7 @@ removeSource(AsyncEventSource & source)
 
 
 /****************************************************************************/
-/* HTTP CLIENT LOOP                                                         */
+/* SINGLETON LOOP                                                           */
 /****************************************************************************/
 
 SingletonLoop::

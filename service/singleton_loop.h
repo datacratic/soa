@@ -5,7 +5,7 @@
 namespace Datacratic {
 
 /****************************************************************************/
-/* HTTP CLIENT LOOP ADAPTOR                                                 */
+/* SINGLETON LOOP ADAPTOR                                                   */
 /****************************************************************************/
 
 struct SingletonLoopAdaptor : public AsyncWriterSource {
@@ -18,7 +18,7 @@ struct SingletonLoopAdaptor : public AsyncWriterSource {
 
 
 /****************************************************************************/
-/* HTTP CLIENT LOOP                                                         */
+/* SINGLETON LOOP                                                           */
 /****************************************************************************/
 
 /* A minimalist event loop, similar to MessageLoop, that does not own pointers
