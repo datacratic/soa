@@ -43,9 +43,17 @@ void
 SingletonLoopAdaptor::
 removeSource(AsyncEventSource & source)
 {
+    int done(false);
+    auto onDone = [&] () {
+        done = true;
+        ML::futex_wake(done);
+    };
     int fd = source.selectFd();
+    unregisterFdCallback(fd, true, onDone);
+    while (!done) {
+        ML::futex_wait(done, false);
+    }
     removeFd(fd);
-    unregisterFdCallback(fd, true);
 }
 
 
