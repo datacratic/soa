@@ -10,9 +10,9 @@
 #include "jml/utils/exc_assert.h"
 
 #include "soa/types/url.h"
-#include "soa/service/message_loop.h"
 #include "soa/service/http_header.h"
 #include "soa/service/http_parsers.h"
+#include "soa/service/singleton_loop.h"
 
 #include "http_client_v2.h"
 
@@ -50,6 +50,16 @@ translateError(TcpConnectionCode code)
     }
 
     return error;
+}
+
+SingletonLoop &
+getHTTPClientLoop()
+{
+    static SingletonLoop loop;
+
+    loop.start();
+
+    return loop;
 }
 
 bool getExpectResponseBody(const HttpRequest & request)
@@ -432,11 +442,16 @@ HttpClientV2(const string & baseUrl, int numParallel, size_t queueSize)
         avlConnections_[i] = connPtr;
     }
     loop_.addSource("queue", queue_);
+
+    SingletonLoop & loop = getHTTPClientLoop();
+    loop.addSource(*this);
 }
 
 HttpClientV2::
 ~HttpClientV2()
 {
+    SingletonLoop & loop = getHTTPClientLoop();
+    loop.removeSource(*this);
     // cerr << "~HttpClient: " << this << "\n";
 }
 
@@ -453,6 +468,13 @@ HttpClientV2::
 processOne()
 {
     return loop_.processOne();
+}
+
+void
+HttpClientV2::
+enableDebug(bool value)
+{
+    debug_ = value;
 }
 
 void
