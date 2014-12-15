@@ -37,12 +37,7 @@ doRequest(const string & baseUrl, const string & resource,
 {
     ClientResponse response;
 
-    MessageLoop loop;
-    loop.start();
-
-    auto client = make_shared<HttpClient>(baseUrl);
-    loop.addSource("client", client);
-
+    HttpClient client(baseUrl, 4);
     int done(false);
     auto onResponse = [&] (const HttpRequest & rq,
                            HttpClientError error,
@@ -60,15 +55,13 @@ doRequest(const string & baseUrl, const string & resource,
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
 
-    CALL_MEMBER_FN(*client, func)(resource, cbs, queryParams, headers,
-                                  timeout);
+    CALL_MEMBER_FN(client, func)(resource, cbs, queryParams, headers,
+                                 timeout);
 
     while (!done) {
         int oldDone = done;
         ML::futex_wait(done, oldDone);
     }
-
-    loop.shutdown();
 
     return response;
 }
@@ -100,12 +93,7 @@ doUploadRequest(bool isPut,
 {
     ClientResponse response;
 
-    MessageLoop loop;
-    loop.start();
-
-    auto client = make_shared<HttpClient>(baseUrl);
-    loop.addSource("client", client);
-
+    HttpClient client(baseUrl, 4);
     int done(false);
     auto onResponse = [&] (const HttpRequest & rq,
                            HttpClientError error,
@@ -125,18 +113,16 @@ doUploadRequest(bool isPut,
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
     HttpRequest::Content content(body, type);
     if (isPut) {
-        client->put(resource, cbs, content);
+        client.put(resource, cbs, content);
     }
     else {
-        client->post(resource, cbs, content);
+        client.post(resource, cbs, content);
     }
 
     while (!done) {
         int oldDone = done;
         ML::futex_wait(done, oldDone);
     }
-
-    loop.shutdown();
 
     return response;
 }
@@ -242,6 +228,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
         string body = get<2>(resp);
         BOOST_CHECK_EQUAL(body, "?value=hello");
     }
+
+    service.shutdown();
 }
 #endif
 
@@ -267,6 +255,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_post )
         BOOST_CHECK_EQUAL(jsonBody["payload"], "post body");
         BOOST_CHECK_EQUAL(jsonBody["type"], "application/x-nothing");
     }
+
+    service.shutdown();
 }
 #endif
 
@@ -293,6 +283,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     BOOST_CHECK_EQUAL(jsonBody["verb"], "PUT");
     BOOST_CHECK_EQUAL(jsonBody["payload"], bigBody);
     BOOST_CHECK_EQUAL(jsonBody["type"], "application/x-nothing");
+
+    service.shutdown();
 }
 #endif
 
@@ -313,6 +305,8 @@ BOOST_AUTO_TEST_CASE( http_test_client_delete )
 
     BOOST_CHECK_EQUAL(get<0>(resp), HttpClientError::None);
     BOOST_CHECK_EQUAL(get<1>(resp), 200);
+
+    service.shutdown();
 }
 #endif
 
@@ -327,12 +321,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_put_multi )
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
 
-    MessageLoop loop;
-    loop.start();
-
-    auto client = make_shared<HttpClient>(baseUrl);
-    loop.addSource("client", client);
-
+    auto client = make_shared<HttpClient>(baseUrl, 4);
     size_t maxRequests(500);
     int done(0);
 
@@ -348,7 +337,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_put_multi )
 
     for (size_t i = 0; i < maxRequests; i++) {
         auto sendBody = makeBody(i);
-        auto onResponse = [&, sendBody] (const HttpRequest & rq,
+        auto onResponse = [ &, sendBody] (const HttpRequest & rq,
                                          HttpClientError error,
                                          int status,
                                          string && headers,
@@ -377,7 +366,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_put_multi )
         ML::futex_wait(done, oldDone);
     }
 
-    loop.shutdown();
+    service.shutdown();
 }
 #endif
 
@@ -402,12 +391,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
         string baseUrl("http://127.0.0.1:"
                        + to_string(service.port()));
 
-        MessageLoop loop;
-        loop.start();
-
         auto client = make_shared<HttpClient>(baseUrl, numParallel);
-        loop.addSource("client", client);
-
         int maxReqs(30000), numReqs(0), missedReqs(0);
         int numResponses(0);
 
@@ -465,8 +449,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
         }
         ::fprintf(stderr, "performed %d requests; missed: %d\n",
                   maxReqs, missedReqs);
-
-        loop.shutdown();
+        service.shutdown();
     };
 
     doStressTest(1);
@@ -494,7 +477,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
 
     auto doGet = [&] (HttpClient & getClient) {
         int done(false);
-
         auto onDone = [&] (const HttpRequest & rq,
                            HttpClientError errorCode, int status,
                            string && headers, string && body) {
@@ -523,6 +505,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
     HttpClient client2("http://nowhere", 1);
     client2 = move(client1);
     doGet(client2);
+
+    service.shutdown();
 }
 #endif
 
@@ -545,9 +529,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_unlimited_queue )
                    + to_string(service.port()));
 
     auto client = make_shared<HttpClient>(baseUrl, 4, 0);
-    loop.addSource("client", client);
-    client->waitConnectionState(AsyncEventSource::CONNECTED);
-
     atomic<int> pending(0);
     int done(0);
 
@@ -575,8 +556,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_unlimited_queue )
         cerr << "requests done: " + to_string(done) + "\n";
     }
 
-    loop.removeSource(client.get());
-    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
+    service.shutdown();
 }
 #endif
 
@@ -594,8 +574,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
 
-    auto client = make_shared<HttpClient>(baseUrl);
-    client->debug(true);
+    auto client = make_shared<HttpClient>(baseUrl, 4);
+    client->enableDebug(true);
     client->sendExpect100Continue(true);
 
     HttpHeader sentHeaders;
@@ -609,18 +589,19 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
     {
         int done(false);
         string body;
-        auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
-            [&] (const HttpRequest &, HttpClientError error,
-                 int statusCode, std::string &&,
-                 std::string && newBody) {
+        auto onResponse = [&] (const HttpRequest &, HttpClientError error,
+                               int statusCode, std::string &&,
+                               std::string && newBody) {
             BOOST_CHECK_EQUAL(error, HttpClientError::None);
             BOOST_CHECK_EQUAL(statusCode, 200);
             body = move(newBody);
             done = true;
             ML::futex_wake(done);
-        });
+        };
+        auto callbacks
+            = std::make_shared<HttpClientSimpleCallbacks>(onResponse);
 
-        const std::string& smallPayload = randomString(20);
+        const std::string smallPayload = randomString(20);
         HttpRequest::Content content(smallPayload, "application/x-nothing");
         client->post("/post-test", callbacks, content);
 
@@ -634,17 +615,18 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
     {
         int done(false);
         string body;
-        auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
-            [&](const HttpRequest&, HttpClientError error,
-                int statusCode, std::string &&,
-                std::string&& newBody) {
+        auto onResponse = [&] (const HttpRequest &, HttpClientError error,
+                               int statusCode, std::string &&,
+                               std::string && newBody) {
             BOOST_CHECK_EQUAL(error, HttpClientError::None);
             body = move(newBody);
             done = true;
             ML::futex_wake(done);
-        });
+        };
+        auto callbacks
+            = std::make_shared<HttpClientSimpleCallbacks>(onResponse);
 
-        const std::string& bigPayload = randomString(2024);
+        const std::string & bigPayload = randomString(2024);
         HttpRequest::Content content(bigPayload, "application/x-nothing");
         client->post("/post-test", callbacks, content);
 
@@ -652,7 +634,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
             ML::futex_wait(done, false);
         }
 
-        // BOOST_CHECK_EQUAL(getClientHeader(body, "expect"), "100-continue");
+        BOOST_CHECK_EQUAL(getClientHeader(body, "expect"), "100-continue");
     }
 
     client->sendExpect100Continue(false);
@@ -660,16 +642,18 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
     {
         int done(false);
         string body;
-        auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
-            [&](const HttpRequest&, HttpClientError error,
-                int statusCode, std::string&&, std::string&& newBody) {
+        auto onResponse = [&] (const HttpRequest &, HttpClientError error,
+                               int statusCode, std::string &&,
+                               std::string && newBody) {
             BOOST_CHECK_EQUAL(error, HttpClientError::None);
             body = move(newBody);
             done = true;
             ML::futex_wake(done);
-        });
+        };
+        auto callbacks
+            = std::make_shared<HttpClientSimpleCallbacks>(onResponse);
 
-        const std::string& bigPayload = randomString(2024);
+        const std::string & bigPayload = randomString(2024);
         HttpRequest::Content content(bigPayload, "application/x-nothing");
         client->post("/post-test", callbacks, content);
 
@@ -679,6 +663,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
 
         BOOST_CHECK_EQUAL(getClientHeader(body, "expect"), "");
     }
+
+    service.shutdown();
 }
 #endif
 
@@ -694,14 +680,9 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_timeout )
     service.start();
     service.waitListening();
 
-    MessageLoop loop;
-    loop.start();
-
     string baseUrl("http://127.0.0.1:" + to_string(service.port()));
 
     auto client = make_shared<HttpClient>(baseUrl, 1);
-    loop.addSource("client", client);
-
     int done(0);
     auto onDone = [&] (const HttpRequest & rq,
                        HttpClientError errorCode, int status,
@@ -717,7 +698,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_timeout )
         ML::futex_wait(done, done);
     }
 
-    loop.removeSourceSync(client.get());
+    service.shutdown();
 }
 #endif
 
@@ -735,8 +716,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
     service.start();
     service.waitListening();
 
-    MessageLoop loop;
-    loop.start();
 
     string baseUrl("http://127.0.0.1:" + to_string(service.port()));
 
@@ -744,8 +723,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
     {
         cerr << "* connection-close\n";
         auto client = make_shared<HttpClient>(baseUrl, 1);
-        loop.addSource("client", client);
-
         int done(0);
         auto onDone = [&] (const HttpRequest & rq,
                            HttpClientError errorCode, int status,
@@ -760,16 +737,12 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
         while (done < 2) {
             ML::futex_wait(done, done);
         }
-
-        loop.removeSourceSync(client.get());
     }
 
     /* response sent, no "Connection: close" header */
     {
         cerr << "* no connection-close\n";
         auto client = make_shared<HttpClient>(baseUrl, 1);
-        loop.addSource("client", client);
-
         int done(0);
         auto onDone = [&] (const HttpRequest & rq,
                            HttpClientError errorCode, int status,
@@ -784,16 +757,12 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
         while (done < 2) {
             ML::futex_wait(done, done);
         }
-
-        loop.removeSourceSync(client.get());
     }
 
     /* response not sent */
     {
         cerr << "* no response at all\n";
         auto client = make_shared<HttpClient>(baseUrl, 1);
-        loop.addSource("client", client);
-
         int done(0);
         auto onDone = [&] (const HttpRequest & rq,
                            HttpClientError errorCode, int status,
@@ -808,8 +777,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
         while (done < 2) {
             ML::futex_wait(done, done);
         }
-
-        loop.removeSourceSync(client.get());
     }
+
+    service.shutdown();
 }
 #endif

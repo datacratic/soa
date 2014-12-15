@@ -102,7 +102,8 @@ private:
 /* HTTP CLIENT V2                                                           */
 /****************************************************************************/
 
-struct HttpClientV2 : public HttpClientImpl {
+struct HttpClientV2 : public AsyncEventSource,
+                      public HttpClientImpl {
     HttpClientV2(const std::string & baseUrl,
                  int numParallel, size_t queueSize);
     HttpClientV2(HttpClient && other) = delete;
@@ -115,6 +116,7 @@ struct HttpClientV2 : public HttpClientImpl {
     virtual bool processOne();
 
     /* HttpClientImpl */
+    void enableDebug(bool value);
     void enableSSLChecks(bool value);
     void sendExpect100Continue(bool value);
     void enableTcpNoDelay(bool value);
