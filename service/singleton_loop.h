@@ -8,12 +8,15 @@ namespace Datacratic {
 /* SINGLETON LOOP ADAPTOR                                                   */
 /****************************************************************************/
 
+/* This adaptor class is meant to be instantiated from SingletonLoop. It
+ * subclasses AsyncWriterSource in order to use its protected epoll
+ * interface. */
 struct SingletonLoopAdaptor : public AsyncWriterSource {
     SingletonLoopAdaptor();
     ~SingletonLoopAdaptor();
 
-    void removeSource(AsyncEventSource & source);
     void addSource(AsyncEventSource & newSource);
+    void removeSource(const AsyncEventSource & source);
 };
 
 
@@ -40,7 +43,7 @@ struct SingletonLoop {
        - that events being processed will not be interfered with
        - that no more events are going to be handled when it returns
     */
-    void removeSource(AsyncEventSource & source);
+    void removeSource(const AsyncEventSource & source);
 
 private:
     bool started_;

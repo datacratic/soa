@@ -41,7 +41,7 @@ addSource(AsyncEventSource & newSource)
 
 void
 SingletonLoopAdaptor::
-removeSource(AsyncEventSource & source)
+removeSource(const AsyncEventSource & source)
 {
     int done(false);
     auto onDone = [&] () {
@@ -105,7 +105,7 @@ addSource(AsyncEventSource & newSource)
 
 void
 SingletonLoop::
-removeSource(AsyncEventSource & source)
+removeSource(const AsyncEventSource & source)
 {
     adaptor_->removeSource(source);
 }
