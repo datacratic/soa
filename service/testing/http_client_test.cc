@@ -489,16 +489,10 @@ BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
     service.start();
     service.waitListening();
 
-    MessageLoop loop;
-    loop.start();
-
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
 
     auto doGet = [&] (HttpClient & getClient) {
-        loop.addSource("client", getClient);
-        getClient.waitConnectionState(AsyncEventSource::CONNECTED);
-
         int done(false);
 
         auto onDone = [&] (const HttpRequest & rq,
@@ -514,9 +508,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
             int old = done;
             ML::futex_wait(done, old);
         }
-
-        loop.removeSource(&getClient);
-        getClient.waitConnectionState(AsyncEventSource::DISCONNECTED);
     };
 
     /* move constructor */
@@ -549,9 +540,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_unlimited_queue )
     service.addResponse("GET", "/", 200, "coucou");
     service.start();
     service.waitListening();
-
-    MessageLoop loop;
-    loop.start();
 
     string baseUrl("http://127.0.0.1:"
                    + to_string(service.port()));
@@ -609,10 +597,6 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
     auto client = make_shared<HttpClient>(baseUrl);
     client->debug(true);
     client->sendExpect100Continue(true);
-
-    MessageLoop loop;
-    loop.addSource("HttpClient", client);
-    loop.start();
 
     HttpHeader sentHeaders;
 
