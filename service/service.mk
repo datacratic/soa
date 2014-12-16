@@ -31,6 +31,22 @@ $(eval $(call library,runner_common,$(LIBRECOSET_RUNNERCOMMON_SOURCES),$(LIBRECO
 $(eval $(call program,runner_helper,runner_common arch))
 
 
+# ASIO SERVICES
+
+LIBASIOSERVICES_SOURCES := \
+	asio_threaded_loop.cc
+
+LIBASIOSERVICES_LINK := \
+	arch \
+	boost_system
+
+$(eval $(call library,asio_services, \
+	$(LIBASIOSERVICES_SOURCES), \
+	$(LIBASIOSERVICES_LINK)))
+
+
+# SERVICES
+
 LIBSERVICES_SOURCES := \
 	transport.cc \
 	endpoint.cc \
@@ -64,13 +80,14 @@ LIBSERVICES_SOURCES := \
 	http_client.cc \
 	http_client_v1.cc \
 	http_client_v2.cc \
+	http_client_v3.cc \
 	http_parsers.cc \
 	http_rest_proxy.cc \
 	xml_helpers.cc \
 	nprobe.cc \
 	logs.cc
 
-LIBSERVICES_LINK := opstats curl curlpp boost_regex runner_common zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description
+LIBSERVICES_LINK := asio_services opstats curl curlpp boost_regex runner_common zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
@@ -120,16 +137,6 @@ $(eval $(call program,sns_send,cloud boost_program_options utils))
 SERVICEDUMP_LINK = services boost_program_options
 
 $(eval $(call program,service_dump,$(SERVICEDUMP_LINK)))
-
-
-# ASIO
-
-LIBSERVICESASIO_SOURCES := \
-	http_client_v3.cc
-
-LIBSERVICESASIO_LINK := boost_system
-
-$(eval $(call library,services_asio,$(LIBSERVICESASIO_SOURCES),$(LIBSERVICESASIO_LINK)))
 
 
 $(eval $(call include_sub_make,service_js,js,service_js.mk))
