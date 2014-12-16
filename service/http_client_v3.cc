@@ -272,7 +272,6 @@ startSendingRequest()
                                         content.str.size());
         const_buffers_2 writeBuffers(writeBuffer, writeBufferNext);
         async_write(socket_, writeBuffers, writeCompleteCond, onWriteResult);
-        cerr << "async_write\n";
     }
     else {
         const_buffers_1 writeBuffer(rqData_.c_str(), rqData_.size());
