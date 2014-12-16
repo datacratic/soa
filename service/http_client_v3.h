@@ -75,10 +75,13 @@ struct HttpConnectionV3 {
     /* tcp_socket overrides */
     void onClosed(bool fromPeer,
                   const std::vector<std::string> & msgs);
-    void onReceivedData(const char * data, size_t size);
+    void onReceivedData(size_t size);
+    void onReceiveError(const boost::system::error_code & ec,
+                        size_t bufferSize);
+
     typedef std::function<void(const boost::system::error_code & ec,
-                               size_t bufferSize)> OnReceivedDataFn;
-    OnReceivedDataFn onReceivedDataFn_;
+                               size_t bufferSize)> OnReadSome;
+    OnReadSome onReadSome_;
 
     void onException(const std::exception_ptr & excPtr);
 

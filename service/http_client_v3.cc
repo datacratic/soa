@@ -7,7 +7,6 @@
    - fixed failing tests:
      - timeouts
      - "expect 100 Continue"
-     - expected and unexepected closing of sockets
    - async lookups
    - SSL
 */
@@ -18,6 +17,7 @@
 #include <string>
 
 #include "boost/asio/connect.hpp"
+#include "boost/asio/error.hpp"
 
 #include "jml/arch/exception.h"
 #include "jml/utils/exc_assert.h"
@@ -59,7 +59,8 @@ translateError(const boost::system::error_code & code)
     else if (code == connection_refused) {
         error = HttpClientError::CouldNotConnect;
     }
-    else if (code == connection_reset) {
+    else if (code == connection_reset
+             || code == error::eof) {
         error = HttpClientError::Unknown;
     }
     else {
@@ -153,9 +154,13 @@ HttpConnectionV3(io_service & ioService,
         this->onParserDone(doClose);
     };
 
-    onReceivedDataFn_ = [&] (const boost::system::error_code & ec,
-                             size_t bufferSize) {
-        this->onReceivedData(recvBuffer_, bufferSize);
+    onReadSome_ = [&] (const boost::system::error_code & ec, size_t bufferSize) {
+        if (ec) {
+            this->onReceiveError(ec, bufferSize);
+        }
+        else {
+            this->onReceivedData(bufferSize);
+        }
     };
 
     recvBuffer_ = new char[recvBufferSize_];
@@ -263,7 +268,7 @@ startSendingRequest()
 
         socket_.async_read_some(boost::asio::buffer(recvBuffer_,
                                                     recvBufferSize_),
-                                onReceivedDataFn_);
+                                onReadSome_);
     };
 
     auto writeCompleteCond
@@ -292,13 +297,27 @@ startSendingRequest()
 
 void
 HttpConnectionV3::
-onReceivedData(const char * data, size_t size)
+onReceivedData(size_t size)
 {
-    parser_.feed(data, size);
+    parser_.feed(recvBuffer_, size);
     if (!parsingEnded_) {
         socket_.async_read_some(boost::asio::buffer(recvBuffer_,
                                                     recvBufferSize_),
-                                onReceivedDataFn_);
+                                onReadSome_);
+    }
+}
+
+void
+HttpConnectionV3::
+onReceiveError(const boost::system::error_code & ec,
+               size_t bufferSize)
+{
+    if (ec.category() == error::misc_category
+        && ec.value() == error::eof) {
+        this->handleEndOfRq(ec, true);
+    }
+    else {
+        throw ML::Exception("unhandled error: " + ec.message());
     }
 }
 
