@@ -21,6 +21,8 @@ namespace Datacratic {
 /* An Asio io_service running under a secondary thread, similarly to the
  * MessageLoop */
 struct AsioThreadedLoop {
+    ~AsioThreadedLoop();
+
     typedef std::function<void()> OnStarted;
     typedef std::function<void()> OnStopped;
 

@@ -18,6 +18,12 @@ using namespace Datacratic;
 /* ASIO THREADED LOOP                                                       */
 /****************************************************************************/
 
+AsioThreadedLoop::
+~AsioThreadedLoop()
+{
+    stopSync();
+}
+
 void
 AsioThreadedLoop::
 start(const OnStarted & onStarted)
