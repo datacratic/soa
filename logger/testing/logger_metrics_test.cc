@@ -53,14 +53,33 @@ BOOST_AUTO_TEST_CASE( test_logger_metrics ) {
 
     BOOST_CHECK_EQUAL(conn->count("test.lalmetrics"), 1);
     auto cursor = conn->query("test.lalmetrics", mongo::BSONObj());
-    if (cursor->more()) {
+    BOOST_CHECK(cursor->more());
+    {
         mongo::BSONObj p = cursor->next();
-        cerr << p.toString() << endl;
-        cerr << "FM:" << p["meta"]["a"]["b"].String() << endl;
-        cerr << "FM:" << p["meta"]["a"]["b"].String() << endl;
         BOOST_CHECK_EQUAL(p.getFieldDotted("meta.a.b").String(), "taratapom");
     }
-    else {
-        throw ML::Exception("Nothing to read");
+
+    logger->logMetrics({"fooValue"}, 123);
+    ML::sleep(1); // Leave time for async write
+    cursor = conn->query("test.lalmetrics", mongo::BSONObj());
+    BOOST_CHECK(cursor->more());
+    {
+        mongo::BSONObj p = cursor->next();
+        BOOST_CHECK_EQUAL(p["metrics"]["fooValue"].Number(), 123);
+    }
+
+    Json::Value block;
+    block["alpha"] = 1;
+    block["beta"] = 2;
+    block["coco"] = Json::objectValue;
+    block["coco"]["sanchez"] = 3;
+    logger->logMetrics(block);
+    ML::sleep(1); // Leave time for async write
+    cursor = conn->query("test.lalmetrics", mongo::BSONObj());
+    BOOST_CHECK(cursor->more());
+    {
+        mongo::BSONObj p = cursor->next();
+        cerr << p.toString() << endl;
+        //BOOST_CHECK_EQUAL(p["metrics"]["fooValue"].Number(), 123);
     }
 }

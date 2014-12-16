@@ -109,23 +109,45 @@ void LoggerMetricsMongo
         throw new ML::Exception(
             "You need to specify a path where to log the value");
     }
-    stringstream ss;
-    ss << val;
     stringstream newCat;
     newCat << category;
     for(string part: path){
         newCat << "." << part;
     }
     string newCatStr = newCat.str();
-    string str = ss.str();
     
+    BSONObj bsonObj;
+    //reference
+    //typedef boost::variant<int, float, double, size_t, uint32_t> Numeric;
+    int type = val.which();
+    if (type == 0) {
+        bsonObj = BSON(newCatStr << boost::get<int>(val));
+    }
+    else if (type == 1) {
+        bsonObj = BSON(newCatStr << boost::get<float>(val));
+    }
+    else if (type == 2) {
+        bsonObj = BSON(newCatStr << boost::get<double>(val));
+    }
+    else if (type == 3) {
+        bsonObj = BSON(newCatStr << (int)boost::get<size_t>(val));
+    }
+    else if (type == 4) {
+        bsonObj = BSON(newCatStr << boost::get<uint32_t>(val));
+    }
+    else {
+        stringstream ss;
+        ss << val;
+        string str = ss.str();
+        cerr << "Unknown type of NumOrStr for value: " << str << endl;
+        bsonObj = BSON(newCatStr << str);
+    }
     if(logToTerm){
-        cout << newCatStr << ": " << str << endl;
+        bsonObj.toString();
     }
     conn->update(db + "." + coll,
                 BSON("_id" << objectId),
-                BSON("$set" 
-                    << BSON(newCatStr << str)),
+                BSON("$set" << bsonObj),
                 true);
 }
 
