@@ -16,11 +16,12 @@
 #include "soa/types/url.h"
 #include "googleurl/src/gurl.h"
 #include "googleurl/src/url_util.h"
-// #include "soa/service/message_loop.h"
-#include "soa/service/http_header.h"
-#include "soa/service/http_parsers.h"
 
+#include "asio_threaded_loop.h"
 #include "asio_utils.h"
+#include "http_header.h"
+#include "http_parsers.h"
+
 #include "http_client_v3.h"
 
 using namespace std;
@@ -59,6 +60,15 @@ translateError(const boost::system::error_code & code)
     }
 
     return error;
+}
+
+io_service &
+getHTTPClientLoop()
+{
+    static AsioThreadedLoop loop;
+    loop.startSync();
+
+    return loop.getIoService();
 }
 
 bool getExpectResponseBody(const HttpRequest & request)
@@ -262,6 +272,7 @@ startSendingRequest()
                                         content.str.size());
         const_buffers_2 writeBuffers(writeBuffer, writeBufferNext);
         async_write(socket_, writeBuffers, writeCompleteCond, onWriteResult);
+        cerr << "async_write\n";
     }
     else {
         const_buffers_1 writeBuffer(rqData_.c_str(), rqData_.size());
@@ -476,19 +487,11 @@ handleTimeoutEvent(const ::epoll_event & event)
 /* HTTPCLIENT */
 
 HttpClientV3::
-HttpClientV3(io_service & ioService,
-             const string & baseUrl,
-             int numParallel, size_t queueSize)
-    : // HttpClientImpl(baseUrl, numParallel, queueSize),
-      // loop_(1, 0, -1),
-      ioService_(ioService),
-      baseUrl_(baseUrl),
-      nextAvail_(0),
-      queue_(ioService, queueSize)
+HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
+    : HttpClientImpl(baseUrl, numParallel, queueSize),
+      baseUrl_(baseUrl), nextAvail_(0)
 {
     ExcAssert(baseUrl.compare(0, 8, "https://") != 0);
-
-    queue_.setOnNotify([&]() { this->handleQueueEvent(); });
 
     // cerr << " baseUrl : " + baseUrl_ + "\n";
     Url url(baseUrl_);
@@ -509,6 +512,11 @@ HttpClientV3(io_service & ioService,
                                url.url->EffectiveIntPort());
     endpoint.address(address);
 
+    io_service & ioService = getHTTPClientLoop();
+
+    queue_.reset(new HttpRequestQueue(ioService, queueSize));
+    queue_->setOnNotify([&]() { this->handleQueueEvent(); });
+
     /* available connections */
     for (size_t i = 0; i < numParallel; i++) {
         auto connection = make_shared<HttpConnectionV3>(ioService, endpoint);
@@ -517,11 +525,9 @@ HttpClientV3(io_service & ioService,
             = [&, connectionPtr] (const boost::system::error_code & result) {
             handleHttpConnectionDone(connectionPtr, result);
         };
-        // loop_.addSource("connection" + to_string(i), connection);
         allConnections_.emplace_back(std::move(connection));
         avlConnections_.push_back(connectionPtr);
     }
-    // loop_.addSource("queue", queue_);
 }
 
 HttpClientV3::
@@ -530,22 +536,12 @@ HttpClientV3::
     // cerr << "~HttpClient: " << this << "\n";
 }
 
-#if 0
-int
+void
 HttpClientV3::
-selectFd()
-    const
+enableDebug(bool value)
 {
-    return loop_.selectFd();
+    debug_ = value;
 }
-
-bool
-HttpClientV3::
-processOne()
-{
-    return loop_.processOne();
-}
-#endif
 
 void
 HttpClientV3::
@@ -587,7 +583,7 @@ enqueueRequest(const string & verb, const string & resource,
     string url = baseUrl_ + resource + queryParams.uriEscaped();
     HttpRequest request(verb, url, callbacks, content, headers, timeout);
 
-    return queue_.push_back(std::move(request));
+    return queue_->push_back(std::move(request));
 }
 
 void
@@ -600,7 +596,7 @@ handleQueueEvent()
     // cerr << " numConnections: "  + to_string(numConnections) + "\n";
     if (numConnections > 0) {
         /* "0" has a special meaning for pop_front and must be avoided here */
-        auto requests = queue_.pop_front(numConnections);
+        auto requests = queue_->pop_front(numConnections);
         for (auto request: requests) {
             HttpConnectionV3 * conn = getConnection();
             if (!conn) {
@@ -621,7 +617,7 @@ HttpClientV3::
 handleHttpConnectionDone(HttpConnectionV3 * connection,
                          const boost::system::error_code & rc)
 {
-    auto requests = queue_.pop_front(1);
+    auto requests = queue_->pop_front(1);
     if (requests.size() > 0) {
         // cerr << "emptying queue...\n";
         connection->perform(move(requests[0]));

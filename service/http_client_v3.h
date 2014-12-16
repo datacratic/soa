@@ -18,7 +18,7 @@
 #include "soa/service/http_client.h"
 #include "soa/service/http_header.h"
 #include "soa/service/http_parsers.h"
-#include "soa/service/typed_message_channel_asio.h"
+#include "soa/service/asio_typed_message_queue.h"
 
 
 namespace Datacratic {
@@ -118,87 +118,16 @@ struct HttpConnectionV3 {
 
 /* HTTPCLIENT */
 
-struct HttpClientV3
-/* : public HttpClientImpl*/ {
-    HttpClientV3(boost::asio::io_service & ioService,
-                 const std::string & baseUrl,
-                 int numParallel = 1024, size_t queueSize = 0);
+struct HttpClientV3 : public HttpClientImpl {
+    HttpClientV3(const std::string & baseUrl,
+                 int numParallel, size_t queueSize);
     HttpClientV3(HttpClient && other) = delete;
     HttpClientV3(const HttpClient & other) = delete;
 
     ~HttpClientV3();
 
-    // /* AsyncEventSource */
-    // virtual int selectFd() const;
-    // virtual bool processOne();
-
-    /* HttpClient */
-    /** Performs a GET request, with "resource" as the location of the
-     *  resource on the server indicated in "baseUrl". Query parameters
-     *  should preferably be passed via "queryParams".
-     *
-     *  Returns "true" when the request could successfully be enqueued.
-     */
-    bool get(const std::string & resource,
-             const std::shared_ptr<HttpClientCallbacks> & callbacks,
-             const RestParams & queryParams = RestParams(),
-             const RestParams & headers = RestParams(),
-             int timeout = -1)
-    {
-        return enqueueRequest("GET", resource, callbacks,
-                              HttpRequest::Content(),
-                              queryParams, headers, timeout);
-    }
-
-    /** Performs a POST request, using similar parameters as get with the
-     * addition of "content" which defines the contents body and type.
-     *
-     *  Returns "true" when the request could successfully be enqueued.
-     */
-    bool post(const std::string & resource,
-              const std::shared_ptr<HttpClientCallbacks> & callbacks,
-              const HttpRequest::Content & content = HttpRequest::Content(),
-              const RestParams & queryParams = RestParams(),
-              const RestParams & headers = RestParams(),
-              int timeout = -1)
-    {
-        return enqueueRequest("POST", resource, callbacks, content,
-                              queryParams, headers, timeout);
-    }
-
-    /** Performs a PUT request in a similar fashion to "post" above.
-     *
-     *  Returns "true" when the request could successfully be enqueued.
-     */
-    bool put(const std::string & resource,
-             const std::shared_ptr<HttpClientCallbacks> & callbacks,
-             const HttpRequest::Content & content = HttpRequest::Content(),
-             const RestParams & queryParams = RestParams(),
-             const RestParams & headers = RestParams(),
-             int timeout = -1)
-    {
-        return enqueueRequest("PUT", resource, callbacks, content,
-                              queryParams, headers, timeout);
-    }
-
-    /** Performs a DELETE request. Note that this method cannot be named
-     * "delete", which is a reserved keyword in C++.
-     *
-     *  Returns "true" when the request could successfully be enqueued.
-     */
-    bool del(const std::string & resource,
-             const std::shared_ptr<HttpClientCallbacks> & callbacks,
-             const RestParams & queryParams = RestParams(),
-             const RestParams & headers = RestParams(),
-             int timeout = -1)
-    {
-        return enqueueRequest("DELETE", resource, callbacks,
-                              HttpRequest::Content(),
-                              queryParams, headers, timeout);
-    }
-
-
     /* HttpClientImpl */
+    virtual void enableDebug(bool value);
     void enableSSLChecks(bool value);
     void sendExpect100Continue(bool value);
     void enableTcpNoDelay(bool value);
@@ -215,13 +144,15 @@ struct HttpClientV3
     size_t queuedRequests()
         const
     {
-        return queue_.size();
+        return (queue_ ? queue_->size() : 0);
     }
 
     HttpClient & operator = (HttpClient && other) = delete;
     HttpClient & operator = (const HttpClient & other) = delete;
 
 private:
+    typedef AsioTypedMessageQueue<HttpRequest> HttpRequestQueue;
+
     void handleQueueEvent();
 
     void handleHttpConnectionDone(HttpConnectionV3 * connection,
@@ -229,9 +160,6 @@ private:
 
     HttpConnectionV3 * getConnection();
     void releaseConnection(HttpConnectionV3 * connection);
-
-    // MessageLoop loop_;
-    boost::asio::io_service & ioService_;
 
     std::string baseUrl_;
     boost::asio::ip::tcp::endpoint endpoint_;
@@ -242,7 +170,7 @@ private:
     std::vector<HttpConnectionV3 *> avlConnections_;
     size_t nextAvail_;
 
-    TypedMessageQueueAsio<HttpRequest> queue_; /* queued requests */
+    std::unique_ptr<HttpRequestQueue> queue_;
 
     HttpConnectionV3::OnDone onHttpConnectionDone_;
 };
