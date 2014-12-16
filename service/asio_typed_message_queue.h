@@ -1,4 +1,4 @@
-/* typed_message_queue_asiof.h                                     -*- C++ -*-
+/* asio_typed_message_queue.h                                        -*-C++-*-
    Wolfgang Sourdeau, 2 Dec 2014
    Copyright (c) 2014 Datacratic.  All rights reserved.
 */
@@ -13,17 +13,17 @@
 
 namespace Datacratic {
 
-/*****************************************************************************
- * TYPED MESSAGE QUEUE ASIO                                                  *
- *****************************************************************************/
+/****************************************************************************/
+/* TYPED MESSAGE QUEUE ASIO                                                 */
+/****************************************************************************/
 
 /* Same as TypedMessageQueue, ported to boost::asio */
 template<typename Message>
-struct TypedMessageQueueAsio
+struct AsioTypedMessageQueue
 {
     typedef std::function<void ()> OnNotify;
 
-    TypedMessageQueueAsio(boost::asio::io_service & ioService,
+    AsioTypedMessageQueue(boost::asio::io_service & ioService,
                           size_t maxMessages = 0,
                           const OnNotify & onNotify = nullptr)
         : ioService_(ioService),
@@ -103,7 +103,6 @@ private:
     void notifyReceiver()
     {
         auto doNotify = [&] () {
-            std::cerr << "doNotify\n";
             this->onNotify();
         };
         ioService_.post(doNotify);
