@@ -3,6 +3,15 @@
    Copyright (c) 2014 Datacratic.  All rights reserved.
 */
 
+/* TODO:
+   - fixed failing tests:
+     - timeouts
+     - "expect 100 Continue"
+     - expected and unexepected closing of sockets
+   - async lookups
+   - SSL
+*/
+
 #include <errno.h>
 #include <sys/timerfd.h>
 
