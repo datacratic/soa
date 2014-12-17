@@ -6,7 +6,6 @@
 /* TODO:
    - fixed failing tests:
      - "expect 100 Continue"
-   - async lookups
    - SSL
 */
 
@@ -43,6 +42,9 @@ namespace {
 
 static auto cancelledCode = make_error_code(error::operation_aborted);
 static auto eofCode = make_error_code(error::eof);
+static auto unreachableCode = make_error_code(error::host_unreachable);
+
+static asio::ip::tcp::resolver::iterator endIterator;
 
 HttpClientError
 translateError(const system::error_code & code)
@@ -58,7 +60,8 @@ translateError(const system::error_code & code)
     else if (code == errc::host_unreachable) {
         error = HttpClientError::HostNotFound;
     }
-    else if (code == errc::connection_refused) {
+    else if (code == errc::connection_refused
+             || code == errc::network_unreachable) {
         error = HttpClientError::CouldNotConnect;
     }
     else if (code == errc::connection_reset
@@ -66,8 +69,8 @@ translateError(const system::error_code & code)
         error = HttpClientError::Unknown;
     }
     else {
-        ::fprintf(stderr, "returning 'unknown' for code: %s\n",
-                  code.message().c_str());
+        ::fprintf(stderr, "returning 'unknown' for code (%d): %s\n",
+                  code.value(), code.message().c_str());
         error = HttpClientError::Unknown;
     }
 
@@ -127,13 +130,11 @@ makeRequestStr(const HttpRequest & request)
 /* HTTP CONNECTION */
 
 HttpConnectionV3::
-HttpConnectionV3(io_service & ioService,
-                 const ip::tcp::endpoint & endpoint)
+HttpConnectionV3(io_service & ioService)
     : socket_(ioService), connected_(false),
-      endpoint_(endpoint), responseState_(IDLE),
-      requestEnded_(false), parsingEnded_(false),
+      responseState_(IDLE), requestEnded_(false), parsingEnded_(false),
       recvBuffer_(nullptr), recvBufferSize_(262144),
-      timeoutTimer_(ioService)
+      resolver_(ioService), timeoutTimer_(ioService)
 {
     // cerr << "HttpConnectionV3(): " << this << "\n";
 
@@ -210,21 +211,76 @@ perform(HttpRequest && request)
 
     request_ = move(request);
 
-    if (queueEnabled()) {
+    if (connected_) {
         startSendingRequest();
     }
     else {
+        resolveAndConnect();
+    }
+}
+
+void
+HttpConnectionV3::
+resolveAndConnect()
+{
+    endpoints_.clear();
+    currentEndpoint_ = 0;
+
+    // cerr << " baseUrl : " + baseUrl_ + "\n";
+    Url url(request_.url_);
+
+    int port = url.url->EffectiveIntPort();
+    if (url.hostIsIpAddress()) {
+        ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), port);
+        ip::address address(ip::address_v4::from_string(url.host()));
+        endpoint.address(address);
+        endpoints_.emplace_back(move(endpoint));
+        connect();
+    }
+    else {
+        ip::tcp::resolver::query query(url.host(), to_string(port));
+        auto onResolveFn = [&] (const system::error_code & ec,
+                                asio::ip::tcp::resolver::iterator iterator) {
+            if (ec) {
+                handleEndOfRq(unreachableCode, true);
+            }
+            else {
+                while (iterator != endIterator) {
+                    endpoints_.push_back(*iterator);
+                }
+                connect();
+            }
+        };
+        resolver_.async_resolve(query, onResolveFn);
+    }
+}
+
+void
+HttpConnectionV3::
+connect()
+{
+    if (currentEndpoint_ < endpoints_.size()) {
         auto onConnectionResult = [&] (const system::error_code & ec) {
-            if (!ec) {
+            if (ec) {
+                if (ec == errc::connection_refused) {
+                    currentEndpoint_++;
+                    connect();
+                }
+                else {
+                    handleEndOfRq(ec, false);
+                }
+            }
+            else {
                 connected_ = true;
                 socket_.native_non_blocking(true);
                 startSendingRequest();
             }
-            else {
-                handleEndOfRq(ec, false);
-            }
         };
-        socket_.async_connect(endpoint_, onConnectionResult);
+        socket_.async_connect(endpoints_[currentEndpoint_],
+                              onConnectionResult);
+    }
+    else {
+        handleEndOfRq(unreachableCode, true);
     }
 }
 
@@ -299,8 +355,7 @@ onWrittenData(size_t written)
     responseState_ = IDLE;
     parsingEnded_ = false;
 
-    socket_.async_read_some(boost::asio::buffer(recvBuffer_,
-                                                recvBufferSize_),
+    socket_.async_read_some(asio::buffer(recvBuffer_, recvBufferSize_),
                             onReadSome_);
 }
 
@@ -310,8 +365,7 @@ onReceivedData(size_t size)
 {
     parser_.feed(recvBuffer_, size);
     if (!parsingEnded_) {
-        socket_.async_read_some(boost::asio::buffer(recvBuffer_,
-                                                    recvBufferSize_),
+        socket_.async_read_some(asio::buffer(recvBuffer_, recvBufferSize_),
                                 onReadSome_);
     }
 }
@@ -449,7 +503,7 @@ HttpConnectionV3::
 armRequestTimer()
 {
     if (request_.timeout_ > 0) {
-        auto secs = boost::posix_time::seconds(request_.timeout_);
+        auto secs = posix_time::seconds(request_.timeout_);
         timeoutTimer_.expires_from_now(secs);
         auto handleTimeoutEventFn = [&] (const system::error_code & ec) {
             this->handleTimeoutEvent(ec);
@@ -484,25 +538,6 @@ HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
 {
     ExcAssert(baseUrl.compare(0, 8, "https://") != 0);
 
-    // cerr << " baseUrl : " + baseUrl_ + "\n";
-    Url url(baseUrl_);
-
-#if 0
-    ip::tcp::resolver resolver(ioService);
-
-    ip::tcp::resolver::query query(url.host(),
-                                                to_string(url.url->EffectiveIntPort()));
-    system::error_code error;
-    ip::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query, error);
-    if (error) {
-        throw ML::Exception("resolve error");
-    }
-#endif
-    ip::address address(ip::address_v4::from_string("127.0.0.1"));
-    ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(),
-                               url.url->EffectiveIntPort());
-    endpoint.address(address);
-
     io_service & ioService = getHTTPClientLoop();
 
     queue_.reset(new HttpRequestQueue(ioService, queueSize));
@@ -510,7 +545,7 @@ HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
 
     /* available connections */
     for (size_t i = 0; i < numParallel; i++) {
-        auto connection = make_shared<HttpConnectionV3>(ioService, endpoint);
+        auto connection = make_shared<HttpConnectionV3>(ioService);
         HttpConnectionV3 * connectionPtr = connection.get();
         connection->onDone
             = [&, connectionPtr] (const system::error_code & result) {

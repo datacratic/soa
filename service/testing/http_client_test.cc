@@ -37,7 +37,7 @@ doRequest(const string & baseUrl, const string & resource,
 {
     ClientResponse response;
 
-    HttpClient client(baseUrl, 4);
+    HttpClient client(baseUrl, 1);
     int done(false);
     auto onResponse = [&] (const HttpRequest & rq,
                            HttpClientError error,
@@ -93,7 +93,7 @@ doUploadRequest(bool isPut,
 {
     ClientResponse response;
 
-    HttpClient client(baseUrl, 4);
+    HttpClient client(baseUrl, 1);
     int done(false);
     auto onResponse = [&] (const HttpRequest & rq,
                            HttpClientError error,

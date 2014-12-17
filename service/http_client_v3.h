@@ -34,8 +34,7 @@ struct HttpConnectionV3 {
         PENDING
     };
 
-    HttpConnectionV3(boost::asio::io_service & ioService,
-                     const boost::asio::ip::tcp::endpoint & endpoint);
+    HttpConnectionV3(boost::asio::io_service & ioService);
 
     HttpConnectionV3(const HttpConnectionV3 & other) = delete;
 
@@ -59,12 +58,6 @@ struct HttpConnectionV3 {
     /* AsyncWriterSource methods */
     void requestClose();
     void doClose();
-
-    bool queueEnabled()
-        const
-    {
-        return connected_;
-    }
 
     typedef std::function<void(const boost::system::error_code &,
                                std::size_t)> OnWritten;
@@ -95,6 +88,8 @@ struct HttpConnectionV3 {
     void onParserDone(bool onClose);
 
     void startSendingRequest();
+    void resolveAndConnect();
+    void connect();
 
     void handleEndOfRq(const boost::system::error_code & code,
                        bool requireClose);
@@ -119,6 +114,9 @@ struct HttpConnectionV3 {
     void cancelRequestTimer();
     void handleTimeoutEvent(const boost::system::error_code & ec);
 
+    boost::asio::ip::tcp::resolver resolver_;
+    std::vector<boost::asio::ip::tcp::endpoint> endpoints_;
+    int currentEndpoint_;
     boost::asio::deadline_timer timeoutTimer_;
 };
 
