@@ -49,17 +49,54 @@ LoggerMetricsMongo::LoggerMetricsMongo(Json::Value config,
 void LoggerMetricsMongo::logInCategory(const string& category,
     const Json::Value& json)
 {
+    struct Holder {
+        BSONObjBuilder * bson;
+        BSONArrayBuilder * arr;
+
+        Holder(BSONObjBuilder * bson) : bson(bson), arr(nullptr) {}
+        Holder(BSONArrayBuilder * arr) : bson(nullptr), arr(arr) {}
+
+        void append(const string & key, const Json::Value & v) {
+            if (v.isInt()) {
+                if (arr == nullptr) {
+                    bson->append(key, v.asInt());
+                }
+                else {
+                    arr->append(v.asInt());
+                }
+            }
+            else if (v.isUInt()) {
+                if (arr == nullptr) {
+                    bson->append(key, (uint32_t)v.asUInt());
+                }
+                else {
+                    arr->append((uint32_t)v.asUInt());
+                }
+            }
+            else if (v.isDouble()) {
+                if (arr == nullptr) {
+                    bson->append(key, v.asDouble());
+                }
+                else {
+                    arr->append(v.asDouble());
+                }
+            }
+            else {
+                if (arr == nullptr) {
+                    bson->append(key, v.asString().c_str());
+                }
+                else {
+                    arr->append(v.asString().c_str());
+                }
+            }
+        }
+    };
+
     BSONObjBuilder bson;
     vector<string> stack;
     function<void(const Json::Value&)> doit;
 
-    auto format = [](const Json::Value& v) -> string{
-        string str = v.toString();
-        if(v.isInt() || v.isUInt() || v.isDouble() || v.isNumeric()){
-            return str.substr(0, str.length() - 1);
-        }
-        return str.substr(1, str.length() - 3);
-    };
+    Holder bsonH(&bson);
 
     doit = [&](const Json::Value& v){
         for(auto it = v.begin(); it != v.end(); ++it){
@@ -77,12 +114,13 @@ void LoggerMetricsMongo::logInCategory(const string& category,
                 key << "." << it.memberName();
                 if(current.isArray()){
                     BSONArrayBuilder arr;
+                    Holder arrH(&arr);
                     for(const Json::Value el: current){
-                        arr.append(format(el));
+                        arrH.append("", el);
                     }
                     bson.append(key.str(), arr.arr());
                 }else{
-                    bson.append(key.str(), format(current));
+                    bsonH.append(key.str(), current);
                 }
             }
         }

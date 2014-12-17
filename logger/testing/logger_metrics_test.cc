@@ -79,7 +79,6 @@ BOOST_AUTO_TEST_CASE( test_logger_metrics ) {
     BOOST_CHECK(cursor->more());
     {
         mongo::BSONObj p = cursor->next();
-        cerr << p.toString() << endl;
-        //BOOST_CHECK_EQUAL(p["metrics"]["fooValue"].Number(), 123);
+        BOOST_CHECK_EQUAL(p["metrics"]["coco"]["sanchez"].Number(), 3);
     }
 }
