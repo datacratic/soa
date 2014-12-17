@@ -118,7 +118,6 @@ struct HttpClientV2 : public AsyncEventSource,
     /* HttpClientImpl */
     void enableDebug(bool value);
     void enableSSLChecks(bool value);
-    void sendExpect100Continue(bool value);
     void enableTcpNoDelay(bool value);
     void enablePipelining(bool value);
 

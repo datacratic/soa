@@ -166,13 +166,6 @@ enableSSLChecks(bool value)
 
 void
 HttpClientV1::
-sendExpect100Continue(bool value)
-{
-    expect100Continue_ = value;
-}
-
-void
-HttpClientV1::
 enableTcpNoDelay(bool value)
 {
     tcpNoDelay_ = value;
@@ -351,8 +344,7 @@ handleWakeupEvent()
         for (auto & request: requests) {
             HttpConnection *conn = getConnection();
             conn->request_ = move(request);
-            conn->perform(noSSLChecks_, expect100Continue_, tcpNoDelay_,
-                          debug_);
+            conn->perform(noSSLChecks_, tcpNoDelay_, debug_);
             multi_.add(&conn->easy_);
         }
     }
@@ -561,7 +553,7 @@ HttpConnection()
 void
 HttpClientV1::
 HttpConnection::
-perform(bool noSSLChecks, bool withExpect100Continue, bool tcpNoDelay, bool debug)
+perform(bool noSSLChecks, bool tcpNoDelay, bool debug)
 {
     // cerr << "* performRequest\n";
 
@@ -597,9 +589,9 @@ perform(bool noSSLChecks, bool withExpect100Continue, bool tcpNoDelay, bool debu
         curlHeaders.push_back("Content-Type: "
                               + request_->content_.contentType);
 
-        if (!withExpect100Continue) {
-            curlHeaders.push_back("Expect:");
-        }
+        /* Disable "Expect: 100 Continue" header that curl sets automatically
+           for uploads larger than 1 Kbyte */
+        curlHeaders.push_back("Expect:");
     }
     easy_.setOpt<curlopt::HttpHeader>(curlHeaders);
 

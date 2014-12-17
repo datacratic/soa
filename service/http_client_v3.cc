@@ -4,8 +4,6 @@
 */
 
 /* TODO:
-   - fixed failing tests:
-     - "expect 100 Continue"
    - SSL
 */
 
@@ -578,12 +576,6 @@ enableSSLChecks(bool value)
 void
 HttpClientV3::
 enableTcpNoDelay(bool value)
-{
-}
-
-void
-HttpClientV3::
-sendExpect100Continue(bool value)
 {
 }
 

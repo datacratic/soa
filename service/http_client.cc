@@ -116,8 +116,17 @@ HttpClient(const string & baseUrl, int numParallel, int queueSize,
     enableDebug(false);
     enableSSLChecks(true);
     enableTcpNoDelay(false);
-    sendExpect100Continue(true);
     enablePipelining(false);
+}
+
+void
+HttpClient::
+sendExpect100Continue(bool value)
+{
+    if (value) {
+        throw ML::Exception("HttpClient has no support for"
+                            " 'Expect: 100 Continue' requests");
+    }
 }
 
 

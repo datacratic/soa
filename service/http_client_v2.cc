@@ -491,12 +491,6 @@ enableTcpNoDelay(bool value)
 
 void
 HttpClientV2::
-sendExpect100Continue(bool value)
-{
-}
-
-void
-HttpClientV2::
 enablePipelining(bool value)
 {
     if (value) {
