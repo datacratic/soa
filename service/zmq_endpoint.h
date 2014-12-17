@@ -93,8 +93,6 @@ struct ZmqEventSource : public AsyncEventSource {
 
     virtual int selectFd() const;
 
-    virtual bool poll() const;
-
     virtual bool processOne();
 
     /** Handle a message.  The default implementation will call
@@ -150,7 +148,6 @@ struct ZmqBinaryEventSource : public AsyncEventSource {
     ZmqBinaryEventSource()
         : socket_(0)
     {
-        needsPoll = true;
     }
 
     ZmqBinaryEventSource(zmq::socket_t & socket,
@@ -158,13 +155,11 @@ struct ZmqBinaryEventSource : public AsyncEventSource {
         : messageHandler(std::move(messageHandler)),
           socket_(&socket)
     {
-        needsPoll = true;
     }
 
     void init(zmq::socket_t & socket)
     {
         socket_ = &socket;
-        needsPoll = true;
     }
 
     virtual int selectFd() const
@@ -174,34 +169,55 @@ struct ZmqBinaryEventSource : public AsyncEventSource {
         socket().getsockopt(ZMQ_FD, &res, &resSize);
         if (res == -1)
             THROW(ZmqLogs::error) << "no fd for zeromq socket" << std::endl;
+        std::cerr << "FDB " << res << std::endl;
         return res;
-    }
-
-    virtual bool poll() const
-    {
-        return getEvents(socket()).first;
     }
 
     virtual bool processOne()
     {
         ExcAssert(socket_);
 
-        std::vector<zmq::message_t> messages;
+        std::cerr << "PROCESS BINARY" << std::endl;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            uint32_t events;
+            size_t events_size = sizeof(events);
 
-        int64_t more = 1;
-        size_t more_size = sizeof (more);
-
-        while (more) {
-            zmq::message_t message;
-            bool got = socket_->recv(&message, messages.empty() ? ZMQ_NOBLOCK: 0);
-            if (!got) return false;  // no first part available
-            messages.emplace_back(std::move(message));
-            socket_->getsockopt(ZMQ_RCVMORE, &more, &more_size);
+            socket().getsockopt(ZMQ_EVENTS, &events, &events_size);
+            if((events & ZMQ_POLLIN) == 0)
+                return false;
         }
 
-        handleMessage(std::move(messages));
+        bool one = false;
+        for(;;) {
+            std::vector<zmq::message_t> messages;
 
-        return poll();
+            std::cerr << "PROCESS BINARY GOT A MESSAGE" << std::endl;
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                int64_t more = 1;
+                size_t more_size = sizeof (more);
+
+                while (more) {
+                    zmq::message_t message;
+                    bool got = socket_->recv(&message, ZMQ_DONTWAIT);
+                    if (!got) {
+                        std::cerr << "PROCESS BINARY EXITS EAGAIN" << std::endl;
+                        return one;
+                    }
+                    messages.emplace_back(std::move(message));
+                    socket_->getsockopt(ZMQ_RCVMORE, &more, &more_size);
+                }
+            }
+
+            std::cerr << "PROCESS BINARY IS HANDLING" << std::endl;
+            one = true;
+            handleMessage(std::move(messages));
+            std::cerr << "PROCESS BINARY IS DONE" << std::endl;
+        }
+
+        std::cerr << "PROCESS BINARY EXITS" << std::endl;
+        return one;
     }
 
     /** Handle a message.  The default implementation will call
@@ -224,7 +240,7 @@ struct ZmqBinaryEventSource : public AsyncEventSource {
     }
 
     zmq::socket_t * socket_;
-
+    std::mutex mutex;
 };
 
 
@@ -245,7 +261,6 @@ struct ZmqBinaryTypedEventSource: public AsyncEventSource {
     ZmqBinaryTypedEventSource()
         : socket_(0)
     {
-        needsPoll = true;
     }
 
     ZmqBinaryTypedEventSource(zmq::socket_t & socket,
@@ -253,13 +268,11 @@ struct ZmqBinaryTypedEventSource: public AsyncEventSource {
         : messageHandler(std::move(messageHandler)),
           socket_(&socket)
     {
-        needsPoll = true;
     }
 
     void init(zmq::socket_t & socket)
     {
         socket_ = &socket;
-        needsPoll = true;
     }
 
     virtual int selectFd() const
@@ -272,21 +285,30 @@ struct ZmqBinaryTypedEventSource: public AsyncEventSource {
         return res;
     }
 
-    virtual bool poll() const
-    {
-        return getEvents(socket()).first;
-    }
-
     virtual bool processOne()
     {
-        zmq::message_t message;
-        ExcAssert(socket_);
-        bool got = socket_->recv(&message, ZMQ_NOBLOCK);
-        if (!got) return false;
+        uint32_t events;
+        size_t events_size = sizeof(events);
 
-        handleMessage(* reinterpret_cast<const Arg *>(message.data()));
+        socket().getsockopt(ZMQ_EVENTS, &events, &events_size);
 
-        return poll();
+        if((events & ZMQ_POLLIN) == 0)
+            return false;
+
+        bool one = false;
+        for(;;) {
+            zmq::message_t message;
+            ExcAssert(socket_);
+            bool got = socket_->recv(&message, ZMQ_NOBLOCK);
+            if (!got) {
+                return one;
+            }
+
+            one = true;
+            handleMessage(* reinterpret_cast<const Arg *>(message.data()));
+        }
+
+        return one;
     }
 
     virtual void handleMessage(const Arg & arg)
@@ -991,13 +1013,13 @@ struct ZmqNamedProxy: public MessageLoop {
         return shardIndex;
     }
 
+    mutable ZmqEventSource::SocketLock socketLock_;
+
 protected:
     ConfigurationService::Watch serviceWatch, endpointWatch;
     std::shared_ptr<ConfigurationService> config;
     std::shared_ptr<zmq::context_t> context_;
     std::shared_ptr<zmq::socket_t> socket_;
-
-    mutable ZmqEventSource::SocketLock socketLock_;
 
     enum ConnectionType {
         NO_CONNECTION,        ///< No connection type yet

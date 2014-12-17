@@ -41,8 +41,7 @@ MessageLoop::
 MessageLoop(int numThreads, double maxAddedLatency, int epollTimeout)
     : sourceActions_([&] () { handleSourceActions(); }),
       numThreadsCreated(0),
-      shutdown_(true),
-      totalSleepTime_(0.0)
+      shutdown_(true)
 {
     init(numThreads, maxAddedLatency, epollTimeout);
 }
@@ -132,10 +131,12 @@ shutdown()
     ML::futex_wake(shutdown_);
     addSource("_shutdown", nullptr);
 
+    std::cerr << "WAITING " << threads.size() << std::endl;
     for (auto & t: threads)
         t.join();
     threads.clear();
 
+    std::cerr << "DONE WAITING" << std::endl;
     numThreadsCreated = 0;
 }
 
@@ -165,6 +166,7 @@ addSource(const std::string & name,
     //      << " needsPoll: " << needsPoll
     //      << endl;
 
+    std::cerr << "SOURCE " << name << std::endl;
     SourceEntry entry(name, source, priority);
     SourceAction newAction(SourceAction::ADD, move(entry));
 
@@ -178,6 +180,7 @@ addPeriodic(const std::string & name,
             std::function<void (uint64_t)> toRun,
             int priority)
 {
+    std::cerr << "PERIODIC " << name << std::endl;
     auto newPeriodic
         = make_shared<PeriodicEventSource>(timePeriodSeconds, toRun);
     return addSource(name, newPeriodic, priority);
@@ -230,93 +233,9 @@ void
 MessageLoop::
 runWorkerThread()
 {
-    Date lastCheck = Date::now();
-
-    ML::Duty_Cycle_Timer duty;
-
     while (!shutdown_) {
-        Date start = Date::now();
-
-        if (debug_) {
-            cerr << "handling events from " << sources.size()
-                 << " sources with needsPoll " << needsPoll << endl;
-            for (unsigned i = 0;  i < sources.size();  ++i)
-                cerr << sources[i].name << " " << sources[i].source->needsPoll << endl;
-        }
-
-        if (!needsPoll) {
-            Date beforeSleepTime;
-
-            // Now we've processed what we can, let's allow a sleep
-            auto beforeSleep = [&] ()
-                {
-                    duty.notifyBeforeSleep();
-                    beforeSleepTime = Date::now();
-                };
-
-            auto afterSleep = [&] ()
-                {
-                    double delta  = Date::now().secondsSince(beforeSleepTime);
-                    totalSleepTime_ += delta;
-                    duty.notifyAfterSleep();
-                };
-
-            // Maximum number of events to handle in handleEvents.
-            int maxEventsToHandle = 512;
-
-            // First time, we sleep for up to one second waiting for events to come
-            // in to the event loop, and handle as many as we can until we hit the
-            // limit or we're idle.
-            int res JML_UNUSED = handleEvents(999999 /* microseconds */, maxEventsToHandle,
-                                              nullptr, beforeSleep, afterSleep);
-            //cerr << "handleEvents returned " << res << endl;
-
-#if 0
-            while (res != 0) {
-                if (shutdown_)
-                    return;
-                
-                // Now we busy loop handling events while there is still more work to do
-                res = handleEvents(0 /* microseconds */, maxEventsToHandle,
-                                   nullptr, beforeSleep, afterSleep);
-            }
-#endif
-        }
-
-        if (shutdown_)
-            return;
-
-        // Do any outstanding work now
-        while (processOne())
-            if (shutdown_)
-                return;
-
-        // At this point, we've done as much work as we can (there is no more
-        // work to do).  We will now sleep for the maximum allowable delay
-        // time minus the time we spent working.  This allows us to batch up
-        // work to be done next time we wake up, rather then waking up all the
-        // time to do a little bit of work.  The busier we get, the less time
-        // we will sleep for until when we're completely busy we don't sleep
-        // at all.
-        Date end = Date::now();
-
-        double elapsed = end.secondsSince(start);
-        double sleepTime = maxAddedLatency_ - elapsed;
-
-        duty.notifyBeforeSleep();
-        if (sleepTime > 0) {
-            ML::futex_wait(shutdown_, 0, sleepTime);
-            totalSleepTime_ += sleepTime;
-        }
-        duty.notifyAfterSleep();
-        
-        if (lastCheck.secondsUntil(end) > 10.0) {
-            // auto stats = duty.stats();
-            //cerr << "message loop: wakeups " << stats.numWakeups
-            //     << " duty " << stats.duty_cycle() << endl;
-            lastCheck = end;
-            duty.clear();
-        }
+        getrusage(RUSAGE_THREAD, &resourceUsage);
+        processOne();
     }
 }
 
@@ -342,12 +261,12 @@ handleEpollEvent(epoll_event & event)
     
     AsyncEventSource * source
         = reinterpret_cast<AsyncEventSource *>(event.data.ptr);
-    
-    if (debug) {
-        ExcAssert(source->poll());
+
+    if(event.events & EPOLLIN) {    
+    //if (debug) {
+        //ExcAssert(source->poll());
         cerr << "message loop " << this << " with parent " << parent_
-             << " handing source " << ML::type_name(*source) << " poll result "
-             << Epoller::poll() << endl;
+             << " handing source " << ML::type_name(*source) << " " << endl;
     }
 
     int res = source->processOne();
@@ -389,35 +308,12 @@ processAddSource(const SourceEntry & entry)
     //      << " needsPoll: " << needsPoll
     //      << endl;
     int fd = entry.source->selectFd();
+    std::cerr << "ADD FD " << fd << " " << entry.name << std::endl;
     if (fd != -1)
         addFd(fd, entry.source.get());
 
-    if (!needsPoll && entry.source->needsPoll) {
-        needsPoll = true;
-        if (parent_) parent_->checkNeedsPoll();
-    }
-
     if (debug_) entry.source->debug(true);
     sources.push_back(entry);
-
-    if (needsPoll) {
-        string pollingSources;
-        
-        for (auto & s: sources) {
-            if (s.source->needsPoll) {
-                if (!pollingSources.empty())
-                    pollingSources += ", ";
-                pollingSources += s.name;
-            }
-        }
-        
-        double wakeupsPerSecond = 1.0 / maxAddedLatency_;
-        
-        LOG(Logs::warning)
-            << "message loop in polling mode will cause " << wakeupsPerSecond
-            << " context switches per second due to polling on sources "
-            << pollingSources << endl;
-    }
 
     entry.source->connectionState_ = AsyncEventSource::CONNECTED;
     ML::futex_wake(entry.source->connectionState_);
@@ -442,30 +338,8 @@ processRemoveSource(const SourceEntry & rmEntry)
     if (fd == -1) return;
     removeFd(fd);
 
-    // Make sure that our and our parent's value of needsPoll is up to date
-    bool sourceNeedsPoll = entry.source->needsPoll;
-    if (needsPoll && sourceNeedsPoll) {
-        bool oldNeedsPoll = needsPoll;
-        checkNeedsPoll();
-        if (oldNeedsPoll != needsPoll && parent_)
-            parent_->checkNeedsPoll();
-    }
-
     entry.source->connectionState_ = AsyncEventSource::DISCONNECTED;
     ML::futex_wake(entry.source->connectionState_);
-}
-
-bool
-MessageLoop::
-poll() const
-{
-    if (needsPoll) {
-        for (auto & s: sources)
-            if (s.source->poll())
-                return true;
-        return false;
-    }
-    else return Epoller::poll();
 }
 
 /** This function assumes that it's called by only a single thread. This
@@ -482,29 +356,7 @@ bool
 MessageLoop::
 processOne()
 {
-    bool more = false;
-
-    // NOTE: this is required for some buggy sources that don't have a reliable FD to
-    // sleep on.  It shouldn't be substantially less efficient.
-    if (needsPoll || true) {
-        more = sourceActions_.processOne();
-
-        for (unsigned i = 0;  i < sources.size();  ++i) {
-            try {
-                bool hasMore = sources[i].source->processOne();
-                if (debug_)
-                    cerr << "source " << sources[i].name << " has " << hasMore << endl;
-                more = more || hasMore;
-            } catch (...) {
-                cerr << "exception processing source " << sources[i].name
-                     << endl;
-                throw;
-            }
-        }
-    }
-    else more = Epoller::processOne();
-
-    return more;
+    return Epoller::processOne();
 }
 
 void
@@ -512,20 +364,6 @@ MessageLoop::
 debug(bool debugOn)
 {
     debug_ = debugOn;
-}
-
-void
-MessageLoop::
-checkNeedsPoll()
-{
-    bool newNeedsPoll = false;
-    for (unsigned i = 0;  i < sources.size() && !newNeedsPoll;  ++i)
-        newNeedsPoll = sources[i].source->needsPoll;
-
-    if (newNeedsPoll == needsPoll) return;
-
-    needsPoll = newNeedsPoll;
-    if (parent_) parent_->checkNeedsPoll();
 }
 
 } // namespace Datacratic

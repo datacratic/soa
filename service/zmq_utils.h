@@ -22,12 +22,6 @@
 #include "jml/arch/exception.h"
 #include "jml/compiler/compiler.h"
 
-#if 0
-#define BLOCK_FLAG 0
-#else
-#define BLOCK_FLAG ZMQ_DONTWAIT
-#endif
-
 namespace Datacratic {
 
 inline void setIdentity(zmq::socket_t & sock, const std::string & identity)
@@ -266,10 +260,10 @@ inline void sendAll(zmq::socket_t & sock,
         throw ML::Exception("can't send an empty message vector");
 
     for (unsigned i = 0;  i < message.size() - 1;  ++i)
-        if (!sendMesg(sock, message[i], ZMQ_SNDMORE | BLOCK_FLAG)) {
+        if (!sendMesg(sock, message[i], ZMQ_SNDMORE | ZMQ_DONTWAIT)) {
             throwSocketError(__FUNCTION__);
         }
-    if (!sendMesg(sock, message.back(), lastFlags | BLOCK_FLAG)) {
+    if (!sendMesg(sock, message.back(), lastFlags | ZMQ_DONTWAIT)) {
         throwSocketError(__FUNCTION__);
     }
 }
@@ -316,7 +310,7 @@ void sendMessage(zmq::socket_t & socket,
                  const Arg1 & arg1,
                  Args... args)
 {
-    if (!sendMesg(socket, arg1, ZMQ_SNDMORE | BLOCK_FLAG)) {
+    if (!sendMesg(socket, arg1, ZMQ_SNDMORE | ZMQ_DONTWAIT)) {
         throwSocketError(__FUNCTION__);
     }
     sendMessage(socket, args...);
@@ -326,7 +320,7 @@ void sendMessage(zmq::socket_t & socket,
 template<typename Arg1>
 bool trySendMessage(zmq::socket_t & socket, const Arg1 & arg1)
 {
-    if (!sendMesg(socket, arg1, 0)) {
+    if (!sendMesg(socket, arg1, ZMQ_DONTWAIT)) {
         if (errno == EAGAIN)
             return false;
         else
@@ -339,7 +333,7 @@ bool trySendMessage(zmq::socket_t & socket, const Arg1 & arg1)
 template<typename Arg1, typename... Args>
 bool trySendMessage(zmq::socket_t & socket, const Arg1 & arg1, Args... args)
 {
-    if (!sendMesg(socket, arg1, ZMQ_SNDMORE | BLOCK_FLAG)) {
+    if (!sendMesg(socket, arg1, ZMQ_SNDMORE | ZMQ_DONTWAIT)) {
         if (errno == EAGAIN)
             return false;
         else
@@ -356,7 +350,7 @@ inline bool trySendAll(zmq::socket_t & sock,
         throw ML::Exception("can't send an empty message vector");
 
     for (unsigned i = 0; i < message.size() - 1;  ++i) {
-        if (!sendMesg(sock, message[i], ZMQ_SNDMORE | BLOCK_FLAG)) {
+        if (!sendMesg(sock, message[i], ZMQ_SNDMORE | ZMQ_DONTWAIT)) {
             if (errno == EAGAIN)
                 return false;
             else
@@ -364,7 +358,7 @@ inline bool trySendAll(zmq::socket_t & sock,
         }
     }
 
-    if (!sendMesg(sock, message.back(), lastFlags | BLOCK_FLAG)) {
+    if (!sendMesg(sock, message.back(), lastFlags | ZMQ_DONTWAIT)) {
         if (errno == EAGAIN)
             return false;
         else

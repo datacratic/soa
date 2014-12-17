@@ -65,6 +65,7 @@ namespace zmq
 
     inline int poll (zmq_pollitem_t *items_, int nitems_, long timeout_ = -1)
     {
+        std::cerr << "ZMQ POOL!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
         int rc = zmq_poll (items_, nitems_, timeout_);
         if (rc < 0)
             throw error_t ();
@@ -373,6 +374,7 @@ namespace zmq
 
         inline bool send (message_t &msg_, int flags_ = 0)
         {
+            std::cerr << "ZMQ SEND " << flags_ << std::endl;
             int rc = zmq_sendmsg (ptr, &msg_, flags_);
             if (rc >= 0)
                 return true;
@@ -383,6 +385,7 @@ namespace zmq
 
         inline bool send (message_t && msg_, int flags_ = 0)
         {
+            std::cerr << "ZMQ SEND " << flags_ << std::endl;
             int rc = zmq_sendmsg (ptr, &msg_, flags_);
             if (rc >= 0)
                 return true;
@@ -393,6 +396,7 @@ namespace zmq
 
         inline bool recv (message_t *msg_, int flags_ = 0)
         {
+            std::cerr << "ZMQ RECV " << flags_ << std::endl;
             int rc = zmq_recvmsg (ptr, msg_, flags_);
             if (rc >= 0)
                 return true;

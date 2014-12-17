@@ -10,6 +10,7 @@
 #include <thread>
 #include "jml/arch/timers.h"
 #include "jml/arch/info.h"
+#include "jml/arch/threads.h"
 
 using namespace std;
 
@@ -34,15 +35,13 @@ ZmqEventSource::
 ZmqEventSource()
     : socket_(0), socketLock_(nullptr)
 {
-    needsPoll = false;
 }
 
 ZmqEventSource::
 ZmqEventSource(zmq::socket_t & socket, SocketLock * socketLock)
     : socket_(&socket), socketLock_(socketLock)
 {
-    needsPoll = false;
-    updateEvents();
+    //updateEvents();
 }
 
 void
@@ -51,8 +50,7 @@ init(zmq::socket_t & socket, SocketLock * socketLock)
 {
     socket_ = &socket;
     socketLock_ = socketLock;
-    needsPoll = false;
-    updateEvents();
+    //updateEvents();
 }
 
 int
@@ -64,32 +62,16 @@ selectFd() const
     socket().getsockopt(ZMQ_FD, &res, &resSize);
     if (res == -1)
         THROW(ZmqLogs::error) << "no fd for zeromq socket" << endl;
+    std::cerr << "FD " << res << std::endl;
     return res;
-}
-
-bool
-ZmqEventSource::
-poll() const
-{
-    if (currentEvents & ZMQ_POLLIN)
-        return true;
-
-    std::unique_lock<SocketLock> guard;
-
-    if (socketLock_)
-        guard = std::unique_lock<SocketLock>(*socketLock_);
-
-    updateEvents();
-
-    return currentEvents & ZMQ_POLLIN;
 }
 
 void
 ZmqEventSource::
 updateEvents() const
 {
-    size_t events_size = sizeof(currentEvents);
-    socket().getsockopt(ZMQ_EVENTS, &currentEvents, &events_size);
+    //size_t events_size = sizeof(currentEvents);
+    //socket().getsockopt(ZMQ_EVENTS, &currentEvents, &events_size);
 }
 
 bool
@@ -97,38 +79,73 @@ ZmqEventSource::
 processOne()
 {
     using namespace std;
-    if (debug_)
-        cerr << "called processOne on " << this << ", poll = " << poll() << endl;
+    std::cerr << "HANDLE ZMQ EVENT SOURCE " << gettid() << std::endl;
+    {
+        std::unique_lock<SocketLock> guard;
+        if (socketLock_)
+            guard = std::unique_lock<SocketLock>(*socketLock_);
+        size_t events_size = sizeof(currentEvents);
+        socket().getsockopt(ZMQ_EVENTS, &currentEvents, &events_size);
 
-    if (!poll())
-        return false;
-
-    std::vector<std::string> msg;
+        if ((currentEvents & ZMQ_POLLIN) == 0) {
+            std::cerr << "HANDLE NO EVENTS" << std::endl;
+            return false;
+        }
+    }
 
     // We process all events, as otherwise the select fd can't be guaranteed to wake us up
+    bool one = false;
     for (;;) {
+        std::vector<std::string> result;
         {
             std::unique_lock<SocketLock> guard;
             if (socketLock_)
                 guard = std::unique_lock<SocketLock>(*socketLock_);
 
-            msg = recvAllNonBlocking(socket());
-
-            if (msg.empty()) {
-                if (currentEvents & ZMQ_POLLIN)
-                    throw ML::Exception("empty message with currentEvents");
-                return false;  // no more events
+            std::cerr << "HANDLE RECV" << std::endl;
+            std::string msg0;
+            bool got;
+            std::tie(msg0, got) = recvMesgNonBlocking(socket());
+            if (!got) {
+                return one;
             }
 
-            updateEvents();
+            std::cerr << "MSG " << msg0 << std::endl;
+            result.push_back(msg0);
+
+            for (;;) {
+                int64_t more = 1;
+                size_t more_size = sizeof (more);
+                socket().getsockopt(ZMQ_RCVMORE, &more, &more_size);
+                if (!more) break;
+                std::tie(msg0, got) = recvMesgNonBlocking(socket());
+                if(!got) {
+                    std::cerr << "SHIT" << std::endl;
+                    return one;
+                }
+                result.push_back(msg0);
+            }
+
+            //auto messages = recvAllNonBlocking(socket());
+
+            if (result.empty()) {
+                std::cerr << "HANDLE NO MORE EVENTS" << std::endl;
+                //throw ML::Exception("empty message with currentEvents");
+                break;
+            }
         }
 
-        if (debug_)
-            cerr << "got message of length " << msg.size() << endl;
-        handleMessage(msg);
+        //if (debug_)
+        //    cerr << "got message of length " << messages.size() << endl;
+
+        std::cerr << "HANDLE MESSAGE" << std::endl;
+        one = true;
+        handleMessage(result);
+        std::cerr << "HANDLE MESSAGE DONE" << std::endl;
     }
 
-    return currentEvents & ZMQ_POLLIN;
+    std::cerr << "HANDLE MESSAGE EXITS" << std::endl;
+    return one;
 }
 
 void
@@ -142,6 +159,7 @@ handleMessage(const std::vector<std::string> & message)
 
     auto reply = handleSyncMessage(message);
     if (!reply.empty()) {
+        std::cerr << "SENDING???" << std::endl;
         sendAll(socket(), reply);
     }
 }
@@ -517,9 +535,9 @@ connect(const std::string & endpointName,
 
             {
                 std::lock_guard<ZmqEventSource::SocketLock> guard(socketLock_);
-                socket().connect(uri.c_str());
                 connectedUri = uri;
                 connectionState = CONNECTED;
+                socket().connect(uri.c_str());
             }
 
             LOG(ZmqLogs::print) << "connected to " << uri << endl;

@@ -122,6 +122,10 @@ struct RestProxy: public MessageLoop {
         return numMessagesOutstanding_;
     }
 
+    bool isConnected() const {
+        return connection.isConnected();
+    }
+
 protected:
     std::string serviceName_;
     std::string endpointName_;

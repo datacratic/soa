@@ -54,8 +54,8 @@ sendResponse(int responseCode,
         message.push_back(std::to_string(responseCode));
         message.push_back(response);
 
-        //std::cerr << "sending response to " << itl->requestId
-        //          << std::endl;
+        std::cerr << "sending response to " << itl->requestId
+                  << std::endl;
         itl->endpoint->zmqEndpoint.sendMessage(message);
     }
 

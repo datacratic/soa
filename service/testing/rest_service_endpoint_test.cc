@@ -59,7 +59,7 @@ struct EchoService : public ServiceBase, public RestServiceEndpoint {
     virtual void handleRequest(const ConnectionId & connection,
                                const RestRequest & request) const
     {
-        //cerr << "handling request " << request << endl;
+        cerr << "handling request " << request << endl;
         if (request.verb != "POST")
             throw ML::Exception("echo service needs POST");
         if (request.resource != "/echo")
@@ -76,7 +76,7 @@ BOOST_AUTO_TEST_CASE( test_named_endpoint )
     auto proxies = std::make_shared<ServiceProxies>();
     proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()));
 
-    int totalPings = 1000;
+    int totalPings = 20;
 
     EchoService service(proxies, "echo");
     auto addr = service.bindTcp();
@@ -87,14 +87,20 @@ BOOST_AUTO_TEST_CASE( test_named_endpoint )
 
     proxies->config->dump(cerr);
 
-
     volatile int numPings = 0;
 
-    auto runZmqThread = [=, &numPings] ()
+    auto runZmqThread = [&] ()
         {
+            auto proxies = std::make_shared<ServiceProxies>();
+            proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()));
+
             RestProxy proxy(proxies->zmqContext);
             proxy.init(proxies->config, "echo");
             proxy.start();
+
+            while(!proxy.isConnected())
+                ML::sleep(0.1);
+
             cerr << "connected" << endl;
 
             volatile int numOutstanding = 0;
@@ -111,8 +117,8 @@ BOOST_AUTO_TEST_CASE( test_named_endpoint )
                      int responseCode,
                      std::string body)
                     {
-                        //cerr << "got response " << responseCode
-                        //     << endl;
+                        cerr << "got response " << responseCode
+                             << endl;
                         ML::atomic_dec(numOutstanding);
 
                         if (ptr)
@@ -128,7 +134,9 @@ BOOST_AUTO_TEST_CASE( test_named_endpoint )
                 ML::atomic_inc(numOutstanding);
             }
 
+            std::cerr << "SLEEP UNTIL IDLE" << std::endl;
             proxy.sleepUntilIdle();
+            std::cerr << "DONE SLEEPING" << std::endl;
 
             //ML::sleep(1.0);
 
@@ -161,7 +169,7 @@ BOOST_AUTO_TEST_CASE( test_named_endpoint )
 
     boost::thread_group threads;
 
-    for (unsigned i = 0;  i < 8;  ++i) {
+    for (unsigned i = 0;  i < 1;  ++i) {
         threads.create_thread(runZmqThread);
     }
 

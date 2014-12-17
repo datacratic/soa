@@ -911,7 +911,6 @@ struct ZmqNamedMultipleSubscriber: public MessageLoop {
     ZmqNamedMultipleSubscriber(std::shared_ptr<zmq::context_t> context)
         : context(context)
     {
-        needsPoll = true;
     }
 
     ~ZmqNamedMultipleSubscriber()

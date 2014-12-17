@@ -156,6 +156,7 @@ handleEvents(int usToWait, int nEvents,
         nEvents = res;
         
         for (unsigned i = 0;  i < nEvents;  ++i) {
+            std::cerr << "EPOLL " << events[i].data.ptr << std::endl;
             if (handleEvent(events[i]) == SHUTDOWN) return -1;
         }
                 
@@ -167,6 +168,7 @@ bool
 Epoller::
 poll() const
 {
+    /*
     for (;;) {
         pollfd fds[1] = { { epoll_fd, POLLIN, 0 } };
         int res = ::poll(fds, 1, 0);
@@ -182,18 +184,20 @@ poll() const
 
         return res > 0;
     }
+    */
+    return true;
 }
 
 void
 Epoller::
 performAddFd(int fd, void * data, bool oneshot, bool restart)
 {
-    // cerr << (Date::now().print(4)
-    //          + " performAddFd: epoll_fd=" + to_string(epoll_fd)
-    //          + " fd=" + to_string(fd)
-    //          + " one-shot=" + to_string(oneshot)
-    //          + " restart=" + to_string(restart)
-    //          + "\n");
+     cerr << (Date::now().print(4)
+              + " performAddFd: epoll_fd=" + to_string(epoll_fd)
+              + " fd=" + to_string(fd)
+              + " one-shot=" + to_string(oneshot)
+              + " restart=" + to_string(restart)
+              + "\n");
 
     struct epoll_event event;
     event.events = EPOLLIN;
@@ -222,7 +226,7 @@ processOne()
     int res = handleEvents();
     //cerr << "processOne res = " << res << endl;
     if (res == -1) return false;  // wakeup for shutdown
-    return poll();
+    return true;//poll();
 }
 
 } // namespace Datacratic

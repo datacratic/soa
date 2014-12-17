@@ -6,6 +6,7 @@
 
 #include "rest_proxy.h"
 #include "jml/arch/exception_handler.h"
+#include "jml/arch/threads.h"
 
 using namespace std;
 using namespace ML;
@@ -89,7 +90,8 @@ init(std::shared_ptr<ConfigurationService> config,
               (connection.socket(),
                std::bind(&RestProxy::handleZmqResponse,
                          this,
-                         std::placeholders::_1)));
+                         std::placeholders::_1),
+               connection.socketLock()));
 }
 
 void
@@ -110,7 +112,8 @@ initServiceClass(std::shared_ptr<ConfigurationService> config,
               (connection.socket(),
                std::bind(&RestProxy::handleZmqResponse,
                          this,
-                         std::placeholders::_1)));
+                         std::placeholders::_1),
+               connection.socketLock()));
 }
 
 void
@@ -124,6 +127,8 @@ push(const RestRequest & request, const OnDone & onDone)
         ML::atomic_inc(numMessagesOutstanding_);
     else
         throw ML::Exception("queue is full");
+
+    std::cerr << "PUSH " << numMessagesOutstanding_ << std::endl;
 }
 
 void
@@ -142,6 +147,8 @@ void
 RestProxy::
 handleOperation(const Operation & op)
 {
+    std::cerr << "RESTPROXY OP ENTER " << gettid() << std::endl;
+    std::lock_guard<std::mutex> lock(connection.socketLock_);
     // Gets called when someone calls our API to make something happen;
     // this is run by the main worker thread to actually do the work.
     // It forwards the request off to the master banker.
@@ -158,6 +165,7 @@ handleOperation(const Operation & op)
                        op.request.resource,
                        op.request.params.toBinary(),
                        op.request.payload)) {
+        std::cerr << "TRYSEND PASSED" << std::endl;
         if (opId)
             outstanding[opId] = op.onDone;
         else {
@@ -167,6 +175,7 @@ handleOperation(const Operation & op)
         }
     }
     else {
+        std::cerr << "TRYSEND FAILED" << std::endl;
         if (op.onDone) {
             ML::Set_Trace_Exceptions notrace(false);
             string exc_msg = ("connection to '" + serviceName_
@@ -177,12 +186,16 @@ handleOperation(const Operation & op)
         if (no == 0)
             futex_wake(numMessagesOutstanding_);
     }
+
+    std::cerr << "RESPROXY OP LEAVE" << std::endl;
 }
 
 void
 RestProxy::
 handleZmqResponse(const std::vector<std::string> & message)
 {
+    std::cerr << "RESPROXY ZMQ RESPONSE ENTER" << gettid() << std::endl;
+    std::lock_guard<std::mutex> lock(connection.socketLock_);
     // Gets called when we get a response back from the master banker in
     // response to one of our calls.
 
@@ -218,6 +231,7 @@ handleZmqResponse(const std::vector<std::string> & message)
     outstanding.erase(it);
     
     ML::atomic_dec(numMessagesOutstanding_);
+    std::cerr << "POP " << numMessagesOutstanding_ << std::endl;
 }
 
 
