@@ -11,6 +11,7 @@
 #include "jml/utils/string_functions.h"
 #include "soa/types/value_description.h"
 #include "soa/service/http_endpoint.h"
+#include "soa/service/http_client.h"
 
 
 namespace curlpp {
@@ -36,6 +37,8 @@ struct HttpRestProxy {
     {
     }
 
+    typedef HttpClientResponse Response;
+
     void init(const std::string & serviceUri)
     {
         this->serviceUri = serviceUri;
@@ -43,50 +46,6 @@ struct HttpRestProxy {
 
     ~HttpRestProxy();
 
-    /** The response of a request.  Has a return code and a body. */
-    struct Response {
-        Response()
-            : code_(0), errorCode_(0)
-        {
-        }
-
-        /** Return code of the REST call. */
-        int code() const {
-            return code_;
-        }
-
-        /** Body of the REST call. */
-        std::string body() const
-        {
-            return body_;
-        }
-
-        Json::Value jsonBody() const
-        {
-            return Json::parse(body_);
-        }
-
-        /** Get the given response header of the REST call. */
-        std::string getHeader(const std::string & name) const
-        {
-            auto it = header_.headers.find(name);
-            if (it == header_.headers.end())
-                it = header_.headers.find(ML::lowercase(name));
-            if (it == header_.headers.end())
-                throw ML::Exception("required header " + name + " not found");
-            return it->second;
-        }
-
-        long code_;
-        std::string body_;
-        HttpHeader header_;
-
-        /// Error code for request, normally a CURL code, 0 is OK
-        int errorCode_;
-
-        /// Error string for an error request, empty is OK
-        std::string errorMessage_;
-    };
 
     /** Add a cookie to the connection that comes in from the response. */
     void setCookieFromResponse(const Response& r)
@@ -99,6 +58,7 @@ struct HttpRestProxy {
     {
         cookies.push_back("Set-Cookie: " + value);
     }
+
 
     /** Structure used to hold content for a POST request. */
     struct Content {

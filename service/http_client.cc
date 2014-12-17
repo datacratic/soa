@@ -110,7 +110,7 @@ HttpClient(const string & baseUrl, int numParallel, int queueSize,
     enablePipelining(false);
 }
 
-HttpResponse
+HttpClientResponse
 HttpClient::getSync(
         const std::string& resource,
         const RestParams& queryParams,
@@ -127,7 +127,7 @@ HttpClient::getSync(
     return future.get();
 }
 
-HttpResponse
+HttpClientResponse
 HttpClient::postSync(
         const std::string& resource,
         const HttpRequest::Content& content,
@@ -146,7 +146,7 @@ HttpClient::postSync(
     return future.get();
 }
 
-HttpResponse
+HttpClientResponse
 HttpClient::putSync(
         const std::string& resource,
         const HttpRequest::Content& content,
@@ -165,7 +165,7 @@ HttpClient::putSync(
     return future.get();
 }
 
-HttpResponse
+HttpClientResponse
 HttpClient::delSync(
         const std::string& resource,
         const RestParams& queryParams,

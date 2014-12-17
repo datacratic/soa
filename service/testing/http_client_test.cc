@@ -634,21 +634,21 @@ BOOST_AUTO_TEST_CASE( test_synchronous_requests )
 
     {
         auto resp = client->getSync("/hello");
-        BOOST_CHECK_EQUAL(resp.responseCode, 200);
+        BOOST_CHECK_EQUAL(resp.code_, 200);
     }
 
     {
         auto resp = client->getSync("/not-found");
-        BOOST_CHECK_EQUAL(resp.responseCode, 404);
+        BOOST_CHECK_EQUAL(resp.code_, 404);
     }
 
     {
         auto resp = client->postSync("/foo");
-        BOOST_CHECK_EQUAL(resp.responseCode, 200);
+        BOOST_CHECK_EQUAL(resp.code_, 200);
     }
 
     {
         auto resp = client->putSync("/ying");
-        BOOST_CHECK_EQUAL(resp.responseCode, 200);
+        BOOST_CHECK_EQUAL(resp.code_, 200);
     }
 }

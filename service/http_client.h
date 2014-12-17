@@ -26,12 +26,58 @@
 #include "soa/service/http_header.h"
 #include "soa/service/http_endpoint.h"
 #include "jml/arch/futex.h"
+#include "jml/utils/string_functions.h"
 
 namespace Datacratic {
 
 /* Forward declarations */
 
 struct HttpClientCallbacks;
+
+/** The response of a request.  Has a return code and a body. */
+struct HttpClientResponse {
+    HttpClientResponse()
+        : code_(0), errorCode_(0)
+    {
+    }
+
+    /** Return code of the REST call. */
+    int code() const {
+        return code_;
+    }
+
+    /** Body of the REST call. */
+    std::string body() const
+    {
+        return body_;
+    }
+
+    Json::Value jsonBody() const
+    {
+        return Json::parse(body_);
+    }
+
+    /** Get the given response header of the REST call. */
+    std::string getHeader(const std::string & name) const
+    {
+        auto it = header_.headers.find(name);
+        if (it == header_.headers.end())
+            it = header_.headers.find(ML::lowercase(name));
+        if (it == header_.headers.end())
+            throw ML::Exception("required header " + name + " not found");
+        return it->second;
+    }
+
+    long code_;
+    std::string body_;
+    HttpHeader header_;
+
+    /// Error code for request, normally a CURL code, 0 is OK
+    int errorCode_;
+
+    /// Error string for an error request, empty is OK
+    std::string errorMessage_;
+};
 
 
 /****************************************************************************/
@@ -166,7 +212,6 @@ struct HttpSyncFuture {
 
     HttpSyncFuture()
         : done(0)
-        , response(0, "", "")
     {
     }
 
@@ -177,17 +222,14 @@ struct HttpSyncFuture {
         return [=](const HttpRequest&, HttpClientError error, int statusCode,
                    std::string&& headers, std::string&& body) {
             if (error != HttpClientError::None) {
+                response.errorCode_ = static_cast<int>(error);
             }
             else {
-                response.responseCode = statusCode;
-                response.body = std::move(body);
+                response.code_ = statusCode;
+                response.body_ = std::move(body);
 
-                HttpHeader header;
-                header.parse(headers);
+                response.header_.parse(headers);
 
-                std::copy(
-                        std::begin(header.headers), std::end(header.headers),
-                        std::back_inserter(response.extraHeaders));
             }
 
             done = 1;
@@ -195,7 +237,7 @@ struct HttpSyncFuture {
         };
     }
 
-    HttpResponse get() const {
+    HttpClientResponse get() const {
         while (!done)
             ML::futex_wait(done, 0);
 
@@ -204,7 +246,7 @@ struct HttpSyncFuture {
 
 private:
     int done;
-    HttpResponse response;
+    HttpClientResponse response;
 };
 
 /****************************************************************************/
@@ -289,7 +331,7 @@ struct HttpClient : public AsyncEventSource {
 
     /** Performs a synchronous GET request.
      */
-    HttpResponse getSync(const std::string & resource,
+    HttpClientResponse getSync(const std::string & resource,
              const RestParams & queryParams = RestParams(),
              const RestParams & headers = RestParams(),
              int timeout = -1);
@@ -312,7 +354,7 @@ struct HttpClient : public AsyncEventSource {
 
     /** Performs a synchronous POST request
      */
-    HttpResponse postSync(const std::string & resource,
+    HttpClientResponse postSync(const std::string & resource,
               const HttpRequest::Content & content = HttpRequest::Content(),
               const RestParams & queryParams = RestParams(),
               const RestParams & headers = RestParams(),
@@ -335,7 +377,7 @@ struct HttpClient : public AsyncEventSource {
 
     /** Performs a synchronous PUT request.
      */
-    HttpResponse putSync(const std::string & resource,
+    HttpClientResponse putSync(const std::string & resource,
              const HttpRequest::Content & content = HttpRequest::Content(),
              const RestParams & queryParams = RestParams(),
              const RestParams & headers = RestParams(),
@@ -359,7 +401,7 @@ struct HttpClient : public AsyncEventSource {
 
     /** Performs a synchronous DELETE request.
      */
-    HttpResponse delSync(const std::string & resource,
+    HttpClientResponse delSync(const std::string & resource,
              const RestParams & queryParams = RestParams(),
              const RestParams & headers = RestParams(),
              int timeout = -1);
