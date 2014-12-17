@@ -32,15 +32,13 @@
 
 using namespace std;
 using namespace boost;
-using namespace boost::asio;
-using namespace boost::system;
 using namespace Datacratic;
 
 namespace {
 
-static auto cancelledCode = make_error_code(error::operation_aborted);
-static auto eofCode = make_error_code(error::eof);
-static auto unreachableCode = make_error_code(error::host_unreachable);
+static auto cancelledCode = make_error_code(asio::error::operation_aborted);
+static auto eofCode = make_error_code(asio::error::eof);
+static auto unreachableCode = make_error_code(asio::error::host_unreachable);
 
 static asio::ip::tcp::resolver::iterator endIterator;
 
@@ -49,21 +47,21 @@ translateError(const system::error_code & code)
 {
     HttpClientError error;
 
-    if (code == errc::success) {
+    if (code == system::errc::success) {
         error = HttpClientError::None;
     }
-    else if (code == errc::timed_out) {
+    else if (code == system::errc::timed_out) {
         error = HttpClientError::Timeout;
     }
-    else if (code == errc::host_unreachable) {
+    else if (code == system::errc::host_unreachable) {
         error = HttpClientError::HostNotFound;
     }
-    else if (code == errc::connection_refused
-             || code == errc::network_unreachable) {
+    else if (code == system::errc::connection_refused
+             || code == system::errc::network_unreachable) {
         error = HttpClientError::CouldNotConnect;
     }
-    else if (code == errc::connection_reset
-             || code == error::eof) {
+    else if (code == system::errc::connection_reset
+             || code == asio::error::eof) {
         error = HttpClientError::Unknown;
     }
     else {
@@ -75,7 +73,7 @@ translateError(const system::error_code & code)
     return error;
 }
 
-io_service &
+asio::io_service &
 getHTTPClientLoop()
 {
     static AsioThreadedLoop loop;
@@ -128,7 +126,7 @@ makeRequestStr(const HttpRequest & request)
 /* HTTP CONNECTION */
 
 HttpConnectionV3::
-HttpConnectionV3(io_service & ioService)
+HttpConnectionV3(asio::io_service & ioService)
     : socket_(ioService), connected_(false),
       responseState_(IDLE), requestEnded_(false), parsingEnded_(false),
       recvBuffer_(nullptr), recvBufferSize_(262144),
@@ -229,14 +227,13 @@ resolveAndConnect()
 
     int port = url.url->EffectiveIntPort();
     if (url.hostIsIpAddress()) {
-        ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), port);
-        ip::address address(ip::address_v4::from_string(url.host()));
-        endpoint.address(address);
+        asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), port);
+        endpoint.address(asio::ip::address_v4::from_string(url.host()));
         endpoints_.emplace_back(move(endpoint));
         connect();
     }
     else {
-        ip::tcp::resolver::query query(url.host(), to_string(port));
+        asio::ip::tcp::resolver::query query(url.host(), to_string(port));
         auto onResolveFn = [&] (const system::error_code & ec,
                                 asio::ip::tcp::resolver::iterator iterator) {
             if (ec) {
@@ -260,7 +257,7 @@ connect()
     if (currentEndpoint_ < endpoints_.size()) {
         auto onConnectionResult = [&] (const system::error_code & ec) {
             if (ec) {
-                if (ec == errc::connection_refused) {
+                if (ec == system::errc::connection_refused) {
                     currentEndpoint_++;
                     connect();
                 }
@@ -331,10 +328,10 @@ startSendingRequest()
     };
 
     responseState_ = PENDING;
-    const_buffers_1 writeBuffer(rqData_.c_str(), rqData_.size());
+    asio::const_buffers_1 writeBuffer(rqData_.c_str(), rqData_.size());
     if (twoSteps) {
-        const_buffers_1 writeBufferNext(content.str.c_str(),
-                                        content.str.size());
+        asio::const_buffers_1 writeBufferNext(content.str.c_str(),
+                                              content.str.size());
         const_buffers_2 writeBuffers(writeBuffer, writeBufferNext);
         async_write(socket_, writeBuffers, writeCompleteCond, onWriteResult);
     }
@@ -426,7 +423,7 @@ HttpConnectionV3::
 onParserDone(bool doClose)
 {
     parsingEnded_ = true;
-    handleEndOfRq(make_error_code(errc::success),
+    handleEndOfRq(make_error_code(system::errc::success),
                   doClose);
 }
 
@@ -488,7 +485,7 @@ HttpConnectionV3::
 onClosed(bool fromPeer, const std::vector<std::string> & msgs)
 {
     if (fromPeer) {
-        handleEndOfRq(make_error_code(errc::connection_reset),
+        handleEndOfRq(make_error_code(system::errc::connection_reset),
                       false);
     }
     else {
@@ -536,7 +533,7 @@ HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
 {
     ExcAssert(baseUrl.compare(0, 8, "https://") != 0);
 
-    io_service & ioService = getHTTPClientLoop();
+    asio::io_service & ioService = getHTTPClientLoop();
 
     queue_.reset(new HttpRequestQueue(ioService, queueSize));
     queue_->setOnNotify([&]() { this->handleQueueEvent(); });
