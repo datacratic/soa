@@ -11,7 +11,8 @@
 #include <string>
 #include <vector>
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/deadline_timer.hpp>
 #include <boost/system/error_code.hpp>
 
 #include "soa/jsoncpp/value.h"
@@ -75,7 +76,10 @@ struct HttpConnectionV3 {
     /* tcp_socket overrides */
     void onClosed(bool fromPeer,
                   const std::vector<std::string> & msgs);
+    void onWrittenData(size_t size);
     void onReceivedData(size_t size);
+    void onWriteError(const boost::system::error_code & ec,
+                      size_t bufferSize);
     void onReceiveError(const boost::system::error_code & ec,
                         size_t bufferSize);
 
@@ -113,9 +117,9 @@ struct HttpConnectionV3 {
     /* request timeouts */
     void armRequestTimer();
     void cancelRequestTimer();
-    void handleTimeoutEvent(const ::epoll_event & event);
+    void handleTimeoutEvent(const boost::system::error_code & ec);
 
-    int timeoutFd_;
+    boost::asio::deadline_timer timeoutTimer_;
 };
 
 

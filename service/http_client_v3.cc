@@ -5,7 +5,6 @@
 
 /* TODO:
    - fixed failing tests:
-     - timeouts
      - "expect 100 Continue"
    - async lookups
    - SSL
@@ -18,6 +17,7 @@
 
 #include "boost/asio/connect.hpp"
 #include "boost/asio/error.hpp"
+#include "boost/asio/write.hpp"
 
 #include "jml/arch/exception.h"
 #include "jml/utils/exc_assert.h"
@@ -34,32 +34,34 @@
 #include "http_client_v3.h"
 
 using namespace std;
+using namespace boost;
 using namespace boost::asio;
+using namespace boost::system;
 using namespace Datacratic;
-
 
 namespace {
 
+static auto cancelledCode = make_error_code(error::operation_aborted);
+static auto eofCode = make_error_code(error::eof);
+
 HttpClientError
-translateError(const boost::system::error_code & code)
+translateError(const system::error_code & code)
 {
     HttpClientError error;
 
-    using namespace boost::system::errc;
-
-    if (code == success) {
+    if (code == errc::success) {
         error = HttpClientError::None;
     }
-    else if (code == timed_out) {
+    else if (code == errc::timed_out) {
         error = HttpClientError::Timeout;
     }
-    else if (code == host_unreachable) {
+    else if (code == errc::host_unreachable) {
         error = HttpClientError::HostNotFound;
     }
-    else if (code == connection_refused) {
+    else if (code == errc::connection_refused) {
         error = HttpClientError::CouldNotConnect;
     }
-    else if (code == connection_reset
+    else if (code == errc::connection_reset
              || code == error::eof) {
         error = HttpClientError::Unknown;
     }
@@ -131,7 +133,7 @@ HttpConnectionV3(io_service & ioService,
       endpoint_(endpoint), responseState_(IDLE),
       requestEnded_(false), parsingEnded_(false),
       recvBuffer_(nullptr), recvBufferSize_(262144),
-      timeoutFd_(-1)
+      timeoutTimer_(ioService)
 {
     // cerr << "HttpConnectionV3(): " << this << "\n";
 
@@ -154,7 +156,7 @@ HttpConnectionV3(io_service & ioService,
         this->onParserDone(doClose);
     };
 
-    onReadSome_ = [&] (const boost::system::error_code & ec, size_t bufferSize) {
+    onReadSome_ = [&] (const system::error_code & ec, size_t bufferSize) {
         if (ec) {
             this->onReceiveError(ec, bufferSize);
         }
@@ -212,7 +214,7 @@ perform(HttpRequest && request)
         startSendingRequest();
     }
     else {
-        auto onConnectionResult = [&] (const boost::system::error_code & ec) {
+        auto onConnectionResult = [&] (const system::error_code & ec) {
             if (!ec) {
                 connected_ = true;
                 socket_.native_non_blocking(true);
@@ -232,9 +234,9 @@ startSendingRequest()
 {
     /* This controls the maximum body size from which the body will be written
        separately from the request headers. This tend to improve performance
-       by removing a potential allocation and a large copy. 65536 appears to
-       be a reasonable value on my installation, but this would need to be
-       tested on different setups. */
+       by removing a potential reallocation and a large copy. 65536 appears to
+       be a reasonable value but this would need to be tested on different
+       setups. */
     static constexpr size_t TwoStepsThreshold(65536);
 
     parser_.setExpectBody(getExpectResponseBody(request_));
@@ -256,23 +258,18 @@ startSendingRequest()
 
     // cerr << " twoSteps: " << twoSteps << endl;
 
-    auto onWriteResult = [&] (const boost::system::error_code & ec,
-                              std::size_t written) {
-        // cerr << " onWriteResult\n";
+    auto onWriteResult
+        = [&] (const system::error_code & ec, std::size_t written) {
         if (ec) {
-            throw ML::Exception("unhandled error");
+            this->onWriteError(ec, written);
         }
-        ExcAssertEqual(responseState_, PENDING);
-        responseState_ = IDLE;
-        parsingEnded_ = false;
-
-        socket_.async_read_some(boost::asio::buffer(recvBuffer_,
-                                                    recvBufferSize_),
-                                onReadSome_);
+        else {
+            this->onWrittenData(written);
+        }
     };
 
     auto writeCompleteCond
-        = [&, totalSize] (const boost::system::error_code & ec,
+        = [&, totalSize] (const system::error_code & ec,
                           std::size_t written) {
         // ::fprintf(stderr, "written: %d, total: %lu\n"
         //           written, totalSize);
@@ -288,11 +285,23 @@ startSendingRequest()
         async_write(socket_, writeBuffers, writeCompleteCond, onWriteResult);
     }
     else {
-        const_buffers_1 writeBuffer(rqData_.c_str(), rqData_.size());
         async_write(socket_, writeBuffer, writeCompleteCond, onWriteResult);
     }
 
     armRequestTimer();
+}
+
+void
+HttpConnectionV3::
+onWrittenData(size_t written)
+{
+    ExcAssertEqual(responseState_, PENDING);
+    responseState_ = IDLE;
+    parsingEnded_ = false;
+
+    socket_.async_read_some(boost::asio::buffer(recvBuffer_,
+                                                recvBufferSize_),
+                            onReadSome_);
 }
 
 void
@@ -309,14 +318,21 @@ onReceivedData(size_t size)
 
 void
 HttpConnectionV3::
-onReceiveError(const boost::system::error_code & ec,
-               size_t bufferSize)
+onWriteError(const system::error_code & ec, size_t bufferSize)
 {
-    if (ec.category() == error::misc_category
-        && ec.value() == error::eof) {
+    if (ec != cancelledCode) {
+        throw ML::Exception("unhandled error");
+    }
+}
+
+void
+HttpConnectionV3::
+onReceiveError(const system::error_code & ec, size_t bufferSize)
+{
+    if (ec == eofCode) {
         this->handleEndOfRq(ec, true);
     }
-    else {
+    else if (ec != cancelledCode) {
         throw ML::Exception("unhandled error: " + ec.message());
     }
 }
@@ -358,7 +374,7 @@ HttpConnectionV3::
 onParserDone(bool doClose)
 {
     parsingEnded_ = true;
-    handleEndOfRq(make_error_code(boost::system::errc::success),
+    handleEndOfRq(make_error_code(errc::success),
                   doClose);
 }
 
@@ -368,7 +384,7 @@ onParserDone(bool doClose)
  * finalizeEndOfRq is invoked. */
 void
 HttpConnectionV3::
-handleEndOfRq(const boost::system::error_code & code, bool requireClose)
+handleEndOfRq(const system::error_code & code, bool requireClose)
 {
     if (requestEnded_) {
         // cerr << "ignoring extraneous end of request\n";
@@ -389,7 +405,7 @@ handleEndOfRq(const boost::system::error_code & code, bool requireClose)
 
 void
 HttpConnectionV3::
-finalizeEndOfRq(const boost::system::error_code & code)
+finalizeEndOfRq(const system::error_code & code)
 {
     request_.callbacks_->onDone(request_, translateError(code));
     clear();
@@ -420,7 +436,7 @@ HttpConnectionV3::
 onClosed(bool fromPeer, const std::vector<std::string> & msgs)
 {
     if (fromPeer) {
-        handleEndOfRq(make_error_code(boost::system::errc::connection_reset),
+        handleEndOfRq(make_error_code(errc::connection_reset),
                       false);
     }
     else {
@@ -432,81 +448,29 @@ void
 HttpConnectionV3::
 armRequestTimer()
 {
-#if 0
     if (request_.timeout_ > 0) {
-        if (timeoutFd_ == -1) {
-            timeoutFd_ = timerfd_create(CLOCK_MONOTONIC,
-                                        TFD_NONBLOCK | TFD_CLOEXEC);
-            if (timeoutFd_ == -1) {
-                throw ML::Exception(errno, "timerfd_create");
-            }
-            auto handleTimeoutEventCb = [&] (const struct epoll_event & event) {
-                this->handleTimeoutEvent(event);
-            };
-            registerFdCallback(timeoutFd_, handleTimeoutEventCb);
-            // cerr << " timeoutFd_: "  + to_string(timeoutFd_) + "\n";
-            addFdOneShot(timeoutFd_, true, false);
-            // cerr << "timer armed\n";
-        }
-        else {
-            // cerr << "timer rearmed\n";
-            modifyFdOneShot(timeoutFd_, true, false);
-        }
-
-        itimerspec spec;
-        ::memset(&spec, 0, sizeof(itimerspec));
-
-        spec.it_interval.tv_sec = 0;
-        spec.it_value.tv_sec = request_.timeout_;
-        int res = timerfd_settime(timeoutFd_, 0, &spec, nullptr);
-        if (res == -1) {
-            throw ML::Exception(errno, "timerfd_settime");
-        }
+        auto secs = boost::posix_time::seconds(request_.timeout_);
+        timeoutTimer_.expires_from_now(secs);
+        auto handleTimeoutEventFn = [&] (const system::error_code & ec) {
+            this->handleTimeoutEvent(ec);
+        };
+        timeoutTimer_.async_wait(handleTimeoutEventFn);
     }
-#endif
 }
 
 void
 HttpConnectionV3::
 cancelRequestTimer()
 {
-#if 0
-    // cerr << "cancel request timer " << this << "\n";
-    if (timeoutFd_ != -1) {
-        // cerr << "  was active\n";
-        removeFd(timeoutFd_);
-        unregisterFdCallback(timeoutFd_, true);
-        ::close(timeoutFd_);
-        timeoutFd_ = -1;
-    }
-    // else {
-    //     cerr << "  was not active\n";
-    // }
-#endif
+    timeoutTimer_.cancel();
 }
 
 void
 HttpConnectionV3::
-handleTimeoutEvent(const ::epoll_event & event)
+handleTimeoutEvent(const system::error_code & ec)
 {
-    if (timeoutFd_ == -1) {
-        return;
-    }
-
-    if ((event.events & EPOLLIN) != 0) {
-        while (true) {
-            uint64_t expiries;
-            int res = ::read(timeoutFd_, &expiries, sizeof(expiries));
-            if (res == -1) {
-                if (errno == EAGAIN) {
-                    break;
-                }
-
-                throw ML::Exception(errno, "read");
-            }
-        }
-        handleEndOfRq(make_error_code(boost::system::errc::timed_out),
-                      true);
+    if (!ec) {
+        handleEndOfRq(make_error_code(asio::error::timed_out), true);
     }
 }
 
@@ -528,7 +492,7 @@ HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
 
     ip::tcp::resolver::query query(url.host(),
                                                 to_string(url.url->EffectiveIntPort()));
-    boost::system::error_code error;
+    system::error_code error;
     ip::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query, error);
     if (error) {
         throw ML::Exception("resolve error");
@@ -549,7 +513,7 @@ HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
         auto connection = make_shared<HttpConnectionV3>(ioService, endpoint);
         HttpConnectionV3 * connectionPtr = connection.get();
         connection->onDone
-            = [&, connectionPtr] (const boost::system::error_code & result) {
+            = [&, connectionPtr] (const system::error_code & result) {
             handleHttpConnectionDone(connectionPtr, result);
         };
         allConnections_.emplace_back(std::move(connection));
@@ -600,7 +564,7 @@ enablePipelining(bool value)
 bool
 HttpClientV3::
 enqueueRequest(const string & verb, const string & resource,
-               const shared_ptr<HttpClientCallbacks> & callbacks,
+               const std::shared_ptr<HttpClientCallbacks> & callbacks,
                const HttpRequest::Content & content,
                const RestParams & queryParams, const RestParams & headers,
                int timeout)
@@ -642,7 +606,7 @@ handleQueueEvent()
 void
 HttpClientV3::
 handleHttpConnectionDone(HttpConnectionV3 * connection,
-                         const boost::system::error_code & rc)
+                         const system::error_code & rc)
 {
     auto requests = queue_->pop_front(1);
     if (requests.size() > 0) {
