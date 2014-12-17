@@ -49,54 +49,10 @@ LoggerMetricsMongo::LoggerMetricsMongo(Json::Value config,
 void LoggerMetricsMongo::logInCategory(const string& category,
     const Json::Value& json)
 {
-    struct Holder {
-        BSONObjBuilder * bson;
-        BSONArrayBuilder * arr;
-
-        Holder(BSONObjBuilder * bson) : bson(bson), arr(nullptr) {}
-        Holder(BSONArrayBuilder * arr) : bson(nullptr), arr(arr) {}
-
-        void append(const string & key, const Json::Value & v) {
-            if (v.isInt()) {
-                if (arr == nullptr) {
-                    bson->append(key, v.asInt());
-                }
-                else {
-                    arr->append(v.asInt());
-                }
-            }
-            else if (v.isUInt()) {
-                if (arr == nullptr) {
-                    bson->append(key, (uint32_t)v.asUInt());
-                }
-                else {
-                    arr->append((uint32_t)v.asUInt());
-                }
-            }
-            else if (v.isDouble()) {
-                if (arr == nullptr) {
-                    bson->append(key, v.asDouble());
-                }
-                else {
-                    arr->append(v.asDouble());
-                }
-            }
-            else {
-                if (arr == nullptr) {
-                    bson->append(key, v.asString().c_str());
-                }
-                else {
-                    arr->append(v.asString().c_str());
-                }
-            }
-        }
-    };
 
     BSONObjBuilder bson;
     vector<string> stack;
     function<void(const Json::Value&)> doit;
-
-    Holder bsonH(&bson);
 
     doit = [&](const Json::Value& v){
         for(auto it = v.begin(); it != v.end(); ++it){
@@ -114,13 +70,35 @@ void LoggerMetricsMongo::logInCategory(const string& category,
                 key << "." << it.memberName();
                 if(current.isArray()){
                     BSONArrayBuilder arr;
-                    Holder arrH(&arr);
                     for(const Json::Value el: current){
-                        arrH.append("", el);
+                        if (el.isInt()) {
+                            arr.append(el.asInt());
+                        }
+                        else if (el.isUInt()) {
+                            arr.append((uint32_t)el.asUInt());
+                        }
+                        else if (el.isDouble()) {
+                            arr.append(el.asDouble());
+                        }
+                        else {
+                            arr.append(el.asString());
+                        }
                     }
                     bson.append(key.str(), arr.arr());
-                }else{
-                    bsonH.append(key.str(), current);
+                }
+                else {
+                    if (current.isInt()) {
+                        bson.append(key.str(), current.asInt());
+                    }
+                    else if (current.isUInt()) {
+                        bson.append(key.str(), (uint32_t)current.asUInt());
+                    }
+                    else if (current.isDouble()) {
+                        bson.append(key.str(), current.asDouble());
+                    }
+                    else {
+                        bson.append(key.str(), current.asString());
+                    }
                 }
             }
         }
@@ -156,7 +134,7 @@ void LoggerMetricsMongo
     
     BSONObj bsonObj;
     //reference
-    //typedef boost::variant<int, float, double, size_t, uint32_t> Numeric;
+    //typedef boost::variant<int, float, double, size_t, uint32_t, String> NumOrStr;
     int type = val.which();
     if (type == 0) {
         bsonObj = BSON(newCatStr << boost::get<int>(val));
@@ -177,7 +155,9 @@ void LoggerMetricsMongo
         stringstream ss;
         ss << val;
         string str = ss.str();
-        cerr << "Unknown type of NumOrStr for value: " << str << endl;
+        if (type != 5) {
+            cerr << "Unknown type of NumOrStr for value: " << str << endl;
+        }
         bsonObj = BSON(newCatStr << str);
     }
     if(logToTerm){
