@@ -4,6 +4,7 @@
 #include <string>
 #include <boost/test/unit_test.hpp>
 
+#include "jml/arch/futex.h"
 #include "jml/utils/testing/watchdog.h"
 #include "soa/service/http_client.h"
 
@@ -16,13 +17,13 @@ using namespace Datacratic;
 BOOST_AUTO_TEST_CASE( test_http_client_chunked_encoding )
 {
     HttpClient client("http://jigsaw.w3.org");
-    client.start();
 
     int done(false);
-    int error, status;
+    HttpClientError error;
+    int status;
     string body;
     auto onResponse = [&] (const HttpRequest & rq,
-                           int newError, int newStatus,
+                           HttpClientError newError, int newStatus,
                            string && headers, string && newBody) {
         error = newError;
         status = newStatus;
@@ -39,7 +40,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_chunked_encoding )
         ML::futex_wait(done, oldDone);
     }
 
-    BOOST_CHECK_EQUAL(error, 0);
+    BOOST_CHECK_EQUAL(error, HttpClientError::None);
     BOOST_CHECK_EQUAL(status, 200);
     BOOST_CHECK_EQUAL(body.size(), 72200);
 
