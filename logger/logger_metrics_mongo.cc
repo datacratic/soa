@@ -181,7 +181,7 @@ void LoggerMetricsMongo
         bsonObj = BSON(newCatStr << str);
     }
     if(logToTerm){
-        bsonObj.toString();
+        cerr << bsonObj.toString() << endl;
     }
     conn->update(db + "." + coll,
                 BSON("_id" << objectId),
