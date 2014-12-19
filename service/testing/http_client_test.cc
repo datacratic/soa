@@ -469,10 +469,10 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
                 ML::futex_wake(numResponses);
             }
         };
-        auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
 
         while (numReqs < maxReqs) {
             const char * url = "/counter";
+            auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
             if (client->get(url, cbs)) {
                 numReqs++;
                 // if ((numReqs & mask) == 0 || numReqs == maxReqs) {
