@@ -86,7 +86,7 @@ struct S3Globals {
         unique_lock<mutex> guard(clientsLock);
         auto & client = clients[hostname];
         if (!client) {
-            client.reset(new HttpClient(hostname, 30));
+            client.reset(new HttpClient("http://" + hostname, 30));
             client->sendExpect100Continue(false);
             loop.addSource("s3-client-" + hostname, client);
         }
