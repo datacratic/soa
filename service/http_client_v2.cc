@@ -10,9 +10,9 @@
 #include "jml/utils/exc_assert.h"
 
 #include "soa/types/url.h"
-#include "soa/service/message_loop.h"
-#include "soa/service/http_header.h"
-#include "soa/service/http_parsers.h"
+#include "message_loop.h"
+#include "http_header.h"
+#include "http_parsers.h"
 
 #include "http_client_v2.h"
 
@@ -453,6 +453,13 @@ HttpClientV2::
 processOne()
 {
     return loop_.processOne();
+}
+
+void
+HttpClientV2::
+enableDebug(bool value)
+{
+    debug(value);
 }
 
 void

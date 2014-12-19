@@ -21,6 +21,9 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+
 #include "soa/jsoncpp/value.h"
 #include "soa/service/async_event_source.h"
 #include "soa/service/http_header.h"
@@ -117,6 +120,9 @@ struct HttpClientImpl : public AsyncEventSource {
     virtual ~HttpClientImpl()
     {}
 
+    /** Enable debugging */
+    virtual void enableDebug(bool value) = 0;
+
     /** SSL checks */
     virtual void enableSSLChecks(bool value) = 0;
 
@@ -193,6 +199,12 @@ struct HttpClient : public AsyncEventSource {
     virtual bool processOne()
     {
         return impl->processOne();
+    }
+
+    /** Enable debugging */
+    void enableDebug(bool value)
+    {
+        impl->enableDebug(value);
     }
 
     /** SSL checks */

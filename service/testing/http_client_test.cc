@@ -39,9 +39,6 @@ doRequest(MessageLoop & loop,
 {
     ClientResponse response;
 
-    MessageLoop loop;
-    loop.start();
-
     auto client = make_shared<HttpClient>(baseUrl, 4);
     loop.addSource("client", client);
     client->waitConnectionState(AsyncEventSource::CONNECTED);
@@ -71,7 +68,8 @@ doRequest(MessageLoop & loop,
         ML::futex_wait(done, oldDone);
     }
 
-    loop.shutdown();
+    loop.removeSource(client.get());
+    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
 
     return response;
 }
@@ -105,9 +103,6 @@ doUploadRequest(MessageLoop & loop,
                 const string & body, const string & type)
 {
     ClientResponse response;
-
-    MessageLoop loop;
-    loop.start();
 
     auto client = make_shared<HttpClient>(baseUrl, 4);
     loop.addSource("client", client);
@@ -143,7 +138,8 @@ doUploadRequest(MessageLoop & loop,
         ML::futex_wait(done, oldDone);
     }
 
-    loop.shutdown();
+    loop.removeSource(client.get());
+    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
 
     return response;
 }
@@ -205,7 +201,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     {
         ::fprintf(stderr, "testing behaviour with connection: close\n");
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
-        auto resp = doGetRequest(baseUrl, "/connection-close");
+        auto resp = doGetRequest(loop, baseUrl, "/connection-close");
         BOOST_CHECK_EQUAL(get<0>(resp), HttpClientError::None);
         BOOST_CHECK_EQUAL(get<1>(resp), 204);
     }
@@ -247,11 +243,13 @@ BOOST_AUTO_TEST_CASE( test_http_client_get )
     /* query-params */
     {
         string baseUrl("http://127.0.0.1:" + to_string(service.port()));
-        auto resp = doGetRequest(baseUrl, "/query-params",
+        auto resp = doGetRequest(loop, baseUrl, "/query-params",
                                  {{"value", "hello"}});
         string body = get<2>(resp);
         BOOST_CHECK_EQUAL(body, "?value=hello");
     }
+
+    service.shutdown();
 }
 #endif
 
@@ -280,6 +278,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_post )
         BOOST_CHECK_EQUAL(jsonBody["payload"], "post body");
         BOOST_CHECK_EQUAL(jsonBody["type"], "application/x-nothing");
     }
+
+    service.shutdown();
 }
 #endif
 
@@ -309,6 +309,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_put )
     BOOST_CHECK_EQUAL(jsonBody["verb"], "PUT");
     BOOST_CHECK_EQUAL(jsonBody["payload"], bigBody);
     BOOST_CHECK_EQUAL(jsonBody["type"], "application/x-nothing");
+
+    service.shutdown();
 }
 #endif
 
@@ -332,6 +334,8 @@ BOOST_AUTO_TEST_CASE( http_test_client_delete )
 
     BOOST_CHECK_EQUAL(get<0>(resp), HttpClientError::None);
     BOOST_CHECK_EQUAL(get<1>(resp), 200);
+
+    service.shutdown();
 }
 #endif
 
@@ -351,6 +355,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_put_multi )
 
     auto client = make_shared<HttpClient>(baseUrl);
     loop.addSource("client", client);
+    client->waitConnectionState(AsyncEventSource::CONNECTED);
 
     size_t maxRequests(500);
     int done(0);
@@ -397,6 +402,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_put_multi )
     }
 
     loop.shutdown();
+    service.shutdown();
 }
 #endif
 
@@ -426,6 +432,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
 
         auto client = make_shared<HttpClient>(baseUrl, numParallel);
         loop.addSource("client", client);
+        client->waitConnectionState(AsyncEventSource::CONNECTED);
 
         int maxReqs(30000), numReqs(0), missedReqs(0);
         int numResponses(0);
@@ -486,6 +493,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
                   maxReqs, missedReqs);
 
         loop.shutdown();
+        service.shutdown();
     };
 
     doStressTest(1);
@@ -551,6 +559,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
     HttpClient client2("http://nowhere", 1);
     client2 = move(client1);
     doGet(client2);
+
+    service.shutdown();
 }
 #endif
 
