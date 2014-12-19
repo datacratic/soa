@@ -18,6 +18,7 @@
 #include "soa/utils/print_utils.h"
 #include "jml/arch/futex.h"
 #include "jml/arch/threads.h"
+#include "jml/arch/timers.h"
 #include "jml/utils/exc_assert.h"
 #include "jml/utils/pair_utils.h"
 #include "jml/utils/vector_utils.h"
