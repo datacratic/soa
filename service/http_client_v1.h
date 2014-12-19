@@ -33,8 +33,7 @@ namespace Datacratic {
 /* HTTP CLIENT V1                                                           */
 /****************************************************************************/
 
-struct HttpClientV1 : public AsyncEventSource,
-                      public HttpClientImpl {
+struct HttpClientV1 : public HttpClientImpl {
     HttpClientV1(const std::string & baseUrl,
                  int numParallel, int queueSize);
 

@@ -102,8 +102,7 @@ private:
 /* HTTP CLIENT V2                                                           */
 /****************************************************************************/
 
-struct HttpClientV2 : public AsyncEventSource,
-                      public HttpClientImpl {
+struct HttpClientV2 : public HttpClientImpl {
     HttpClientV2(const std::string & baseUrl,
                  int numParallel, size_t queueSize);
 
