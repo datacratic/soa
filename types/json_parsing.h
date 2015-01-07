@@ -220,9 +220,7 @@ struct JsonParsingContext {
     virtual bool isBool() const = 0;
     virtual bool isNumber() const = 0;
     virtual bool isNull() const = 0;
-#if 0
     virtual bool isInt() const = 0;
-#endif
     virtual void skip() = 0;
 
     /** For debugging: print out what is the currently being parsed
@@ -452,6 +450,29 @@ struct StreamingJsonParsingContext
         
     }
 
+    virtual bool isInt() const
+    {
+        skipJsonWhitespace(*context);
+
+        // Find the offset at which an integer finishes
+        size_t offset1;
+        {
+            ML::Parse_Context::Revert_Token token(*context);
+            long long v;
+            if (!context->match_long_long(v))
+                return false;
+            offset1 = context->get_offset();
+        }
+
+        // It's an integer only if a double only matches the same.
+        // Otherwise it's surely a double.
+        ML::Parse_Context::Revert_Token token(*context);
+        double d;
+        if (!context->match_double(d))
+            return false;
+        return context->get_offset() == offset1;
+    }
+    
     virtual bool isNumber() const
     {
         skipJsonWhitespace(*context);
@@ -494,17 +515,6 @@ struct StreamingJsonParsingContext
     {
         return context->where() + " at " + printPath();
     }
-
-#if 0
-    virtual bool isInt() const
-    {
-        Revert_Token token(*context);
-        long long l;
-        if (match_long_long(l))
-            return true;
-        return false;
-    }
-#endif
 
     virtual Json::Value expectJson()
     {
@@ -685,6 +695,11 @@ struct StructuredJsonParsingContext: public JsonParsingContext {
     virtual bool isBool() const
     {
         return current->type() == Json::booleanValue;
+    }
+
+    virtual bool isInt() const
+    {
+        return current->isIntegral();
     }
 
     virtual bool isNumber() const
