@@ -288,9 +288,9 @@ struct RestRequestParsingContext {
         if (&typeid(std::shared_ptr<As>) == obj.second)
             return *reinterpret_cast<std::shared_ptr<As> *>(obj.first)->get();
 
-        void * converted = ML::is_convertible(*obj.second,
-                                              *tp,
-                                              obj.first);
+        void * converted = nullptr; //ML::is_convertible(*obj.second,
+                                    //          *tp,
+                                    //          obj.first);
         if (!converted)
             throw ML::Exception("wanted to get object of type "
                                 + ML::type_name<As>()
