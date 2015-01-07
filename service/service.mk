@@ -34,6 +34,7 @@ LIBSERVICES_SOURCES := \
 	http_header.cc \
 	port_range_service.cc \
 	service_base.cc \
+	event_service.cc \
 	message_loop.cc \
 	loop_monitor.cc \
 	named_endpoint.cc \
