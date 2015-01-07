@@ -33,7 +33,6 @@
 #include "jml/utils/string_functions.h"
 #include "jml/arch/backtrace.h"
 #include "jml/utils/smart_ptr_utils.h"
-#include <node/node.h>
 #include <v8/v8.h>
 #include <boost/shared_ptr.hpp>
 #include <boost/type_traits/is_base_of.hpp>
@@ -42,6 +41,17 @@
 #include <iostream>
 #include "js_utils.h"
 #include "js_registry.h"
+
+
+#define SET_PROTOTYPE_METHOD(templ, name, callback)                  \
+do {                                                                      \
+  v8::Local<v8::Signature> __callback##_SIG = v8::Signature::New(templ);  \
+  v8::Local<v8::FunctionTemplate> __callback##_TEM =                      \
+    v8::FunctionTemplate::New(callback, v8::Handle<v8::Value>(),          \
+                          __callback##_SIG);                              \
+  templ->PrototypeTemplate()->Set(v8::String::NewSymbol(name),            \
+                                  __callback##_TEM);                      \
+} while (0)
 
 
 namespace Datacratic {
@@ -498,9 +508,9 @@ struct JSWrapped : public JSWrappedBase {
 
         // Instance methods
         // Detach the JS object from its backing CPP object
-        NODE_SET_PROTOTYPE_METHOD(t, "cppDetach", cppDetach);
+        SET_PROTOTYPE_METHOD(t, "cppDetach", cppDetach);
 
-        NODE_SET_PROTOTYPE_METHOD(t, "cppType", cppType);
+        SET_PROTOTYPE_METHOD(t, "cppType", cppType);
 
         registry.get_to_know(name, module, t, setup);
 
@@ -741,7 +751,7 @@ struct JSWrapped2 : public JSWrapped<Shared> {
     static void addMethods()
     {
         using namespace v8;
-        NODE_SET_PROTOTYPE_METHOD(tmpl, "wrapperType", wrapperType);
+        SET_PROTOTYPE_METHOD(tmpl, "wrapperType", wrapperType);
         //tmpl->Set(String::NewSymbol("wrapperType"),
         //          FunctionTemplate::New(wrapperType));
     }
@@ -1266,7 +1276,7 @@ struct JSWrapped3 : public Base {
     static void addMethods()
     {
         using namespace v8;
-        NODE_SET_PROTOTYPE_METHOD(tmpl, "wrapperType", wrapperType);
+        SET_PROTOTYPE_METHOD(tmpl, "wrapperType", wrapperType);
     }
 
     static v8::Persistent<v8::FunctionTemplate>
