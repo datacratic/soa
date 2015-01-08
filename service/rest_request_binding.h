@@ -74,6 +74,74 @@ partial_bind(const std::function<R (Arg1, Args...)> & fn, Bind1 && bind1)
 
 
 /*****************************************************************************/
+/* PARTIAL BIND CONTEXT                                                      */
+/*****************************************************************************/
+
+/** Same as partial bind, but these return a function that also takes a
+    RestRequestParsingContext, from which the Ptr can be extracted.
+*/
+
+template<typename R, typename... Args, typename Obj, typename Ptr>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...) const,
+                     Ptr ptr)
+{
+    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+        {
+            const Obj & obj = *ptr;
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Ptr>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...),
+             Ptr ptr)
+{
+    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+        {
+            Obj & obj = *ptr;
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename Arg1, typename... Args, typename Bind1>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(const std::function<R (Arg1, Args...)> & fn, Bind1 && bind1)
+{
+    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+        {
+            return fn(bind1, std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Value, int Index>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...) const,
+                     const ObjectExtractor<Value, Index> & ptr)
+{
+    return [=] (const RestRequestParsingContext & context, Args&&... args) -> R
+        {
+            const Obj & obj = context.getObjectAs<Obj>(index);
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Value, int Index>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...),
+                     const ObjectExtractor<Value, Index> & ptr)
+{
+    return [=] (const RestRequestParsingContext & context, Args&&... args) -> R
+        {
+            Obj & obj = context.getObjectAs<Obj>(index);
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+
+
+/*****************************************************************************/
 /* CREATE PARAMETER EXTRACTOR                                                */
 /*****************************************************************************/
 
@@ -324,6 +392,27 @@ createParameterExtractor(Json::Value & argHelp,
         {
             
             return context.getObjectAs<Object>(Index);
+        };
+}
+
+/** Any std::function that takes a RestRequestParsingContext can be a
+    parameter extractor.
+*/
+template<typename T>
+inline static std::function<T
+                            (RestConnection & connection,
+                             const RestRequest & request,
+                             const RestRequestParsingContext & context)>
+createParameterExtractor(Json::Value & argHelp,
+                         const std::function<T (const RestRequestParsingContext & context)> & fn,
+                         void * = 0)
+{
+    return [=] (RestConnection & connection,
+               const RestRequest & request,
+               const RestRequestParsingContext & context)
+        -> T
+        {
+            return fn(context);
         };
 }
 
@@ -781,6 +870,58 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         return make_pair(result, argHelp);
     }
 
+    /** Create a request handler that will call the given member
+        function with parameters extracted from the request.
+
+        The function also gets an implicit first parameter which is
+        the RestRequestParsingContext.
+    */
+    template<typename Return, typename... Args,
+             typename... Params, typename ThenFn>
+    static
+    std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
+    bindAsyncThenContext(const ThenFn & then,
+                         const ExcFn & excFn,
+                         const std::function<Return (const RestRequestParsingContext &, Args...)> & fn,
+                         Params&&... params)
+    {
+        Json::Value argHelp;
+
+        // Create a tuple of function objects that we can call with
+        auto gens = std::make_tuple(CreateRestParameterGenerator<PositionedDualTypes, Params...>
+                                    ::create(argHelp, std::forward<Params>(params)...)...);
+        // Necessary to deal with a compiler bug
+        auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
+
+        RestRequestRouter::OnProcessRequest result
+            = [=] (RestConnection & connection,
+                   const RestRequest & request,
+                   const RestRequestParsingContext & context) -> RestRequestRouter::MatchResult
+            {
+                auto gens = *sharedGens;
+                try {
+                    return then(fn(context, CreateRestParameterGenerator<PositionedDualTypes, Params...>
+                                   ::apply(gens, connection, request, context)...
+                                   ),
+                                connection, request, context);
+                } catch (const std::exception & exc) {
+                    if (excFn)
+                        return excFn(exc.what(), std::current_exception(), 
+                                     connection, request, context);
+                    connection.sendErrorResponse(400, exc.what());
+                    return RestRequestRouter::MR_ERROR;
+                } catch (...) {
+                    if (excFn)
+                        return excFn("unknown exception", std::current_exception(),
+                                     connection, request, context);
+                    connection.sendErrorResponse(400, "unknown exception");
+                    return RestRequestRouter::MR_ERROR;
+                }
+            };
+            
+        return make_pair(result, argHelp);
+    }
+
 };
 
 template<typename Return, typename Obj, typename... Args, typename Ptr,
@@ -1055,6 +1196,62 @@ addRouteSyncJsonReturn(RestRequestRouter & router,
                       std::forward<Params>(params)...);
 }
 
+template<typename Return, typename... Args,
+         typename... Params, typename ThenFn>
+void
+addRouteAsyncThenContext(RestRequestRouter & router,
+                         PathSpec path, RequestFilter filter,
+                         const std::string & description,
+                         const std::string & resultDescription,
+                         const ThenFn & then,
+                         const ExcFn & exc,
+                         const std::function<Return (const RestRequestParsingContext & context, Args...)> & fn,
+                         Params&&... params)
+{
+    static_assert(sizeof...(Args) == sizeof...(Params),
+                  "member function and parameter arity must match");
+
+    typedef ML::TypeList<Args...> ArgsList;
+    typedef ML::TypeList<Params...> ParamsList;
+    typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
+
+    auto res = RestRequestBinder<typename PositionedTypes::List>
+        ::bindAsyncThenContext(then, exc, fn, std::forward<Params>(params)...);
+    auto & cb = res.first;
+    auto & help = res.second;
+    help["result"] = resultDescription;
+
+    router.addRoute(path, filter, description, cb, help);
+}
+
+template<typename Return, typename... Args, typename... Params>
+void
+addRouteSyncJsonReturnContext(RestRequestRouter & router,
+                              PathSpec path, RequestFilter filter,
+                              const std::string & description,
+                              const std::string & resultDescription,
+                              const std::function<Return (const RestRequestParsingContext & context, Args...)> & fn,
+                              Params&&... params)
+{
+    auto then = [] (const Return & ret,
+                    RestConnection & connection,
+                    const RestRequest &,
+                    const RestRequestParsingContext &)
+        {
+            static std::shared_ptr<ValueDescription> desc(getDefaultDescription((Return *)0));
+            std::ostringstream out;
+            StreamJsonPrintingContext context(out);
+            desc->printJson(&ret, context);
+            out << std::endl;
+            connection.sendResponse(200, out.str(), "application/json");
+            return RestRequestRouter::MR_YES;
+        };
+
+    addRouteAsyncThenContext(router, path, filter, description, resultDescription,
+                             then, nullptr /* Exception handler */, fn,
+                             std::forward<Params>(params)...);
+}
+
 template<typename Return, typename Obj, typename... Args, typename Ptr,
          typename... Params>
 void
@@ -1066,8 +1263,27 @@ addRouteSyncJsonReturn(RestRequestRouter & router,
                        Ptr ptr,
                        Params&&... params)
 {
-    return addRouteSyncJsonReturn(router, path, filter, description, resultDescription,
-                                  partial_bind(pmf, ptr), std::forward<Params>(params)...);
+    return addRouteSyncJsonReturnContext(router, path, filter, description,
+                                         resultDescription,
+                                         partial_bind_context(pmf, ptr),
+                                         std::forward<Params>(params)...);
+}
+
+template<typename Return, typename Obj, typename... Args, typename Ptr,
+         typename... Params>
+void
+addRouteSyncJsonReturnContext(RestRequestRouter & router,
+                              PathSpec path, RequestFilter filter,
+                              const std::string & description,
+                              const std::string & resultDescription,
+                              Return (Obj::* pmf) (Args...),
+                              Ptr ptr,
+                              Params&&... params)
+{
+    return addRouteSyncJsonReturnContext(router, path, filter, description,
+                                         resultDescription,
+                                         partial_bind_context(pmf, ptr),
+                                         std::forward<Params>(params)...);
 }
 
 template<typename Return, typename Obj, typename... Args, typename Ptr,
@@ -1081,8 +1297,10 @@ addRouteSyncJsonReturn(RestRequestRouter & router,
                        Ptr ptr,
                        Params&&... params)
 {
-    return addRouteSyncJsonReturn(router, path, filter, description, resultDescription,
-                                  partial_bind(pmf, ptr), std::forward<Params>(params)...);
+    return addRouteSyncJsonReturnContext(router, path, filter, description,
+                                         resultDescription,
+                                         partial_bind_context(pmf, ptr),
+                                         std::forward<Params>(params)...);
 }
 
 
