@@ -124,12 +124,12 @@ struct SignalSlotTestJS
         v8::Persistent<FunctionTemplate> t = Register(New, Setup);
         
         // Instance methods
-        NODE_SET_PROTOTYPE_METHOD(t, "event1", event1);
-        NODE_SET_PROTOTYPE_METHOD(t, "event2", event2);
-        NODE_SET_PROTOTYPE_METHOD(t, "checkCast", checkCast);
-        NODE_SET_PROTOTYPE_METHOD(t, "on", on);
-        NODE_SET_PROTOTYPE_METHOD(t, "signalNames", signalNames);
-        NODE_SET_PROTOTYPE_METHOD(t, "signalInfo", signalInfo);
+        SET_PROTOTYPE_METHOD(t, "event1", event1);
+        SET_PROTOTYPE_METHOD(t, "event2", event2);
+        SET_PROTOTYPE_METHOD(t, "checkCast", checkCast);
+        SET_PROTOTYPE_METHOD(t, "on", on);
+        SET_PROTOTYPE_METHOD(t, "signalNames", signalNames);
+        SET_PROTOTYPE_METHOD(t, "signalInfo", signalInfo);
 
         t->InstanceTemplate()
             ->SetAccessor(String::NewSymbol("lastIndex"), lastIndexGetter);

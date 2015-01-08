@@ -61,10 +61,10 @@ struct BaseJS : public JSWrapped2<Base, BaseJS, BaseName, Module> {
         Persistent<FunctionTemplate> t = Register(New, Setup);
         
         // Instance methods
-        NODE_SET_PROTOTYPE_METHOD(t, "type", type);
-        NODE_SET_PROTOTYPE_METHOD(t, "number", number);
-        NODE_SET_PROTOTYPE_METHOD(t, "number2", number2);
-        NODE_SET_PROTOTYPE_METHOD(t, "otherType", otherType);
+        SET_PROTOTYPE_METHOD(t, "type", type);
+        SET_PROTOTYPE_METHOD(t, "number", number);
+        SET_PROTOTYPE_METHOD(t, "number2", number2);
+        SET_PROTOTYPE_METHOD(t, "otherType", otherType);
         
         return t;
     }
@@ -139,8 +139,8 @@ struct DerivedJS
         Persistent<FunctionTemplate> t = Register(New, Setup);
         
         // Instance methods
-        NODE_SET_PROTOTYPE_METHOD(t, "number", number);
-        NODE_SET_PROTOTYPE_METHOD(t, "otherTypeDerived", otherTypeDerived);
+        SET_PROTOTYPE_METHOD(t, "number", number);
+        SET_PROTOTYPE_METHOD(t, "otherTypeDerived", otherTypeDerived);
 
         return t;
     }
@@ -194,7 +194,7 @@ struct ReDerivedJS
         Persistent<FunctionTemplate> t = Register(New, Setup);
         
         // Instance methods
-        NODE_SET_PROTOTYPE_METHOD(t, "number", number);
+        SET_PROTOTYPE_METHOD(t, "number", number);
         
         return t;
     }
@@ -251,9 +251,9 @@ struct Base2JS : public JSWrapped2<Base2, Base2JS, Base2Name, Module> {
         Persistent<FunctionTemplate> t = Register(New, Setup);
         
         // Instance methods
-        NODE_SET_PROTOTYPE_METHOD(t, "type", type);
-        NODE_SET_PROTOTYPE_METHOD(t, "number", number);
-        NODE_SET_PROTOTYPE_METHOD(t, "number2", number2);
+        SET_PROTOTYPE_METHOD(t, "type", type);
+        SET_PROTOTYPE_METHOD(t, "number", number);
+        SET_PROTOTYPE_METHOD(t, "number2", number2);
         
         return t;
     }

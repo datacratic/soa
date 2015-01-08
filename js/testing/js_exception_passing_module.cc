@@ -34,10 +34,10 @@ struct TestExceptionJS
         Persistent<FunctionTemplate> t = Register(New, Setup);
         
         // Instance methods
-        NODE_SET_PROTOTYPE_METHOD(t, "testMlException", testMlException);
-        NODE_SET_PROTOTYPE_METHOD(t, "testMlException2", testMlException2);
-        NODE_SET_PROTOTYPE_METHOD(t, "testStdException", testStdException);
-        NODE_SET_PROTOTYPE_METHOD(t, "testPassThrough", testPassThrough);
+        SET_PROTOTYPE_METHOD(t, "testMlException", testMlException);
+        SET_PROTOTYPE_METHOD(t, "testMlException2", testMlException2);
+        SET_PROTOTYPE_METHOD(t, "testStdException", testStdException);
+        SET_PROTOTYPE_METHOD(t, "testPassThrough", testPassThrough);
         
         return t;
     }

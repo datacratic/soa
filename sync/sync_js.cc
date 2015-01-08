@@ -17,7 +17,6 @@
 
 using namespace v8;
 using namespace std;
-using namespace node;
 
 namespace Datacratic {
 namespace JS {
@@ -201,13 +200,13 @@ struct OutputStreamJS
     Initialize()
     {
         Persistent<FunctionTemplate> t = Register(New);
-        NODE_SET_PROTOTYPE_METHOD(t, "open", open);
-        NODE_SET_PROTOTYPE_METHOD(t, "close", close);
-        NODE_SET_PROTOTYPE_METHOD(t, "flush", close);
-        NODE_SET_PROTOTYPE_METHOD(t, "write", write);
-        NODE_SET_PROTOTYPE_METHOD(t, "log", log);
-        NODE_SET_PROTOTYPE_METHOD(t, "toString", toString);
-        NODE_SET_PROTOTYPE_METHOD(t, "inspect", toString);
+        SET_PROTOTYPE_METHOD(t, "open", open);
+        SET_PROTOTYPE_METHOD(t, "close", close);
+        SET_PROTOTYPE_METHOD(t, "flush", close);
+        SET_PROTOTYPE_METHOD(t, "write", write);
+        SET_PROTOTYPE_METHOD(t, "log", log);
+        SET_PROTOTYPE_METHOD(t, "toString", toString);
+        SET_PROTOTYPE_METHOD(t, "inspect", toString);
     }
 
     static Handle<v8::Value>

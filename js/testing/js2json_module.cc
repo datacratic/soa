@@ -47,11 +47,11 @@ struct FromToJS
         Persistent<FunctionTemplate> t = Register(New, Setup);
 
         // Instance methods
-        NODE_SET_PROTOTYPE_METHOD(t, "roundTrip", roundTrip);
-        NODE_SET_PROTOTYPE_METHOD(t, "getJSON1", getJSON1);
-        NODE_SET_PROTOTYPE_METHOD(t, "getJSON2", getJSON2);
-        NODE_SET_PROTOTYPE_METHOD(t, "getLongLongInt", getLongLongInt);
-        NODE_SET_PROTOTYPE_METHOD(t, "getJSONLongLongInt", getJSONLongLongInt);
+        SET_PROTOTYPE_METHOD(t, "roundTrip", roundTrip);
+        SET_PROTOTYPE_METHOD(t, "getJSON1", getJSON1);
+        SET_PROTOTYPE_METHOD(t, "getJSON2", getJSON2);
+        SET_PROTOTYPE_METHOD(t, "getLongLongInt", getLongLongInt);
+        SET_PROTOTYPE_METHOD(t, "getJSONLongLongInt", getJSONLongLongInt);
 
         return t;
     }

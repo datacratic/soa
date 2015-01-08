@@ -9,7 +9,6 @@
 
 using namespace v8;
 using namespace std;
-using namespace node;
 
 namespace Datacratic{
 namespace JS{

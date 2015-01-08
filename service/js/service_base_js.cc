@@ -61,8 +61,8 @@ struct ServiceProxiesJS :
     {
         Persistent<FunctionTemplate> t = Register(New);
 
-        NODE_SET_PROTOTYPE_METHOD(t, "bootstrap", bootstrap);
-        NODE_SET_PROTOTYPE_METHOD(t, "logToCarbon", logToCarbon);
+        SET_PROTOTYPE_METHOD(t, "bootstrap", bootstrap);
+        SET_PROTOTYPE_METHOD(t, "logToCarbon", logToCarbon);
         registerMemberFn(&Datacratic::ServiceProxies::useZookeeper, "useZookeeper");
         registerMemberFn(&Datacratic::ServiceProxies::getServiceClassInstances, "getServiceClassInstances");
     }
@@ -194,10 +194,10 @@ Initialize()
 {
     Persistent<FunctionTemplate> t = Register(New);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "recordHit", recordHit);
-    NODE_SET_PROTOTYPE_METHOD(t, "recordCount", recordCount);
-    NODE_SET_PROTOTYPE_METHOD(t, "recordOutcome", recordOutcome);
-    NODE_SET_PROTOTYPE_METHOD(t, "recordLevel", recordLevel);
+    SET_PROTOTYPE_METHOD(t, "recordHit", recordHit);
+    SET_PROTOTYPE_METHOD(t, "recordCount", recordCount);
+    SET_PROTOTYPE_METHOD(t, "recordOutcome", recordOutcome);
+    SET_PROTOTYPE_METHOD(t, "recordLevel", recordLevel);
 }
 
 Handle<Value>
