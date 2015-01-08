@@ -81,10 +81,10 @@ partial_bind(const std::function<R (Arg1, Args...)> & fn, Bind1 && bind1)
     RestRequestParsingContext, from which the Ptr can be extracted.
 */
 
-template<typename R, typename... Args, typename Obj, typename Ptr>
+template<typename R, typename... Args, typename Obj, typename Obj2>
 std::function<R (const RestRequestParsingContext &, Args...)>
 partial_bind_context(R (Obj::* pmf) (Args...) const,
-                     Ptr ptr)
+                     Obj2 * ptr)
 {
     return [=] (const RestRequestParsingContext &, Args&&... args) -> R
         {
@@ -93,14 +93,62 @@ partial_bind_context(R (Obj::* pmf) (Args...) const,
         };
 }
 
-template<typename R, typename... Args, typename Obj, typename Ptr>
+template<typename R, typename... Args, typename Obj, typename Obj2>
 std::function<R (const RestRequestParsingContext &, Args...)>
 partial_bind_context(R (Obj::* pmf) (Args...),
-             Ptr ptr)
+                     Obj2 * ptr)
 {
     return [=] (const RestRequestParsingContext &, Args&&... args) -> R
         {
             Obj & obj = *ptr;
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Obj2>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...) const,
+                     const std::shared_ptr<Obj2> & ptr)
+{
+    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+        {
+            const Obj & obj = *ptr;
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Obj2>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...),
+                     const std::shared_ptr<Obj2> & ptr)
+{
+    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+        {
+            Obj & obj = *ptr;
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Obj2>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...),
+                     const std::function<Obj2 * (const RestRequestParsingContext & context)> & fn)
+{
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
+        {
+            Obj & obj = *static_cast<Obj *>(fn(cxt));
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Obj2>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...) const,
+                     const std::function<const Obj2 * (const RestRequestParsingContext & context)> & fn)
+{
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
+        {
+            const Obj & obj = *static_cast<Obj *>(fn(cxt));
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
