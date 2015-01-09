@@ -486,10 +486,16 @@ struct RestRequestRouter {
                   ExtractObject extractObject = nullptr);
 
     void addHelpRoute(PathSpec path, RequestFilter filter);
+    void addAutodocRoute(PathSpec autodocPath, PathSpec helpPath,
+                         const std::string & autodocFilesPath);
 
     virtual void getHelp(Json::Value & result,
                          const std::string & currentPath,
                          const std::set<std::string> & verbs) const;
+    virtual std::string typeFromCppType(const std::string & cppType) const;
+    virtual void getAutodocHelp(Json::Value & result,
+                                const std::string & currentPath,
+                                const std::set<std::string> & verbs) const;
 
     /** Create a generic sub router. */
     RestRequestRouter &
