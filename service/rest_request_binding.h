@@ -81,14 +81,67 @@ partial_bind(const std::function<R (Arg1, Args...)> & fn, Bind1 && bind1)
     RestRequestParsingContext, from which the Ptr can be extracted.
 */
 
+template<typename Obj, typename Obj2>
+Obj & derefPtrContext(Obj2 * ptr,
+                      const RestRequestParsingContext & context)
+{
+    return static_cast<Obj &>(*ptr);
+}
+
+template<typename Obj, typename Obj2>
+Obj & derefPtrContext(const std::shared_ptr<Obj2> & ptr,
+                      const RestRequestParsingContext & context)
+{
+    return static_cast<Obj &>(*ptr);
+}
+
+template<typename Obj, typename Obj2>
+Obj & derefPtrContext(const std::function<Obj2 * (const RestRequestParsingContext &)> & fn,
+                      const RestRequestParsingContext & context)
+{
+    return static_cast<Obj &>(*fn(context));
+}
+
+template<typename Obj, typename Value, int Index>
+Obj & derefPtrContext(const ObjectExtractor<Value, Index> & ptr,
+                      const RestRequestParsingContext & context)
+{
+    return static_cast<Obj &>(context.getObjectAs<Obj>(Index));
+}
+
+template<typename R, typename... Args, typename Obj, typename Ptr>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...),
+                     Ptr && ptr)
+{
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
+        {
+            Obj & obj = derefPtrContext<Obj>(ptr, cxt);
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+template<typename R, typename... Args, typename Obj, typename Ptr>
+std::function<R (const RestRequestParsingContext &, Args...)>
+partial_bind_context(R (Obj::* pmf) (Args...) const,
+                     Ptr && ptr)
+{
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
+        {
+            const Obj & obj = derefPtrContext<const Obj>(ptr, cxt);
+            return ((obj).*(pmf))(std::forward<Args>(args)...);
+        };
+}
+
+#if 0
 template<typename R, typename... Args, typename Obj, typename Obj2>
 std::function<R (const RestRequestParsingContext &, Args...)>
 partial_bind_context(R (Obj::* pmf) (Args...) const,
                      Obj2 * ptr)
 {
-    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
         {
-            const Obj & obj = *ptr;
+            const Obj & obj = derefPtrContext<const Obj>(ptr, cxt);
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
@@ -98,21 +151,21 @@ std::function<R (const RestRequestParsingContext &, Args...)>
 partial_bind_context(R (Obj::* pmf) (Args...),
                      Obj2 * ptr)
 {
-    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
         {
-            Obj & obj = *ptr;
+            Obj & obj = derefPtrContext<Obj>(ptr, cxt);
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
 
 template<typename R, typename... Args, typename Obj, typename Obj2>
-std::function<R (const RestRequestParsingContext &, Args...)>
+std::function<R (const RestRequestParsingContext & cxt, Args...)>
 partial_bind_context(R (Obj::* pmf) (Args...) const,
                      const std::shared_ptr<Obj2> & ptr)
 {
-    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
         {
-            const Obj & obj = *ptr;
+            const Obj & obj = derefPtrContext<const Obj>(ptr, cxt);
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
@@ -122,9 +175,9 @@ std::function<R (const RestRequestParsingContext &, Args...)>
 partial_bind_context(R (Obj::* pmf) (Args...),
                      const std::shared_ptr<Obj2> & ptr)
 {
-    return [=] (const RestRequestParsingContext &, Args&&... args) -> R
+    return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
         {
-            Obj & obj = *ptr;
+            Obj & obj = derefPtrContext<Obj>(ptr, cxt);
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
@@ -136,7 +189,7 @@ partial_bind_context(R (Obj::* pmf) (Args...),
 {
     return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
         {
-            Obj & obj = *static_cast<Obj *>(fn(cxt));
+            Obj & obj = derefPtrContext<Obj>(fn, cxt);
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
@@ -148,7 +201,7 @@ partial_bind_context(R (Obj::* pmf) (Args...) const,
 {
     return [=] (const RestRequestParsingContext & cxt, Args&&... args) -> R
         {
-            const Obj & obj = *static_cast<Obj *>(fn(cxt));
+            const Obj & obj = derefPtrContext<const Obj>(fn, cxt);
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
@@ -186,7 +239,7 @@ partial_bind_context(R (Obj::* pmf) (Args...),
             return ((obj).*(pmf))(std::forward<Args>(args)...);
         };
 }
-
+#endif
 
 
 /*****************************************************************************/
@@ -577,7 +630,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
             {
                 auto gens = *sharedGens;
                 try {
-                    Obj & obj = *ptr;
+                    Obj & obj = derefPtrContext<Obj>(ptr, context);
                     ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                    ::apply(gens, connection, request, context)...
                                    );
@@ -621,7 +674,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
             {
                 auto gens = *sharedGens;
                 try {
-                    Obj & obj = *ptr;
+                    const Obj & obj = derefPtrContext<const Obj>(ptr, context);
                     ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                    ::apply(gens, connection, request, context)...
                                    );
@@ -669,7 +722,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
             {
                 auto gens = *sharedGens;
                 try {
-                    Obj & obj = *ptr;
+                    Obj & obj = derefPtrContext<Obj>(ptr, context);
                     auto res = ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                               ::apply(gens, connection, request, context)...
                                               );
@@ -714,7 +767,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
             {
                 auto gens = *sharedGens;
                 try {
-                    Obj & obj = *ptr;
+                    const Obj & obj = derefPtrContext<const Obj>(ptr, context);
                     auto res = ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                               ::apply(gens, connection, request, context)...
                                               );
@@ -761,7 +814,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
             {
                 auto gens = *sharedGens;
                 try {
-                    Obj & obj = *ptr;
+                    Obj & obj = derefPtrContext<Obj>(ptr, context);
                     auto res = ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                               ::apply(gens, connection, request, context)...
                                               );
@@ -804,7 +857,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
             {
                 auto gens = *sharedGens;
                 try {
-                    Obj & obj = *ptr;
+                    const Obj & obj = derefPtrContext<const Obj>(ptr, context);
                     auto res = ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                               ::apply(gens, connection, request, context)...
                                               );
@@ -851,7 +904,51 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
             {
                 auto gens = *sharedGens;
                 try {
-                    Obj & obj = *ptr;
+                    Obj & obj = derefPtrContext<Obj>(ptr, context);
+                    ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
+                                   ::apply(gens, connection, request, context)...
+                                   );
+                } catch (const std::exception & exc) {
+                    connection.sendErrorResponse(400, exc.what());
+                    return RestRequestRouter::MR_ERROR;
+                } catch (...) {
+                    connection.sendErrorResponse(400, "unknown exception");
+                    return RestRequestRouter::MR_ERROR;
+                }
+
+                return RestRequestRouter::MR_YES;
+            };
+            
+        return make_pair(result, argHelp);
+    }
+
+    /** Create a request handler that will call the given member
+        function with parameters extracted from the request.
+    */
+    template<typename Return, typename Obj, typename... Args, typename Ptr,
+             typename... Params>
+    static
+    std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
+    bindAsync(Return (Obj::* pmf) (Args...) const,
+              Ptr ptr,
+              Params&&... params)
+    {
+        Json::Value argHelp;
+
+        // Create a tuple of function objects that we can call with
+        auto gens = std::make_tuple(CreateRestParameterGenerator<PositionedDualTypes, Params...>
+                                    ::create(argHelp, std::forward<Params>(params)...)...);
+        // Necessary to deal with a compiler bug
+        auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
+
+        RestRequestRouter::OnProcessRequest result
+            = [=] (RestConnection & connection,
+                   const RestRequest & request,
+                   const RestRequestParsingContext & context)
+            {
+                auto gens = *sharedGens;
+                try {
+                    const Obj & obj = derefPtrContext<const Obj>(ptr, context);
                     ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                    ::apply(gens, connection, request, context)...
                                    );
