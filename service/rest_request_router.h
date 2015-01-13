@@ -15,6 +15,7 @@
 #include "jml/arch/rtti_utils.h"
 #include "jml/arch/demangle.h"
 #include "jml/arch/exception.h"
+#include "soa/types/value_description.h"
 //#include <regex>
 #include <boost/regex.hpp>
 
@@ -547,10 +548,22 @@ struct RestRequestRouter {
                   ExtractObject extractObject = nullptr);
 
     void addHelpRoute(PathSpec path, RequestFilter filter);
+    void addAutodocRoute(PathSpec autodocPath, PathSpec helpPath,
+                         const std::string & autodocFilesPath);
 
     virtual void getHelp(Json::Value & result,
                          const std::string & currentPath,
                          const std::set<std::string> & verbs) const;
+    virtual std::string typeFromCppType(const std::string & cppType) const;
+    virtual std::string typeFromValueKind(const ValueKind & kind) const;
+    virtual void addValueDescriptionToProperties(
+        const ValueDescription * vd,
+        Json::Value & properties, int recur = 0) const;
+    virtual void addJsonParamsToProperties(const Json::Value & params,
+                                           Json::Value & properties) const;
+    virtual void getAutodocHelp(Json::Value & result,
+                                const std::string & currentPath,
+                                const std::set<std::string> & verbs) const;
 
     /** Create a generic sub router. */
     RestRequestRouter &
