@@ -457,8 +457,21 @@ updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
     else if (kind == ValueKind::BOOLEAN) {
         v["type"] = "boolean";
     }
-    else if (kind == ValueKind::STRING || kind == ValueKind::ENUM
-            || kind == ValueKind::LINK) {
+    else if (kind == ValueKind::STRING) {
+        v["type"] = "string";
+    }
+    else if (kind == ValueKind::ENUM) {
+        //TODO ENUM, LINK
+        cerr << "Got enum field: " << vd->typeName << endl;
+        v["description"].asString() + " (cppType: " + vd->typeName + ")";
+        v["type"] = "string";
+    }
+    else if (kind == ValueKind::LINK) {
+        //TODO ENUM, LINK, should not be here
+        cerr << "Got link field: " << vd->typeName << endl;
+        v["description"].asString() + " (cppType: " + vd->typeName + ")";
+        const ValueDescription * subVdPtr = &(vd->contained());
+        cerr << subVdPtr->typeName << endl;
         v["type"] = "string";
     }
     else if (kind == ValueKind::FLOAT) {
@@ -468,16 +481,19 @@ updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
         v["type"] = "array";
     }
     else if (kind == ValueKind::STRUCTURE) {
-        //TODO should not be here
+        v["description"].asString() + " (cppType: " + vd->typeName + ")";
         v["type"] = "object";
     }
     else if (kind == ValueKind::ATOM) {
         v["type"] = "string";
+        v["description"] =
+            v["description"].asString() + " (cppType: " + vd->typeName + ")";
         if (vd->typeName == "Datacratic::TimePeriod") {
             v["pattern"] = "^[\\d]+(s|m|h|d)$";
         }
     }
     else if (kind == ValueKind::ANY) {
+        //cppType == Json::Value
         v["type"] = "object";
     }
     else {
@@ -501,13 +517,22 @@ addValueDescriptionToProperties(const ValueDescription * vd,
 
     auto onField = [this, &properties, recur, vd] (const ValueDescription::FieldDescription & fd) {
         Value tmpObj;
-        updateFromValueDescription(tmpObj, fd.description.get());
         tmpObj["description"] = fd.comment;
-        if (fd.description->kind == ValueKind::ARRAY) {
-            const ValueDescription * subVdPtr = &(fd.description->contained());
+        const ValueDescription * curr = fd.description.get();
+        if (curr->kind == ValueKind::LINK) {
+            cerr << "got link" << fd.fieldName << endl;
+            curr = &(curr->contained());
+            if (curr->kind == ValueKind::LINK) {
+                cerr << "link of link not supported" << endl;
+            }
+        }
+        updateFromValueDescription(tmpObj, curr);
+        if (curr->kind == ValueKind::ARRAY) {
+            const ValueDescription * subVdPtr = &(curr->contained());
             if (subVdPtr->kind == ValueKind::STRUCTURE) {
                 if (vd == subVdPtr) {
-                    tmpObj["items"]["type"] = "object (recursive)";
+                    tmpObj["items"]["type"] =
+                        "object (recursive, cppType: " + curr->typeName + ")";
                     tmpObj["items"]["properties"] = objectValue;
                 }
                 else {
@@ -520,16 +545,17 @@ addValueDescriptionToProperties(const ValueDescription * vd,
             else {
                 if (subVdPtr->kind == ValueKind::ARRAY) {
                     // unsupported "pair" type
-                    tmpObj["items"]["type"] = "object";
+                    tmpObj["items"]["type"] =
+                        "object (cppType: " + curr->typeName + ")";
                 }
                 else {
                     updateFromValueDescription(tmpObj["items"], subVdPtr);
                 }
             }
         }
-        else if (fd.description->kind == ValueKind::STRUCTURE) {
+        else if (curr->kind == ValueKind::STRUCTURE) {
             Value itemProperties;
-            addValueDescriptionToProperties(fd.description.get(),
+            addValueDescriptionToProperties(curr,
                                             itemProperties, recur + 1);
             tmpObj["items"]["properties"] = itemProperties;
         }
