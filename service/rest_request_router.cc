@@ -447,45 +447,44 @@ getHelp(Json::Value & result, const std::string & currentPath,
     }
 }
 
-string
+void
 RestRequestRouter::
-typeFromCppType(const string & cppType) const {
-    if (cppType == "bool") {
-        return "boolean";
-    }
-    if (cppType == "Json::Value") {
-        return "object";
-    }
-    if (cppType == "Datacratic::Date") {
-        return "ISO 8601 date-time";
-    }
-
-    shared_ptr<const ValueDescription> vd = ValueDescription::get(cppType);
-    cerr << "unknown cppType: " << cppType << ", of kind: " << vd->kind << endl;
-    return "unknown";
-}
-
-string
-RestRequestRouter::
-typeFromValueKind(const ValueKind & kind) const {
+updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
+    const ValueKind kind = vd->kind;
     if (kind == ValueKind::INTEGER) {
-        return "integer";
+        v["type"] = "integer";
     }
-    if (kind == ValueKind::BOOLEAN) {
-        return "boolean";
+    else if (kind == ValueKind::BOOLEAN) {
+        v["type"] = "boolean";
     }
-    if (kind == ValueKind::STRING || kind == ValueKind::ENUM
+    else if (kind == ValueKind::STRING || kind == ValueKind::ENUM
             || kind == ValueKind::LINK) {
-        return "string";
+        v["type"] = "string";
     }
-    if (kind == ValueKind::FLOAT) {
-        return "float";
+    else if (kind == ValueKind::FLOAT) {
+        v["type"] = "float";
     }
-    if (kind == ValueKind::ARRAY) {
-        return "array";
+    else if (kind == ValueKind::ARRAY) {
+        v["type"] = "array";
     }
-    cerr << "uncovered conversion case for kind: " << kind << endl;
-    return "object";
+    else if (kind == ValueKind::STRUCTURE) {
+        //TODO should not be here
+        v["type"] = "object";
+    }
+    else if (kind == ValueKind::ATOM) {
+        v["type"] = "string";
+        if (vd->typeName == "Datacratic::TimePeriod") {
+            v["pattern"] = "^[\\d]+(s|m|h|d)$";
+        }
+    }
+    else if (kind == ValueKind::ANY) {
+        v["type"] = "object";
+    }
+    else {
+        cerr << "uncovered conversion case for kind: " << kind
+             << " typeName: " << vd->typeName << endl;
+        v["type"] = "object";
+    }
 }
 
 
@@ -494,14 +493,15 @@ RestRequestRouter::
 addValueDescriptionToProperties(const ValueDescription * vd,
                                 Json::Value & properties, int recur) const
 {
+    using namespace Json;
     if (recur > 2) {
         cerr << "WARNING: Too many recursions" << endl;
         return;
     }
-    using namespace Json;
+
     auto onField = [this, &properties, recur, vd] (const ValueDescription::FieldDescription & fd) {
         Value tmpObj;
-        tmpObj["type"] = typeFromValueKind(fd.description->kind);
+        updateFromValueDescription(tmpObj, fd.description.get());
         tmpObj["description"] = fd.comment;
         if (fd.description->kind == ValueKind::ARRAY) {
             const ValueDescription * subVdPtr = &(fd.description->contained());
@@ -512,7 +512,8 @@ addValueDescriptionToProperties(const ValueDescription * vd,
                 }
                 else {
                     Value itemProperties;
-                    addValueDescriptionToProperties(subVdPtr, itemProperties, recur + 1);
+                    addValueDescriptionToProperties(subVdPtr, itemProperties,
+                                                    recur + 1);
                     tmpObj["items"]["items"]["properties"] = itemProperties;
                 }
             }
@@ -522,14 +523,14 @@ addValueDescriptionToProperties(const ValueDescription * vd,
                     tmpObj["items"]["type"] = "object";
                 }
                 else {
-                    tmpObj["items"]["type"] =
-                        typeFromValueKind(subVdPtr->kind);
+                    updateFromValueDescription(tmpObj["items"], subVdPtr);
                 }
             }
         }
         else if (fd.description->kind == ValueKind::STRUCTURE) {
             Value itemProperties;
-            addValueDescriptionToProperties(fd.description.get(), itemProperties, recur + 1);
+            addValueDescriptionToProperties(fd.description.get(),
+                                            itemProperties, recur + 1);
             tmpObj["items"]["properties"] = itemProperties;
         }
         properties[fd.fieldName] = tmpObj;
@@ -548,13 +549,13 @@ addJsonParamsToProperties(const Json::Value & params,
             paramsIt != params.end();
             paramsIt++) {
         string cppType = (*paramsIt)["cppType"].asString();
-        shared_ptr<const ValueDescription> vd = ValueDescription::get(cppType);
+        const ValueDescription * vd = ValueDescription::get(cppType).get();
         if (vd->kind == ValueKind::STRUCTURE) {
-            addValueDescriptionToProperties(vd.get(), properties);
+            addValueDescriptionToProperties(vd, properties);
         }
         else {
             Value tmpObj;
-            tmpObj["type"] = typeFromCppType(cppType);
+            updateFromValueDescription(tmpObj, vd);
             tmpObj["description"] = (*paramsIt)["description"].asString();
             properties[(*paramsIt)["name"].asString()] = tmpObj;
         }
@@ -604,21 +605,6 @@ getAutodocHelp(Json::Value & result, const std::string & currentPath,
             if ((*it).isMember("arguments") && (*it)["arguments"].isMember("jsonParams")) {
                 addJsonParamsToProperties((*it)["arguments"]["jsonParams"],
                                           subObj["in"]["properties"]);
-#if 0
-                if ((*it)["arguments"]["jsonParams"].size() == 1) {
-                    //possibly a struct
-                }
-                else {
-                    for (ValueIterator paramsIt = (*it)["arguments"]["jsonParams"].begin();
-                            paramsIt != (*it)["arguments"]["jsonParams"].end() ;
-                            paramsIt++) {
-                        Value tmpObj;
-                        tmpObj["type"] = typeFromCppType((*paramsIt)["cppType"].asString());
-                        tmpObj["description"] = (*paramsIt)["description"].asString();
-                        subObj["in"]["properties"][(*paramsIt)["name"].asString()] = tmpObj;
-                    }
-                }
-#endif
             }
             curr.append(subObj);
             result["routes"].append(curr);

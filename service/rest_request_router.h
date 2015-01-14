@@ -554,8 +554,8 @@ struct RestRequestRouter {
     virtual void getHelp(Json::Value & result,
                          const std::string & currentPath,
                          const std::set<std::string> & verbs) const;
-    virtual std::string typeFromCppType(const std::string & cppType) const;
-    virtual std::string typeFromValueKind(const ValueKind & kind) const;
+    virtual void updateFromValueDescription(Json::Value & v,
+                                            const ValueDescription * vd) const;
     virtual void addValueDescriptionToProperties(
         const ValueDescription * vd,
         Json::Value & properties, int recur = 0) const;
