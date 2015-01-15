@@ -341,16 +341,13 @@ addHelpRoute(PathSpec path, RequestFilter filter)
                const RestRequest & request,
                const RestRequestParsingContext & context)
         {
+            Json::Value help;
             if (request.params.hasValue("autodoc")) {
-                Json::Value help;
                 getAutodocHelp(help, "", set<string>());
-                connection.sendResponse(200, help);
             } else {
-                Json::Value help;
                 getHelp(help, "", set<string>());
-                connection.sendResponse(200, help);
             }
-
+            connection.sendResponse(200, help);
             return MR_YES;
         };
 
@@ -577,10 +574,8 @@ addJsonParamsToProperties(const Json::Value & params,
                           Json::Value & properties) const
 {
     using namespace Json;
-    for (ValueIterator paramsIt = params.begin();
-            paramsIt != params.end();
-            paramsIt++) {
-        string cppType = (*paramsIt)["cppType"].asString();
+    for (Value param: params) {
+        string cppType = param["cppType"].asString();
         const ValueDescription * vd = ValueDescription::get(cppType).get();
         if (vd->kind == ValueKind::STRUCTURE) {
             addValueDescriptionToProperties(vd, properties);
@@ -588,8 +583,8 @@ addJsonParamsToProperties(const Json::Value & params,
         else {
             Value tmpObj;
             updateFromValueDescription(tmpObj, vd);
-            tmpObj["description"] = (*paramsIt)["description"].asString();
-            properties[(*paramsIt)["name"].asString()] = tmpObj;
+            tmpObj["description"] = param["description"].asString();
+            properties[param["name"].asString()] = tmpObj;
         }
     }
 }
