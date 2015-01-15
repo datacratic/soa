@@ -7,6 +7,7 @@
 
 #include "http_rest_endpoint.h"
 #include "jml/utils/exc_assert.h"
+#include "jml/utils/filter_streams.h"
 
 
 using namespace std;
@@ -79,14 +80,19 @@ std::string
 HttpRestEndpoint::
 bindTcp(PortRange const & portRange, std::string host)
 {
-    using namespace std;
-
     // TODO: generalize this...
     if (host == "" || host == "*")
         host = "0.0.0.0";
 
     // TODO: really scan ports
     int port = HttpEndpoint::listen(portRange, host, false /* name lookup */);
+    const char * literate_doc_bind_file = getenv("LITERATE_DOC_BIND_FILENAME");
+    if (literate_doc_bind_file) {
+        Json::Value v;
+        v["port"] = port;
+        ML::filter_ostream o(literate_doc_bind_file);
+        o << v.toString() << endl;
+    }
 
     return "http://" + host + ":" + to_string(port);
 }
