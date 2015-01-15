@@ -9,7 +9,8 @@
 #include "jml/arch/exception_handler.h"
 #include "jml/utils/set_utils.h"
 #include "jml/utils/environment.h"
-
+#include "jml/utils/file_functions.h"
+#include "jml/utils/string_functions.h"
 
 using namespace std;
 
@@ -341,14 +342,84 @@ addHelpRoute(PathSpec path, RequestFilter filter)
                const RestRequestParsingContext & context)
         {
             Json::Value help;
-            getHelp(help, "", set<string>());
+            if (request.params.hasValue("autodoc")) {
+                getAutodocHelp(help, "", set<string>());
+            } else {
+                getHelp(help, "", set<string>());
+            }
             connection.sendResponse(200, help);
-
             return MR_YES;
         };
 
     addRoute(path, filter, "Get help on the available API commands",
              helpRoute, Json::Value());
+}
+
+
+void
+RestRequestRouter::
+addAutodocRoute(PathSpec autodocPath, PathSpec helpPath,
+                const string & autodocFilesPath)
+{
+    string autodocPathStr = autodocPath.getPathDesc();
+    OnProcessRequest rootRoute
+        = [=] (RestConnection & connection,
+               const RestRequest & request,
+               const RestRequestParsingContext & context) {
+        connection.sendRedirect(302, autodocPathStr + "/index.html");
+        return RestRequestRouter::MR_YES;
+    };
+
+    addRoute(autodocPathStr, "GET", "Main autodoc page",
+             rootRoute, Json::Value());
+    addRoute(autodocPathStr + "/", "GET", "Main autodoc page",
+             rootRoute, Json::Value());
+
+    OnProcessRequest autodocRoute
+        = [=] (RestConnection & connection,
+               const RestRequest & request,
+               const RestRequestParsingContext & context) {
+
+        string path = context.resources.back();
+
+        if (path.find("..") != string::npos) {
+            throw ML::Exception("not dealing with path with .. in it");
+        }
+
+        if (path.find(autodocPathStr) != 0) {
+            throw ML::Exception("not serving file not under %",
+                                autodocPathStr.c_str());
+        }
+
+        string filename = path.substr(autodocPathStr.size());
+        if (filename[0] == '/') {
+            filename = filename.substr(1);
+        }
+        if (filename == "autodoc") {
+            connection.sendRedirect(302, helpPath.getPathDesc() + "?autodoc");
+            return RestRequestRouter::MR_YES;
+        }
+
+        ML::File_Read_Buffer buf(autodocFilesPath + "/" + filename);
+
+        string mimeType = "text/plain";
+        if (filename.find(".html") != string::npos) {
+            mimeType = "text/html";
+        }
+        else if (filename.find(".js") != string::npos) {
+            mimeType = "application/javascript";
+        }
+        else if (filename.find(".css") != string::npos) {
+            mimeType = "text/css";
+        }
+
+        string result(buf.start(), buf.end());
+        connection.sendResponse(200, result,  mimeType);
+        return RestRequestRouter::MR_YES;
+    };
+
+    addRoute(Rx(autodocPathStr + "/.*", "<resource>"), "GET",
+            "Static content", autodocRoute, Json::Value());
 }
 
 void
@@ -370,6 +441,201 @@ getHelp(Json::Value & result, const std::string & currentPath,
         subRoutes[i].path.getHelp(sri);
         subRoutes[i].filter.getHelp(sri);
         subRoutes[i].router->getHelp(result, path, subRoutes[i].filter.verbs);
+    }
+}
+
+void
+RestRequestRouter::
+updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
+    const ValueKind kind = vd->kind;
+    if (kind == ValueKind::INTEGER) {
+        v["type"] = "integer";
+    }
+    else if (kind == ValueKind::BOOLEAN) {
+        v["type"] = "boolean";
+    }
+    else if (kind == ValueKind::STRING) {
+        v["type"] = "string";
+    }
+    else if (kind == ValueKind::ENUM) {
+        v["description"].asString() + " (cppType: " + vd->typeName + ")";
+        v["type"] = "string";
+        vector<string> keys = vd->getEnumKeys();
+        stringstream pattern;
+        bool first = true;
+        for (const string & k: keys) {
+            if (!first) {
+                pattern << "|";
+            }
+            pattern << k;
+        };
+        v["pattern"] = pattern.str();
+    }
+    else if (kind == ValueKind::LINK) {
+        cerr << "Got link field as final value: " << vd->typeName << endl;
+        v["description"].asString() + " (cppType: " + vd->typeName + ")";
+        const ValueDescription * subVdPtr = &(vd->contained());
+        cerr << subVdPtr->typeName << endl;
+        v["type"] = "string";
+    }
+    else if (kind == ValueKind::FLOAT) {
+        v["type"] = "float";
+    }
+    else if (kind == ValueKind::ARRAY) {
+        v["type"] = "array";
+    }
+    else if (kind == ValueKind::STRUCTURE) {
+        v["description"].asString() + " (cppType: " + vd->typeName + ")";
+        v["type"] = "object";
+    }
+    else if (kind == ValueKind::ATOM) {
+        v["type"] = "string";
+        v["description"] =
+            v["description"].asString() + " (cppType: " + vd->typeName + ")";
+        if (vd->typeName == "Datacratic::TimePeriod") {
+            v["pattern"] = "^[\\d]+(s|m|h|d)$";
+        }
+    }
+    else if (kind == ValueKind::ANY) {
+        //cppType == Json::Value
+        v["type"] = "object";
+    }
+    else {
+        cerr << "uncovered conversion case for kind: " << kind
+             << " typeName: " << vd->typeName << endl;
+        v["type"] = "object";
+    }
+}
+
+
+void
+RestRequestRouter::
+addValueDescriptionToProperties(const ValueDescription * vd,
+                                Json::Value & properties, int recur) const
+{
+    using namespace Json;
+    if (recur > 2) {
+        //Too many recursions
+        return;
+    }
+
+    auto onField = [&] (const ValueDescription::FieldDescription & fd) {
+        Value tmpObj;
+        tmpObj["description"] = fd.comment;
+        const ValueDescription * curr = fd.description.get();
+        if (curr->kind == ValueKind::LINK) {
+            curr = &(curr->contained());
+            if (curr->kind == ValueKind::LINK) {
+                cerr << "link of link not supported" << endl;
+            }
+        }
+        updateFromValueDescription(tmpObj, curr);
+        if (curr->kind == ValueKind::ARRAY) {
+            const ValueDescription * subVdPtr = &(curr->contained());
+            if (subVdPtr->kind == ValueKind::STRUCTURE) {
+                if (vd == subVdPtr) {
+                    tmpObj["items"]["type"] =
+                        "object (recursive, cppType: " + curr->typeName + ")";
+                    tmpObj["items"]["properties"] = objectValue;
+                }
+                else {
+                    Value itemProperties;
+                    addValueDescriptionToProperties(subVdPtr, itemProperties,
+                                                    recur + 1);
+                    tmpObj["items"]["items"]["properties"] = itemProperties;
+                }
+            }
+            else {
+                if (subVdPtr->kind == ValueKind::ARRAY) {
+                    // unsupported "pair" type
+                    tmpObj["items"]["type"] =
+                        "object (cppType: " + curr->typeName + ")";
+                }
+                else {
+                    updateFromValueDescription(tmpObj["items"], subVdPtr);
+                }
+            }
+        }
+        else if (curr->kind == ValueKind::STRUCTURE) {
+            Value itemProperties;
+            addValueDescriptionToProperties(curr,
+                                            itemProperties, recur + 1);
+            tmpObj["items"]["properties"] = itemProperties;
+        }
+        properties[fd.fieldName] = tmpObj;
+    };
+    vd->forEachField(nullptr, onField);
+}
+
+
+void
+RestRequestRouter::
+addJsonParamsToProperties(const Json::Value & params,
+                          Json::Value & properties) const
+{
+    using namespace Json;
+    for (Value param: params) {
+        string cppType = param["cppType"].asString();
+        const ValueDescription * vd = ValueDescription::get(cppType).get();
+        if (vd->kind == ValueKind::STRUCTURE) {
+            addValueDescriptionToProperties(vd, properties);
+        }
+        else {
+            Value tmpObj;
+            updateFromValueDescription(tmpObj, vd);
+            tmpObj["description"] = param["description"].asString();
+            properties[param["name"].asString()] = tmpObj;
+        }
+    }
+}
+
+void
+RestRequestRouter::
+getAutodocHelp(Json::Value & result, const std::string & currentPath,
+               const std::set<std::string> & verbs) const
+{
+    using namespace Json;
+    Value tmpResult;
+    getHelp(tmpResult, "", set<string>());
+    result["routes"]   = arrayValue;
+    result["literate"] = arrayValue;
+    result["config"]   = objectValue;
+    for (ValueIterator it = tmpResult.begin() ; it != tmpResult.end() ; it++) {
+        string key = it.key().asString();
+        vector<string> parts = ML::split(it.key().asString());
+        int size = parts.size();
+        if (size == 0) {
+            // the empty key contains the description
+            continue;
+        }
+        if (size == 1) {
+            // useless route
+            continue;
+        }
+        ExcAssert(size == 2);
+
+        vector<string> verbs = ML::split(parts[1], ',');
+        for (const string & verb: verbs) {
+            Value curr = arrayValue;
+            curr.append(verb + " " + parts[0]);
+            Value subObj;
+            subObj["out"] = objectValue;
+            subObj["out"]["required"] = arrayValue;
+            subObj["out"]["type"] = "object";
+            subObj["out"]["properties"] = objectValue;
+            subObj["required_role"] = nullValue;
+            subObj["docstring"] = (*it)["description"].asString();
+            subObj["in"] = nullValue;
+            subObj["in"]["required"] = arrayValue;
+            subObj["in"]["type"] = "object";
+            subObj["in"]["properties"] = objectValue;
+            if ((*it).isMember("arguments") && (*it)["arguments"].isMember("jsonParams")) {
+                addJsonParamsToProperties((*it)["arguments"]["jsonParams"],
+                                          subObj["in"]["properties"]);
+            }
+            curr.append(subObj);
+            result["routes"].append(curr);
+        };
     }
 }
 
