@@ -461,14 +461,21 @@ updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
         v["type"] = "string";
     }
     else if (kind == ValueKind::ENUM) {
-        //TODO ENUM, LINK
-        cerr << "Got enum field: " << vd->typeName << endl;
         v["description"].asString() + " (cppType: " + vd->typeName + ")";
         v["type"] = "string";
+        vector<string> keys = vd->getEnumKeys();
+        stringstream pattern;
+        bool first = true;
+        for (const string & k: keys) {
+            if (!first) {
+                pattern << "|";
+            }
+            pattern << k;
+        };
+        v["pattern"] = pattern.str();
     }
     else if (kind == ValueKind::LINK) {
-        //TODO ENUM, LINK, should not be here
-        cerr << "Got link field: " << vd->typeName << endl;
+        cerr << "Got link field as final value: " << vd->typeName << endl;
         v["description"].asString() + " (cppType: " + vd->typeName + ")";
         const ValueDescription * subVdPtr = &(vd->contained());
         cerr << subVdPtr->typeName << endl;
@@ -511,16 +518,15 @@ addValueDescriptionToProperties(const ValueDescription * vd,
 {
     using namespace Json;
     if (recur > 2) {
-        cerr << "WARNING: Too many recursions" << endl;
+        //Too many recursions
         return;
     }
 
-    auto onField = [this, &properties, recur, vd] (const ValueDescription::FieldDescription & fd) {
+    auto onField = [&] (const ValueDescription::FieldDescription & fd) {
         Value tmpObj;
         tmpObj["description"] = fd.comment;
         const ValueDescription * curr = fd.description.get();
         if (curr->kind == ValueKind::LINK) {
-            cerr << "got link" << fd.fieldName << endl;
             curr = &(curr->contained());
             if (curr->kind == ValueKind::LINK) {
                 cerr << "link of link not supported" << endl;
