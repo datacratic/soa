@@ -26,6 +26,11 @@ struct RestParams
     {
     }
 
+    RestParams(const std::vector<std::pair<std::string, std::string> > & vec)
+        : std::vector<std::pair<std::string, std::string> >(vec)
+    {
+    }
+
     RestParams(std::initializer_list<std::pair<std::string, std::string> > l)
         : std::vector<std::pair<std::string, std::string> >(l.begin(), l.end())
     {
