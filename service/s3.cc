@@ -25,10 +25,12 @@
 #include "soa/credentials/credential_provider.h"
 
 #define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
+#if 0
 #include "crypto++/sha.h"
 #include "crypto++/md5.h"
 #include "crypto++/hmac.h"
 #include "crypto++/base64.h"
+#endif
 
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>

@@ -20,6 +20,9 @@ $(eval $(call library,variadic_hash,variadic_hash.cc,cityhash))
 $(eval $(call library,string_encryption,string_encryption.cc,crypto++))
 $(eval $(call program,string_encryption_keygen,string_encryption))
 
+# gcc 4.7
+$(eval $(call set_compile_option,string_encryption.cc string_encryption_keygen.cc,-fpermissive))
+
 ifeq ($(PYTHON_ENABLED),1)
 
 $(eval $(call library,py_util,py.cc,boost_python python$(PYTHON_VERSION)))

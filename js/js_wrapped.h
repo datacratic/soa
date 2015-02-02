@@ -1001,7 +1001,7 @@ struct JSWrapped2 : public JSWrapped<Shared> {
         v8::Local<v8::Signature> sig = v8::Signature::New(tmpl);
         v8::Local<v8::FunctionTemplate> cb
             =  v8::FunctionTemplate::New
-            (MemberFunctionCaller<R, const Obj, JSWrapped2, Args...>::call,
+            (MemberFunctionCallerConst<R, const Obj, JSWrapped2, Args...>::call,
              pmfToValue(pmf, defaults...), sig);
         tmpl->PrototypeTemplate()->Set(v8::String::NewSymbol(name),
                                        cb);
@@ -1426,7 +1426,7 @@ struct JSWrapped3 : public Base {
         v8::Local<v8::Signature> sig = v8::Signature::New(tmpl);
         v8::Local<v8::FunctionTemplate> cb
             =  v8::FunctionTemplate::New
-            (MemberFunctionCaller<R, Obj, JSWrapped3, Args...>::call,
+            (MemberFunctionCallerConst<R, Obj, JSWrapped3, Args...>::call,
              pmfToValue(pmf), sig);
         tmpl->PrototypeTemplate()->Set(v8::String::NewSymbol(name),
                                        cb);

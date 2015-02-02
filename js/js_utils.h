@@ -924,6 +924,45 @@ struct PmfInfo {
     }
 
     T (Obj::* pmf) (Args...);
+
+    std::vector<JSValue> defaultArgs;
+};
+
+template<typename T, typename Obj, typename... Args>
+struct PmfInfoConst {
+    template<typename... Defaults>
+    PmfInfoConst(T (Obj::* pmf) (Args...) const,
+              Defaults... defaults)
+        : pmf(pmf), defaultArgs(sizeof...(Args))
+    {
+        //using namespace std;
+        //cerr << "adding " << sizeof...(Defaults) << " default args to "
+        //     << sizeof...(Args) << " existing" << endl;
+        addDefaults(sizeof...(Args) - sizeof...(Defaults),
+                    sizeof...(Args), defaults...);
+    }
+    
+    template<typename Arg1, typename... Rest>
+    void addDefaults(int argNum, size_t numArgs, Arg1 arg1, Rest... rest)
+    {
+        addDefault(arg1, argNum, numArgs);
+        addDefaults(argNum + 1, numArgs, rest...);
+    }
+
+    // End of recursion; we should have reached the end of them both
+    void addDefaults(int argNum, size_t numArgs)
+    {
+        ExcAssertEqual(argNum, numArgs);
+    }
+
+    template<typename X>
+    void addDefault(X arg, int argNum, size_t numArgs)
+    {
+        defaultArgs[argNum] = v8::Persistent<v8::Value>::New(JS::toJS(arg));
+    }
+
+    T (Obj::* pmf) (Args...) const;
+
     std::vector<JSValue> defaultArgs;
 };
 
@@ -941,8 +980,8 @@ template<typename T, typename Obj, typename... Args, typename... Defaults>
 v8::Local<v8::Value> pmfToValue(T (Obj::* pmf) (Args...) const,
                                 Defaults... defaults)
 {
-    PmfInfo<T, const Obj, Args...> * res
-        = new PmfInfo<T, const Obj, Args...>(pmf, defaults...);
+    PmfInfoConst<T, const Obj, Args...> * res
+        = new PmfInfoConst<T, const Obj, Args...>(pmf, defaults...);
     return v8::External::Wrap(res);
 }
 
@@ -966,6 +1005,13 @@ const PmfInfo<T, Obj, Args...> *
 valueToPmfInfo(v8::Handle<v8::Value> val)
 {
     return reinterpret_cast<PmfInfo<T, Obj, Args...> *>(v8::External::Unwrap(val));
+}
+
+template<typename T, typename Obj, typename... Args>
+const PmfInfoConst<T, Obj, Args...> *
+valueToPmfInfoConst(v8::Handle<v8::Value> val)
+{
+    return reinterpret_cast<PmfInfoConst<T, Obj, Args...> *>(v8::External::Unwrap(val));
 }
 
 template<typename T, typename... Args>
@@ -1248,7 +1294,7 @@ callPmf(void (Obj::*pmf) (Args...), Obj & obj,
 
 template<typename Obj, typename R, typename... Args>
 v8::Handle<v8::Value>
-callPmf(R (Obj::*pmf) (Args...) const, const Obj & obj,
+callPmf(R (Obj::* pmf) (Args...) const, const Obj & obj,
         const v8::Arguments & args,
         const std::vector<JSValue> & defaults = std::vector<JSValue>())
 {
@@ -1276,6 +1322,22 @@ struct MemberFunctionCaller {
     {
         try {
             auto info = valueToPmfInfo<R, Obj, Args...>(args.Data());
+            Obj & o = *Base::getShared(args);
+            v8::Handle<v8::Value> result = callPmf(info->pmf, o, args,
+                                                   info->defaultArgs);
+            return result;
+        } HANDLE_JS_EXCEPTIONS;
+    }
+};
+
+template<typename R, typename Obj, typename Base, typename... Args>
+struct MemberFunctionCallerConst {
+
+    static v8::Handle<v8::Value>
+    call(const v8::Arguments & args)
+    {
+        try {
+            auto info = valueToPmfInfoConst<R, Obj, Args...>(args.Data());
             Obj & o = *Base::getShared(args);
             v8::Handle<v8::Value> result = callPmf(info->pmf, o, args,
                                                    info->defaultArgs);
