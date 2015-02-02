@@ -186,9 +186,12 @@ struct StreamJsonPrintingContext
 
     virtual void writeString(const std::string & s)
     {
+        writeStringUtf8(Utf8String(s));
+#if 0
         stream << '\"';
         ML::jsonEscape(s, stream);
         stream << '\"';
+#endif
     }
 
     virtual void writeStringUtf8(const Utf8String & s);
