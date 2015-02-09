@@ -24,12 +24,6 @@
 #include "soa/credentials/credentials.h"
 #include "soa/credentials/credential_provider.h"
 
-#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include "crypto++/sha.h"
-#include "crypto++/md5.h"
-#include "crypto++/hmac.h"
-#include "crypto++/base64.h"
-
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
@@ -256,6 +250,7 @@ performSync() const
     bool useRange = (params.verb == "GET" && currentRange != Range::Full);
 
     string body;
+
     for (int i = 0; i < numRetries; ++i) {
         if (i > 0) {
             /* allow a maximum of 384 seconds for retry delays (1 << 7 * 3) */
@@ -275,7 +270,7 @@ performSync() const
 
         string responseHeaders;
         string responseBody;
-        int responseCode(0);
+        long int responseCode(0);
         size_t received(0);
 
         auto connection = owner->proxy.getConnection();
@@ -417,6 +412,7 @@ performSync() const
                             + " bytes):\n" + responseBody + "\n");
             }
 
+
             /* log so-called "REST error"
                (http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html)
             */
@@ -447,7 +443,8 @@ performSync() const
                 //cerr << "Unrecoverable S3 error: code " << responseCode
                 //     << endl;
                 //cerr << string(body, 0, 4096) << endl;
-                string firstLine = string(responseHeaders, 0, responseHeaders.find('\n'));
+                string firstLine(responseHeaders, 0, responseHeaders.find('\n'));
+
                 throw ML::Exception("S3 error loading '%s': %s",
                                     uri.c_str(), firstLine.c_str());
             }

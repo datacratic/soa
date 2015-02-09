@@ -81,6 +81,9 @@ LIBSERVICES_LINK := opstats curl curlpp boost_regex zeromq zookeeper_mt ACE arch
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
 
+# gcc 4.7
+$(eval $(call set_compile_option,aws.cc,-fpermissive))
+
 $(LIB)/libservices.so: $(BIN)/runner_helper
 
 

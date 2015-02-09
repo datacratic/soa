@@ -1062,6 +1062,25 @@ struct EnumDescription: public ValueDescriptionT<Enum> {
     {
     }
 
+    /** Parse the value of the enum which is already in a string. */
+    Enum parseString(const std::string & s) const
+    {
+        auto it = parse.find(s);
+        if (it == parse.end())
+            throw ML::Exception("unknown value for " + this->typeName
+                                + ": " + s);
+        return it->second;
+    }
+
+    /** Convert the value of the enum to a string that represents the value. */
+    std::string printString(Enum e) const
+    {
+        auto it = print.find(e);
+        if (it == print.end())
+            return std::to_string((int)e);
+        else return it->second;
+    }
+
     virtual void parseJsonTyped(Enum * val, JsonParsingContext & context) const
     {
         if (context.isString()) {

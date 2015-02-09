@@ -613,29 +613,31 @@ getAutodocHelp(Json::Value & result, const std::string & currentPath,
             continue;
         }
         ExcAssert(size == 2);
+        if (parts[1] != "GET" && parts[1] != "POST" && parts[1] != "PUT"
+                && parts[1] != "DELETE") {
+            //unsupported verb + param
+            continue;
+        }
 
-        vector<string> verbs = ML::split(parts[1], ',');
-        for (const string & verb: verbs) {
-            Value curr = arrayValue;
-            curr.append(verb + " " + parts[0]);
-            Value subObj;
-            subObj["out"] = objectValue;
-            subObj["out"]["required"] = arrayValue;
-            subObj["out"]["type"] = "object";
-            subObj["out"]["properties"] = objectValue;
-            subObj["required_role"] = nullValue;
-            subObj["docstring"] = (*it)["description"].asString();
-            subObj["in"] = nullValue;
-            subObj["in"]["required"] = arrayValue;
-            subObj["in"]["type"] = "object";
-            subObj["in"]["properties"] = objectValue;
-            if ((*it).isMember("arguments") && (*it)["arguments"].isMember("jsonParams")) {
-                addJsonParamsToProperties((*it)["arguments"]["jsonParams"],
-                                          subObj["in"]["properties"]);
-            }
-            curr.append(subObj);
-            result["routes"].append(curr);
-        };
+        Value curr = arrayValue;
+        curr.append(parts[1] + " " + parts[0]);
+        Value subObj;
+        subObj["out"] = objectValue;
+        subObj["out"]["required"] = arrayValue;
+        subObj["out"]["type"] = "object";
+        subObj["out"]["properties"] = objectValue;
+        subObj["required_role"] = nullValue;
+        subObj["docstring"] = (*it)["description"].asString();
+        subObj["in"] = nullValue;
+        subObj["in"]["required"] = arrayValue;
+        subObj["in"]["type"] = "object";
+        subObj["in"]["properties"] = objectValue;
+        if ((*it).isMember("arguments") && (*it)["arguments"].isMember("jsonParams")) {
+            addJsonParamsToProperties((*it)["arguments"]["jsonParams"],
+                                      subObj["in"]["properties"]);
+        }
+        curr.append(subObj);
+        result["routes"].append(curr);
     }
 }
 

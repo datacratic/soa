@@ -123,5 +123,4 @@ BOOST_AUTO_TEST_CASE ( functions_test )
 
     BOOST_CHECK_EQUAL(state.failed, true);
     BOOST_CHECK_EQUAL(failMessage, "panic");
-
 }
