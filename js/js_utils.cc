@@ -42,6 +42,11 @@ std::string cstr(const JSValue & val)
     return from_js(val, (string *)0);
 }
 
+Utf8String utf8str(const JSValue & val)
+{
+    return from_js(val, (Utf8String *)0);
+}
+
 v8::Handle<v8::Value>
 injectBacktrace(v8::Handle<v8::Value> value)
 {
