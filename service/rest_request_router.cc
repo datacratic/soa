@@ -663,7 +663,7 @@ addSubRouter(PathSpec path, const std::string & description, ExtractObject extra
 
 RestRequestRouter::OnProcessRequest
 RestRequestRouter::
-getStaticRouteHandler(const string dir) const {
+getStaticRouteHandler(const string & dir) const {
     RestRequestRouter::OnProcessRequest staticRoute
         = [dir] (RestConnection & connection,
                  const RestRequest & request,
