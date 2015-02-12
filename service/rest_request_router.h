@@ -571,6 +571,18 @@ struct RestRequestRouter {
                  ExtractObject extractObject = nullptr,
                  std::shared_ptr<RestRequestRouter> subRouter = nullptr);
 
+    /** Create the static route handler for the serveStaticDirectory function
+        below.
+    */
+    virtual OnProcessRequest getStaticRouteHandler(const std::string & dir) const;
+
+    /** Serve up the static content in the given directory under the given
+        route.
+    */
+    void serveStaticDirectory(const std::string & route,
+                              const std::string & dir);
+
+
     /** In the normal case, we don't create an ExtractObject function. */
     static ExtractObject getExtractObject(const void *)
     {
