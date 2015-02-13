@@ -28,6 +28,7 @@
 #include <boost/bind.hpp>
 #include <tuple>
 #include <array>
+#include "soa/types/string.h"
 
 namespace ML {
 
@@ -50,6 +51,7 @@ std::string cstr(const std::string & str);
 
 std::string cstr(const JSValue & val);
 
+Utf8String utf8str(const JSValue & val);
 template<typename T>
 std::string cstr(const v8::Local<T> & str)
 {

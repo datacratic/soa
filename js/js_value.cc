@@ -401,7 +401,7 @@ std::string from_js(const JSValue & val, std::string *)
     }
     else
     {
-    	return *v8::String::AsciiValue(val);
+         return *v8::String::AsciiValue(val);
     }
 }
 
