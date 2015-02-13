@@ -484,6 +484,8 @@ updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
     }
     else if (kind == ValueKind::ARRAY) {
         v["type"] = "array";
+        const ValueDescription * subVdPtr = &(vd->contained());
+        updateFromValueDescription(v["items"], subVdPtr);
     }
     else if (kind == ValueKind::STRUCTURE) {
         v["description"].asString() + " (cppType: " + vd->typeName + ")";
@@ -504,7 +506,7 @@ updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
     else {
         cerr << "uncovered conversion case for kind: " << kind
              << " typeName: " << vd->typeName << endl;
-        v["type"] = "object";
+        v["type"] = "object (cppType: " + vd->typeName + ")";
     }
 }
 
