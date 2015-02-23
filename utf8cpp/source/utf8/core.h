@@ -29,7 +29,7 @@ DEALINGS IN THE SOFTWARE.
 #define UTF8_FOR_CPP_CORE_H_2675DCD0_9480_4c0c_B92A_CC14C027B731
 
 #include <iterator>
-
+#include <iostream>
 namespace utf8
 {
     // The typedefs for 8-bit, 16-bit and 32-bit unsigned integers
@@ -318,7 +318,7 @@ namespace internal
     {
         octet_iterator result = start;
         while (result != end) {
-            internal::utf_error err_code = internal::validate_next(result, end);
+             internal::utf_error err_code = internal::validate_next(result, end);
             if (err_code != internal::UTF8_OK)
                 return result;
         }
