@@ -23,15 +23,186 @@ namespace Datacratic {
 /* PATH SPEC                                                                 */
 /*****************************************************************************/
 
+PathSpec::
+PathSpec()
+    : type(NONE)
+{
+}
+        
+PathSpec::
+PathSpec(const std::string & fullPath)
+    : type(STRING), path(fullPath)
+{
+}
+
+PathSpec::
+PathSpec(const char * fullPath)
+    : type(STRING), path(fullPath)
+{
+}
+
+PathSpec::
+PathSpec(const std::string & str, const boost::regex & rex)
+    : type(REGEX),
+      path(str),
+      rex(rex)
+{
+}
+
+void
+PathSpec::
+getHelp(Json::Value & result) const
+{
+    switch (type) {
+    case STRING:
+        result["path"] = path;
+        break;
+    case REGEX: {
+        Json::Value & v = result["path"];
+        v["regex"] = path;
+        v["desc"] = desc;
+        break;
+    }
+    default:
+        throw ML::Exception("unknown path parameter");
+    }
+}
+    
+std::string
+PathSpec::
+getPathDesc() const
+{
+    if (!desc.empty())
+        return desc;
+    return path;
+}
+
+int
+PathSpec::
+numCapturedElements() const
+{
+    switch (type) {
+    case NONE: return 0;
+    case STRING: return 1;
+    case REGEX: return rex.mark_count() + 1;
+    default:
+        throw ML::Exception("unknown mark count");
+    }
+}
+
+bool
+PathSpec::
+operator == (const PathSpec & other) const
+{
+    return path == other.path;
+}
+
+bool
+PathSpec::
+operator != (const PathSpec & other) const
+{
+    return ! operator == (other);
+}
+
+bool
+PathSpec::
+operator < (const PathSpec & other) const
+{
+    return path < other.path;
+}
+
+PathSpec
+Rx(const std::string & regexString, const std::string & desc)
+{
+    PathSpec result(regexString, boost::regex(regexString));
+    result.desc = desc;
+    return result;
+}
+
 std::ostream & operator << (std::ostream & stream, const PathSpec & path)
 {
     return stream << path.path;
 }
-
+               
 
 /*****************************************************************************/
 /* REQUEST FILTER                                                            */
 /*****************************************************************************/
+
+/** Filter for a REST request by method, etc. */
+
+RequestFilter::
+RequestFilter()
+{
+}
+
+RequestFilter::
+RequestFilter(const std::string & verb)
+{
+    verbs.insert(verb);
+    parseVerbs();
+}
+
+RequestFilter::
+RequestFilter(const char * verb)
+{
+    verbs.insert(verb);
+    parseVerbs();
+}
+
+RequestFilter::
+RequestFilter(std::set<std::string> verbs)
+    : verbs(std::move(verbs))
+{
+    parseVerbs();
+}
+
+RequestFilter::
+RequestFilter(const std::initializer_list<std::string> & verbs)
+    : verbs(verbs)
+{
+    parseVerbs();
+}
+
+void
+RequestFilter::
+parseVerbs()
+{
+    std::set<std::string> newVerbs;
+        
+    for (auto & v: verbs) {
+        auto i = v.find('=');
+
+        if (i == std::string::npos) {
+            newVerbs.insert(v);
+            continue;
+        }
+            
+        std::string key(v, 0, i);
+        std::string value(v, i + 1);
+
+        filters.emplace_back(key, value);
+    }
+
+    newVerbs = verbs;
+}
+
+void
+RequestFilter::
+getHelp(Json::Value & result) const
+{
+    if (!verbs.empty()) {
+        int i = 0;
+        for (auto it = verbs.begin(), end = verbs.end(); it != end;  ++it, ++i) {
+            result["verbs"][i] = *it;
+        }
+    }
+    if (!filters.empty()) {
+        for (auto & f: filters) {
+            result["filters"].append(f.param + "=" + f.value);
+        }
+    }
+}
 
 std::ostream & operator << (std::ostream & stream, const RequestFilter & filter)
 {
