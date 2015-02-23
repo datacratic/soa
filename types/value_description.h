@@ -572,10 +572,16 @@ getDefaultDescriptionShared(T * = 0)
 
         auto initFn = [] (ValueDescription & desc)
             {
-                auto & descTyped
-                = dynamic_cast<typename GetDefaultDescriptionType<T>::type &>
-                    (desc);
-                initializeDefaultDescription(descTyped);
+                auto * descTyped
+                = dynamic_cast<typename GetDefaultDescriptionType<T>::type *>
+                    (&desc);
+                if (!descTyped)
+                    throw ML::Exception("Attempt to initialized description for "
+                                        + ML::type_name<T>() + " of type "
+                                        + ML::type_name<typename GetDefaultDescriptionType<T>::type >()
+                                        + " from value of type "
+                                        + ML::type_name(desc));
+                initializeDefaultDescription(*descTyped);
             };
         
         // For now, register it if it wasn't before.  Eventually this should
