@@ -35,79 +35,48 @@ struct PathSpec {
         REGEX
     } type;
 
-    PathSpec()
-        : type(NONE)
-    {
-    }
+    /// Construct a PathSpec that matches notning
+    PathSpec();
         
-    PathSpec(const std::string & fullPath)
-        : type(STRING), path(fullPath)
-    {
-    }
+    /// Construct a PathSpec that matches a string, eg "/methods"
+    PathSpec(const std::string & fullPath);
 
-    PathSpec(const char * fullPath)
-        : type(STRING), path(fullPath)
-    {
-    }
+    /// Construct a PathSpec that matches a string, eg "/methods"
+    PathSpec(const char * fullPath);
 
-    PathSpec(const std::string & str, const boost::regex & rex)
-        : type(REGEX),
-          path(str),
-          rex(rex)
-    {
-    }
+    /// Construct a PathSpec that mathces a regex, eg "/items/([0-9a-z_]+)"
+    PathSpec(const std::string & str, const boost::regex & rex);
 
-    void getHelp(Json::Value & result) const
-    {
-        switch (type) {
-        case STRING:
-            result["path"] = path;
-            break;
-        case REGEX: {
-            Json::Value & v = result["path"];
-            v["regex"] = path;
-            v["desc"] = desc;
-            break;
-        }
-        default:
-            throw ML::Exception("unknown path parameter");
-        }
-    }
+    /// Fill out the given JSON object with help about how this path is matched
+    void getHelp(Json::Value & result) const;
     
-    std::string getPathDesc() const
-    {
-        if (!desc.empty())
-            return desc;
-        return path;
-    }
+    /// Get the description string
+    std::string getPathDesc() const;
 
-    std::string path;
-    boost::regex rex;
-    std::string desc;
+    std::string path;   ///< Path or regex unparsed string
+    boost::regex rex;   ///< Parsed regex, if type == REGEX
+    std::string desc;   ///< Description for help
 
-    bool operator == (const PathSpec & other) const
-    {
-        return path == other.path;
-    }
+    /// Return the number of captured elements for this specification.  This is the
+    /// number of strings that will be appended to the resources field of the context
+    /// object.
+    ///
+    /// A straight path match will always add one.
+    ///
+    /// A regular expression will always add one, plus one for each capture in the
+    /// regular expression (element enclosed in parantheses).
 
-    bool operator != (const PathSpec & other) const
-    {
-        return ! operator == (other);
-    }
+    int numCapturedElements() const;
 
-    bool operator < (const PathSpec & other) const
-    {
-        return path < other.path;
-    }
+    bool operator == (const PathSpec & other) const;
+
+    bool operator != (const PathSpec & other) const;
+
+    bool operator < (const PathSpec & other) const;
 };
 
-struct Rx : public PathSpec {
-    Rx(const std::string & regexString, const std::string & desc)
-        : PathSpec(regexString, boost::regex(regexString))
-    {
-        this->desc = desc;
-    }
-};
+/// A shortcut way to construct a PathSpec that's a regular expression
+PathSpec Rx(const std::string & regexString, const std::string & desc);
 
 std::ostream & operator << (std::ostream & stream, const PathSpec & path);
 
@@ -124,7 +93,7 @@ std::ostream & operator << (std::ostream & stream, const PathSpec & path);
 */
 struct RequestParamFilter {
     RequestParamFilter(const std::string & param = "",
-                    const std::string & value = "")
+                       const std::string & value = "")
         : param(param), value(value)
     {
     }
@@ -138,74 +107,35 @@ struct RequestParamFilter {
 /* REQUEST FILTER                                                            */
 /*****************************************************************************/
 
-/** Filter for a REST request by method, etc. */
+/** Filter for a REST request route match by verb and filters. */
 
 struct RequestFilter {
-    RequestFilter()
-    {
-    }
 
-    RequestFilter(const std::string & verb)
-    {
-        verbs.insert(verb);
-        parseVerbs();
-    }
+    /// Construct a request filter that matches nothing
+    RequestFilter();
 
-    RequestFilter(const char * verb)
-    {
-        verbs.insert(verb);
-        parseVerbs();
-    }
+    /// Construct a request filter that matches a single verb, eg GET
+    RequestFilter(const std::string & verb);
 
-    RequestFilter(std::set<std::string> verbs)
-        : verbs(verbs)
-    {
-        parseVerbs();
-    }
+    /// Construct a request filter that matches a single verb, eg GET
+    RequestFilter(const char * verb);
 
-    RequestFilter(const std::initializer_list<std::string> & verbs)
-        : verbs(verbs)
-    {
-        parseVerbs();
-    }
+    /// Construct a request filter that matches any of a set of verbs,
+    /// eg { GET, HEAD }
+    RequestFilter(std::set<std::string> verbs);
 
-    void parseVerbs()
-    {
-        std::set<std::string> newVerbs;
-        
-        for (auto & v: verbs) {
-            auto i = v.find('=');
+    /// Construct a request filter that matches any of a set of verbs,
+    /// eg { GET, HEAD }
+    RequestFilter(const std::initializer_list<std::string> & verbs);
 
-            if (i == std::string::npos) {
-                newVerbs.insert(v);
-                continue;
-            }
-            
-            std::string key(v, 0, i);
-            std::string value(v, i + 1);
-
-            filters.emplace_back(key, value);
-        }
-
-        newVerbs = verbs;
-    }
-
-    void getHelp(Json::Value & result) const
-    {
-        if (!verbs.empty()) {
-            int i = 0;
-            for (auto it = verbs.begin(), end = verbs.end(); it != end;  ++it, ++i) {
-                result["verbs"][i] = *it;
-            }
-        }
-        if (!filters.empty()) {
-            for (auto & f: filters) {
-                result["filters"].append(f.param + "=" + f.value);
-            }
-        }
-    }
+    /// Fill out the JSON object with help about the filters
+    void getHelp(Json::Value & result) const;
 
 private:
+    /// Internal method to separate the list of verbs into either verbs or
+    /// filters
+    void parseVerbs();
+
     std::set<std::string> verbs;
     std::vector<RequestParamFilter> filters;
     friend class RestRequestRouter;
