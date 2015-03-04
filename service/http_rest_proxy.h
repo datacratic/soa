@@ -207,10 +207,11 @@ struct HttpRestProxy {
                  double timeout = -1,
                  bool exceptions = true,
                  OnData onData = nullptr,
-                 OnHeader onHeader = nullptr) const
+                 OnHeader onHeader = nullptr,
+                 bool followRedirect = false) const
     {
         return perform("GET", resource, Content(), queryParams, headers,
-                       timeout, exceptions, onData, onHeader);
+                       timeout, exceptions, onData, onHeader, followRedirect);
     }
 
     /** Perform a synchronous request from end to end. */
@@ -222,7 +223,8 @@ struct HttpRestProxy {
                      double timeout = -1,
                      bool exceptions = true,
                      OnData onData = nullptr,
-                     OnHeader onHeader = nullptr) const;
+                     OnHeader onHeader = nullptr,
+                     bool followRedirect = false) const;
 
     /** URI that will be automatically prepended to resources passed in to
         the perform() methods
