@@ -46,7 +46,8 @@ perform(const std::string & verb,
         double timeout,
         bool exceptions,
         OnData onData,
-        OnHeader onHeader) const
+        OnHeader onHeader,
+        bool followRedirect) const
 {
     string responseHeaders;
     string body;
@@ -91,6 +92,10 @@ perform(const std::string & verb,
             myRequest.setOpt<SslVerifyPeer>(false);
         }
 
+        if (followRedirect) {
+            myRequest.setOpt<FollowLocation>(true);
+        }
+
         // auto onData = [&] (char * data, size_t ofs1, size_t ofs2) -> size_t
         //     {
         //         //cerr << "called onData for " << ofs1 << " " << ofs2 << endl;
@@ -130,6 +135,10 @@ perform(const std::string & verb,
 
         auto onHeaderLine = [&] (char * data, size_t ofs1, size_t ofs2) -> size_t
             {
+                if (headerParsed && followRedirect) {
+                    responseHeaders.clear();
+                    headerParsed = false;
+                }
                 ExcAssert(!headerParsed);
 
                 string headerLine(data, ofs1 * ofs2);
