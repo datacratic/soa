@@ -32,6 +32,7 @@ $(eval $(call program,runner_helper,runner_common arch))
 
 
 LIBSERVICES_SOURCES := \
+	fs_utils.cc \
 	transport.cc \
 	endpoint.cc \
 	connection_handler.cc \
@@ -76,7 +77,7 @@ LIBSERVICES_SOURCES := \
 	event_subscriber.cc \
 	nsq_client.cc \
 
-LIBSERVICES_LINK := opstats curl curlpp boost_regex zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description credentials runner_common
+LIBSERVICES_LINK := opstats curl curlpp boost_regex zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description credentials runner_common boost_filesystem 
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
@@ -96,14 +97,13 @@ $(eval $(call library,endpoint,$(LIBENDPOINT_SOURCES),$(LIBENDPOINT_LINK)))
 
 
 LIBCLOUD_SOURCES := \
-	fs_utils.cc \
 	sftp.cc \
 	s3.cc \
 	sns.cc \
 	aws.cc \
 	sqs.cc
 
-LIBCLOUD_LINK := crypto++ curlpp utils arch types tinyxml2 services ssh2 boost_filesystem value_description
+LIBCLOUD_LINK := crypto++ curlpp utils arch types tinyxml2 services ssh2 value_description
 
 
 $(eval $(call library,cloud,$(LIBCLOUD_SOURCES),$(LIBCLOUD_LINK)))
