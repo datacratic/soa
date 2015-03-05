@@ -5,7 +5,6 @@
 */
 
 #include "rest_request_router.h"
-#include "fs_utils.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/arch/exception_handler.h"
 #include "jml/utils/set_utils.h"
@@ -845,7 +844,7 @@ getStaticRouteHandler(const string & dir) const {
 
         string path = context.resources.back();
 
-        //cerr << "static content for " << path << endl;
+        cerr << "static content for " << path << endl;
 
         if (path.find("..") != string::npos) {
             throw ML::Exception("not dealing with path with .. in it");
@@ -853,15 +852,7 @@ getStaticRouteHandler(const string & dir) const {
 
         string filename = dir + "/" + path;
 
-        if (!tryGetUriObjectInfo(filename)) {
-            connection.sendErrorResponse
-                (404,
-                 "File '" + filename + "' doesn't exist", "text/plain");
-            return MR_YES;
-        }
-
         ML::filter_istream stream(filename);
-
         ML::File_Read_Buffer buf(filename);
 
         string mimeType = "text/plain";
