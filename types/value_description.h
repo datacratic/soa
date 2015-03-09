@@ -99,6 +99,7 @@ struct ValueDescription {
     ValueKind kind;
     const std::type_info * type;
     std::string typeName;
+    std::string documentationUri;
 
     void setTypeName(const std::string & newName)
     {
@@ -737,6 +738,11 @@ struct ValueDescriptionWithDefault : public Base {
     virtual void setDefaultTyped(T * val) const
     {
         *val = defaultValue;
+    }
+
+    virtual void * constructDefault() const
+    {
+        return new T(defaultValue);
     }
 
     T defaultValue;

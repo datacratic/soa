@@ -56,6 +56,8 @@ public:
 
     explicit Utf8String(std::string &&in, bool check=true) ;
 
+    explicit Utf8String(const char *start, unsigned int len, bool check=true);
+
     Utf8String & operator=(Utf8String && str) noexcept
     {
         Utf8String newMe(std::move(str));
@@ -100,7 +102,7 @@ public:
 
     Utf8String&  operator+=(const std::string& str)
     {
-    	data_+=str;
+        data_+=str;
     	return *this;
     }
     Utf8String &operator+=(const Utf8String &utf8str);
