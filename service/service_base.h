@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <thread>
+#include <initializer_list>
 #include "jml/utils/exc_assert.h"
 #include "jml/utils/unnamed_bool.h"
 #include "event_service.h"
@@ -31,7 +32,6 @@ struct context_t;
 } // namespace zmq
 
 namespace Datacratic {
-
 
 /*****************************************************************************/
 /* CONFIGURATION SERVICE                                                     */
@@ -368,7 +368,6 @@ struct ServiceProxies {
     void bootstrap(const std::string& path);
     void bootstrap(const Json::Value& config);
 };
-
 
 /*****************************************************************************/
 /* SERVICE BASE                                                              */
