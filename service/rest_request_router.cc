@@ -664,11 +664,17 @@ updateFromValueDescription(Json::Value & v, const ValueDescription * vd) const {
         v["type"] = "object";
     }
     else if (kind == ValueKind::ATOM) {
-        v["type"] = "string";
         v["description"] =
             v["description"].asString() + " (cppType: " + vd->typeName + ")";
         if (vd->typeName == "Datacratic::TimePeriod") {
+            v["type"] = "string";
             v["pattern"] = "^[\\d]+(s|m|h|d)$";
+        }
+        else if (vd->typeName == "Datacratic::Any") {
+            v["type"] = "object";
+        }
+        else {
+            v["type"] = "string";
         }
     }
     else if (kind == ValueKind::ANY) {
