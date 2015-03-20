@@ -102,9 +102,10 @@ LIBCLOUD_SOURCES := \
 	s3.cc \
 	sns.cc \
 	aws.cc \
-	sqs.cc
+	sqs.cc \
+	hdfs.cc
 
-LIBCLOUD_LINK := crypto++ curlpp utils arch types tinyxml2 services ssh2 value_description
+LIBCLOUD_LINK := utils arch types value_description tinyxml2 services crypto++ curlpp ssh2 boost_filesystem hdfs3
 
 
 $(eval $(call library,cloud,$(LIBCLOUD_SOURCES),$(LIBCLOUD_LINK)))
