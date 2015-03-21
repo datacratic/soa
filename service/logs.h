@@ -189,8 +189,8 @@ struct Logging
         static Category& root();
 
     private:
-        Category(CategoryData * data);
-        CategoryData * data;
+        Category(std::shared_ptr<CategoryData> data);
+        std::shared_ptr<CategoryData> data;
 
         // operator bool result
         void dummy() const {}

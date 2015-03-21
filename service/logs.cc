@@ -98,7 +98,7 @@ namespace {
 
 struct Registry {
     std::mutex lock;
-    std::unordered_map<std::string, std::unique_ptr<Logging::CategoryData> > categories;
+    std::unordered_map<std::string, std::shared_ptr<Logging::CategoryData> > categories;
 };
 
 Registry& getRegistry() {
@@ -118,17 +118,21 @@ struct Logging::CategoryData {
     std::stringstream stream;
 
     CategoryData * parent;
-    std::vector<CategoryData *> children;
+    std::vector<std::shared_ptr<CategoryData> > children;
 
-    static CategoryData * getRoot();
-    static CategoryData * get(char const * name);
+    static std::shared_ptr<CategoryData> getRoot();
+    static std::shared_ptr<CategoryData> get(char const * name);
 
-    static CategoryData * create(char const * name, char const * super, bool enabled);
-    static void destroy(CategoryData * name);
+    static std::shared_ptr<CategoryData> create(char const * name, char const * super, bool enabled);
+
+    static void destroy(std::shared_ptr<CategoryData> & data);
 
     void activate(bool recurse = true);
     void deactivate(bool recurse = true);
     void writeTo(std::shared_ptr<Writer> output, bool recurse = true);
+
+    ~CategoryData() {
+    }
 
 private:
 
@@ -138,63 +142,68 @@ private:
         name(name),
         parent(nullptr) {
     }
-
 };
 
-Logging::CategoryData * Logging::CategoryData::get(char const * name) {
+std::shared_ptr<Logging::CategoryData> Logging::CategoryData::get(char const * name) {
     Registry& registry = getRegistry();
 
     auto it = registry.categories.find(name);
-    return it != registry.categories.end() ? it->second.get() : nullptr;
+    return it != registry.categories.end() ? it->second : nullptr;
 }
 
-Logging::CategoryData * Logging::CategoryData::getRoot() {
-    CategoryData * root = get("*");
+std::shared_ptr<Logging::CategoryData> Logging::CategoryData::getRoot() {
+    std::shared_ptr<CategoryData> root = get("*");
     if (root) return root;
 
-    getRegistry().categories["*"].reset(root = new CategoryData("*", true /* enabled */));
-    root->parent = root;
+    root.reset(new CategoryData("*", true /* enabled */));
+    getRegistry().categories["*"] = root;
+    root->parent = root.get();
     root->writer = std::make_shared<ConsoleWriter>();
 
     return root;
 }
 
-Logging::CategoryData * Logging::CategoryData::create(char const * name, char const * super, bool enabled) {
+std::shared_ptr<Logging::CategoryData> Logging::CategoryData::create(char const * name, char const * super, bool enabled) {
     Registry& registry = getRegistry();
     std::lock_guard<std::mutex> guard(registry.lock);
 
-    CategoryData * root = getRoot();
-    CategoryData * data = get(name);
+    std::shared_ptr<CategoryData> root = getRoot();
+    std::shared_ptr<CategoryData> data = get(name);
 
     if (!data) {
-        registry.categories[name].reset(data = new CategoryData(name, enabled));
-    }
-    else {
-        ExcCheck(!data->initialized,
-                "making duplicate category: " + std::string(name));
+        data.reset(new CategoryData(name, enabled));
+        registry.categories[name] = data;
     }
 
-    data->initialized = true;
+    if (!data->initialized) {
+        data->initialized = true;
 
-    data->parent = get(super);
-    if (!data->parent) {
-        registry.categories[super].reset(data->parent = new CategoryData(super, enabled));
-    }
+        data->parent = get(super).get();
+        if (!data->parent) {
+            registry.categories[super].reset(data->parent = new CategoryData(super, enabled));
+        }
 
-    data->parent->children.push_back(data);
+        data->parent->children.push_back(data);
 
-    if (data->parent->initialized) {
-        data->writer = data->parent->writer;
-    }
-    else {
-        data->writer = root->writer;
+        if (data->parent->initialized) {
+            data->writer = data->parent->writer;
+        }
+        else {
+            data->writer = root->writer;
+        }
     }
 
     return data;
 }
 
-void Logging::CategoryData::destroy(CategoryData * data) {
-    if (data->parent == data) return;
+void Logging::CategoryData::destroy(std::shared_ptr<CategoryData> & data) {
+    if (data->parent == data.get()) return;
+
+    if (!data.use_count() > 2) return;
+
+    // There are two uses:
+    // 1.  The current reference
+    // 2.  The registry
 
     Registry& registry = getRegistry();
     std::string name = data->name;
@@ -202,24 +211,28 @@ void Logging::CategoryData::destroy(CategoryData * data) {
     std::lock_guard<std::mutex> guard(registry.lock);
 
     auto dataIt = registry.categories.find(name);
-    ExcCheck(dataIt != registry.categories.end(),
-            "double destroy of a category: " + name);
+    if (dataIt == registry.categories.end())
+        return;
 
     auto& children = data->parent->children;
 
-    auto childIt = std::find(children.begin(), children.end(), data);
-    if (childIt != children.end()) {
-        children.erase(childIt);
+    for (auto it = children.begin(), end = children.end();  it != end;
+         ++it) {
+        if (it->get() == data.get()) {
+            children.erase(it);
+            break;
+        }
     }
 
-    CategoryData* root = getRoot();
+    std::shared_ptr<CategoryData> root = getRoot();
     for (auto& child : data->children) {
-        child->parent = root;
+        child->parent = root.get();
     }
 
     registry.categories.erase(dataIt);
-}
 
+    data.reset();
+}
 
 void Logging::CategoryData::activate(bool recurse) {
     enabled = true;
@@ -253,7 +266,7 @@ Logging::Category& Logging::Category::root() {
     return root;
 }
 
-Logging::Category::Category(CategoryData * data) :
+Logging::Category::Category(std::shared_ptr<CategoryData> data) :
     data(data) {
 }
 
