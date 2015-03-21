@@ -338,8 +338,10 @@ processRequest(RestConnection & connection,
         } catch (const std::exception & exc) {
             connection.sendErrorResponse(500, ML::format("threw exception: %s",
                                                          exc.what()));
+            return MR_YES;
         } catch (...) {
             connection.sendErrorResponse(500, "unknown exception");
+            return MR_YES;
         }
     }
 
@@ -411,7 +413,7 @@ process(const RestRequest & request,
 {
     using namespace std;
 
-    bool debug = false;
+    bool debug = TRACE_REST_REQUESTS;
 
     if (debug) {
         cerr << "verb = " << request.verb << " filter.verbs = " << filter.verbs
