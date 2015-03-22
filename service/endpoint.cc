@@ -44,7 +44,7 @@ EndpointBase(const std::string & name)
       name_(name),
       threadsActive_(0),
       numTransports(0), shutdown_(false), disallowTimers_(false),
-      realTimePolling_(false)
+      realTimePolling_(false), sleepPolling_(false)
 {
     Epoller::init(16384);
     auto wakeupData = make_shared<EpollData>(EpollData::EpollDataType::WAKEUP,
@@ -566,6 +566,16 @@ runEventThread(int threadNum, int numThreads)
 
             continue;
         }
+        else if (sleepPolling_) {
+            // Simple event loop.  Sleep for 0.1 seconds or until an event is
+            // processed.
+            handleEvents(100000, 1, handleEvent,
+                         beforeSleep, afterSleep);
+            continue;
+
+        }
+        
+
 
         Date now = Date::now();
         

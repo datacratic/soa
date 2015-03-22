@@ -118,6 +118,11 @@ struct EndpointBase : public Epoller {
     */
     void realTimePolling(bool value) { realTimePolling_ = value; }
 
+    /** Helps reduce CPU usage caused by the polling loop at the cost of more
+        latency jitter and more context switches.
+    */
+    void sleepPolling(bool value) { sleepPolling_ = value; }
+    
     /** Spin up the threads as part of the initialization.  NOTE: make sure that this is
         only called once; normally it will be done as part of init().  Calling directly is
         only for advanced use where init() is not called.
@@ -256,6 +261,9 @@ private:
 
     // Turns the polling loop into a busy loop with no sleeps.
     bool realTimePolling_;
+
+    // Turns the polling loop into a pure sleeping loop
+    bool sleepPolling_;
 
     std::map<std::string, int> numTransportsByHost;
 
