@@ -80,21 +80,6 @@ listen(PortRange const & portRange,
     this->endpoint = endpoint;
     this->nameLookup = nameLookup;
 
-    fd = socket(AF_INET, SOCK_STREAM, 0);
-
-    // Avoid already bound messages for the minute after a server has exited
-    int tr = 1;
-    int res = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &tr, sizeof(int));
-
-    if (res == -1) {
-        close(fd);
-        fd = -1;
-        throw Exception("error setsockopt SO_REUSEADDR: %s", strerror(errno));
-    }
-
-    const char * hostNameToUse
-        = (hostname == "*" ? "0.0.0.0" : hostname.c_str());
-
     int port;
 
     // Continue until we manage to successfully listen.  With SO_REUSEADDR,
@@ -102,6 +87,21 @@ listen(PortRange const & portRange,
     //
     // See http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t
     while (true) {
+
+        fd = socket(AF_INET, SOCK_STREAM, 0);
+
+        // Avoid already bound messages for the minute after a server has exited
+        int tr = 1;
+        int res = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &tr, sizeof(int));
+
+        if (res == -1) {
+            close(fd);
+            fd = -1;
+            throw Exception("error setsockopt SO_REUSEADDR: %s", strerror(errno));
+        }
+
+        const char * hostNameToUse
+            = (hostname == "*" ? "0.0.0.0" : hostname.c_str());
 
         port = portRange.bindPort
             ([&](int port)
@@ -123,6 +123,8 @@ listen(PortRange const & portRange,
              });
     
         if (port == -1) {
+            close(fd);
+            fd = -1;
             throw Exception("couldn't bind to any port in range [%d,%d]", portRange.first,
                             portRange.last);
         }
@@ -132,6 +134,9 @@ listen(PortRange const & portRange,
         if (res == -1 && errno == EADDRINUSE) {
             cerr << "Someone stole our port before we could listen; retrying"
                  << endl;
+            close(fd);
+            fd = -1;
+
             continue;
         }
 
@@ -147,7 +152,11 @@ listen(PortRange const & portRange,
     if (port == 0) {
         sockaddr_in inAddr;
         socklen_t inAddrLen = sizeof(inAddr);
-        res = ::getsockname(fd, (sockaddr *) &inAddr, &inAddrLen);
+        int res = ::getsockname(fd, (sockaddr *) &inAddr, &inAddrLen);
+        if (res == -1) {
+            close(fd);
+            throw ML::Exception(errno, "getsockname");
+        }
         port = ntohs(inAddr.sin_port);
         addr.set(&inAddr, inAddrLen);
     }
