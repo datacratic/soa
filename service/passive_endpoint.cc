@@ -95,45 +95,53 @@ listen(PortRange const & portRange,
     const char * hostNameToUse
         = (hostname == "*" ? "0.0.0.0" : hostname.c_str());
 
-    int port = portRange.bindPort
-        ([&](int port)
-         {
-             addr = ACE_INET_Addr(port, hostNameToUse, AF_INET);
+    int port;
 
-             //cerr << "port = " << port
-             //     << " hostname = " << hostname
-             //     << " addr = " << addr.get_host_name() << " "
-             //     << addr.get_host_addr() << " "
-             //     << addr.get_ip_address() << endl;
+    // Continue until we manage to successfully listen.  With SO_REUSEADDR,
+    // it will sometimes fail and we need to retry.
+    //
+    // See http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t
+    while (true) {
 
-             int res = ::bind(fd,
-                              reinterpret_cast<sockaddr *>(addr.get_addr()),
-                              addr.get_addr_size());
-             if (res == -1 && errno != EADDRINUSE)
-                 throw Exception("listen: bind returned %s", strerror(errno));
-             return res == 0;
-         });
+        port = portRange.bindPort
+            ([&](int port)
+             {
+                 addr = ACE_INET_Addr(port, hostNameToUse, AF_INET);
+
+                 //cerr << "port = " << port
+                 //     << " hostname = " << hostname
+                 //     << " addr = " << addr.get_host_name() << " "
+                 //     << addr.get_host_addr() << " "
+                 //     << addr.get_ip_address() << endl;
+
+                 int res = ::bind(fd,
+                                  reinterpret_cast<sockaddr *>(addr.get_addr()),
+                                  addr.get_addr_size());
+                 if (res == -1 && errno != EADDRINUSE)
+                     throw Exception("listen: bind returned %s", strerror(errno));
+                 return res == 0;
+             });
     
-    if (port == -1) {
-        throw Exception("couldn't bind to any port in range [%d,%d]", portRange.first,
-                                                            portRange.last);
-    }
+        if (port == -1) {
+            throw Exception("couldn't bind to any port in range [%d,%d]", portRange.first,
+                            portRange.last);
+        }
 
-    // Avoid already bound messages for the minute after a server has exited
-    res = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &tr, sizeof(int));
+        res = ::listen(fd, backlog);
 
-    if (res == -1) {
-        close(fd);
-        fd = -1;
-        throw Exception("error setsockopt SO_REUSEADDR: %s", strerror(errno));
-    }
+        if (res == -1 && errno == EADDRINUSE) {
+            cerr << "Someone stole our port before we could listen; retrying"
+                 << endl;
+            continue;
+        }
 
-    res = ::listen(fd, backlog);
+        if (res == -1) {
+            close(fd);
+            fd = -1;
+            throw Exception("error on listen: %s", strerror(errno));
+        }
 
-    if (res == -1) {
-        close(fd);
-        fd = -1;
-        throw Exception("error on listen: %s", strerror(errno));
+        break;
     }
 
     if (port == 0) {
