@@ -215,7 +215,7 @@ struct RegisterHttpHandler {
         string bucket(resource, 0, pos);
 
         if (mode == ios::in) {
-            return make_pair(makeHttpStreamingDownload(resource).release(),
+            return make_pair(makeHttpStreamingDownload(scheme+"://"+resource).release(),
                              true);
         }
         else if (mode == ios::out) {
