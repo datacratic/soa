@@ -36,6 +36,12 @@ struct RestParams
     {
     }
 
+    template<typename It>
+    RestParams(It first, It last)
+        : std::vector<std::pair<std::string, std::string> >(first, last)
+    {
+    }
+
     bool hasValue(const std::string & key) const;
 
     /** Return the value of the given key.  Throws an exception if it's not
