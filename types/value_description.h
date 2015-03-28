@@ -225,6 +225,12 @@ struct ValueDescription {
         throw ML::Exception("type is not an enum");
     }
 
+    virtual std::vector<std::tuple<int, std::string, std::string> >
+    getEnumValues() const
+    {
+        throw ML::Exception("type is not an enum");
+    }
+
     // Storage to cache Javascript converters
     mutable JSConverters * jsConverters;
     mutable bool jsConvertersInitialized;
@@ -1090,7 +1096,7 @@ struct EnumDescription: public ValueDescriptionT<Enum> {
         auto it = print.find(e);
         if (it == print.end())
             return std::to_string((int)e);
-        else return it->second;
+        else return it->second.first;
     }
 
     virtual void parseJsonTyped(Enum * val, JsonParsingContext & context) const
@@ -1113,7 +1119,7 @@ struct EnumDescription: public ValueDescriptionT<Enum> {
         auto it = print.find(*val);
         if (it == print.end())
             context.writeInt((int)*val);
-        else context.writeString(it->second);
+        else context.writeString(it->second.first);
     }
     
     virtual bool isDefaultTyped(const Enum * val) const
@@ -1141,7 +1147,7 @@ struct EnumDescription: public ValueDescriptionT<Enum> {
     {
         if (!parse.insert(make_pair(name, value)).second)
             throw ML::Exception("double added name to enum");
-        print.insert(make_pair(value, name));
+        print.insert({ value, { name, "" } });
     }
 
     void addValue(const std::string & name, Enum value,
@@ -1149,21 +1155,29 @@ struct EnumDescription: public ValueDescriptionT<Enum> {
     {
         if (!parse.insert(make_pair(name, value)).second)
             throw ML::Exception("double added name to enum");
-        print.insert(make_pair(value, name));
-
-        // TODO: description
+        print.insert({ value, { name, description } });
     }
 
-    virtual const std::vector<std::string> getEnumKeys() const {
+    virtual std::vector<std::tuple<int, std::string, std::string> >
+    getEnumValues() const
+    {
+        std::vector<std::tuple<int, std::string, std::string> > result;
+        for (auto & v: print)
+            result.emplace_back((int)v.first, v.second.first, v.second.second);
+        return result;
+    }
+
+    virtual const std::vector<std::string> getEnumKeys() const
+    {
         std::vector<std::string> res;
         for (const auto it: print) {
-            res.push_back(it.second);
+            res.push_back(it.second.first);
         }
         return res;
     }
 
     std::unordered_map<std::string, Enum> parse;
-    std::map<Enum, std::string> print;
+    std::map<Enum, std::pair<std::string, std::string> > print;
 };
 
 
