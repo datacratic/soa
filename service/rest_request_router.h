@@ -92,12 +92,19 @@ std::ostream & operator << (std::ostream & stream, const PathSpec & path);
     a request parameter.
 */
 struct RequestParamFilter {
-    RequestParamFilter(const std::string & param = "",
+    enum Location {
+        QUERY,  ///< Parameter is in the query string
+        HEADER  ///< Parameter is in a header
+    };
+
+    RequestParamFilter(Location location,
+                       const std::string & param = "",
                        const std::string & value = "")
-        : param(param), value(value)
+        : location(location), param(param), value(value)
     {
     }
 
+    Location location;
     std::string param;
     std::string value;
 };

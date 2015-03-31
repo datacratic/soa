@@ -62,3 +62,5 @@ $(eval $(call test,zmq_message_loop_test,services,boost))
 
 $(eval $(call test,event_handler_test,cloud services,boost manual))
 $(eval $(call test,mongo_basic_test,services boost_filesystem mongo_tmp_server,boost manual))
+
+$(eval $(call test,rest_request_router_test,services,boost))

@@ -182,7 +182,15 @@ parseVerbs()
         std::string key(v, 0, i);
         std::string value(v, i + 1);
 
-        filters.emplace_back(key, value);
+        RequestParamFilter::Location location
+            = RequestParamFilter::QUERY;
+
+        if (key.find("header:") == 0) {
+            location = RequestParamFilter::HEADER;
+            key = string(key, 7);  // strip off header:
+        }
+        
+        filters.emplace_back(location, key, value);
     }
 
     newVerbs = verbs;
@@ -200,7 +208,8 @@ getHelp(Json::Value & result) const
     }
     if (!filters.empty()) {
         for (auto & f: filters) {
-            result["filters"].append(f.param + "=" + f.value);
+            string loc = (f.location == RequestParamFilter::HEADER ? "header:" : "");
+            result["filters"].append(loc + f.param + "=" + f.value);
         }
     }
 }
@@ -426,13 +435,24 @@ process(const RestRequest & request,
     // Check that the parameter filters match
     for (auto & f: filter.filters) {
         bool matched = false;
-        for (auto & p: request.params) {
-            if (p.first == f.param && p.second == f.value) {
-                matched = true;
-                break;
+
+        if (f.location == RequestParamFilter::QUERY) {
+            for (auto & p: request.params) {
+                if (p.first == f.param && p.second == f.value) {
+                    matched = true;
+                    break;
+                }
             }
-            if (matched) break;
         }
+        else if (f.location == RequestParamFilter::HEADER) {
+            //cerr << "matching header " << f.param << " with value "
+            //     << request.header.tryGetHeader(f.param)
+            //     << " against " << f.value << endl;
+            if (request.header.tryGetHeader(f.param) == f.value) {
+                matched = true;
+            }
+        }
+
         if (!matched)
             return MR_NO;
     }
