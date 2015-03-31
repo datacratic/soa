@@ -57,11 +57,13 @@ LIBSERVICES_SOURCES := \
 	tcp_client.cc \
 	rest_service_endpoint.cc \
 	http_rest_endpoint.cc \
+	http_rest_service.cc \
 	rest_request.cc \
 	http_named_endpoint.cc \
 	rest_proxy.cc \
 	rest_request_router.cc \
 	rest_request_binding.cc \
+	in_process_rest_connection.cc \
 	runner.cc \
 	sink.cc \
 	zookeeper.cc \
