@@ -99,6 +99,7 @@ struct HttpStreamingDownloadSource {
                 currentDone = 0;
 
                 if (current.empty()) {
+                    if (lastExc) rethrow_exception(lastExc);
                     eof = true;
                     return -1;  // shutdown or empty
                 }
