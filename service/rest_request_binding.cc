@@ -5,6 +5,10 @@
 */
 
 #include "rest_request_binding.h"
+#include "http_exception.h"
+
+using namespace std;
+
 
 namespace Datacratic {
 
@@ -80,6 +84,60 @@ createParameterExtractor(Json::Value & argHelp,
         {
             return request;
         };
+}
+
+std::function<bool
+              (RestConnection & connection,
+               const RestRequest & request,
+               const RestRequestParsingContext & context)>
+createRequestValidater(const Json::Value & argHelp)
+{
+    //cerr << "creating validator with help " << argHelp << endl;
+
+    std::set<std::string> acceptedParams;
+
+    if (!argHelp.isNull()) {
+        for (auto & p: argHelp["requestParams"]) {
+            string s = p["name"].asString();
+            acceptedParams.insert(s);
+        }
+    }
+
+    auto result = [=] (RestConnection & connection,
+                       const RestRequest & request,
+                       const RestRequestParsingContext & context)
+        {
+            bool hadError = false;
+            Json::Value details;
+            
+            for (auto & s: request.params) {
+                if (!acceptedParams.count(s.first)) {
+                    hadError = true;
+                    Json::Value detail;
+                    detail["paramName"] = s.first;
+                    detail["paramValue"] = s.second;
+
+                    details["unknownParameters"].append(detail);
+                }
+            }
+
+            if (!hadError)
+                return true;  // pass the request
+            
+            details["help"] = argHelp;
+            details["verb"] = request.verb;
+            details["resource"] = request.resource;
+
+            Json::Value exc;
+            exc["error"] = "Unknown parameter(s) in REST call";
+            exc["httpCode"] = 400;
+            exc["details"] = details;
+
+            connection.sendErrorResponse(400, exc);
+            return false;
+        };
+
+    return result;
 }
 
 

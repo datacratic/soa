@@ -602,6 +602,18 @@ template<typename T>
 struct RestRequestBinder {
 };
 
+/** Create a function that validates that the request doesn't have any unknown
+    parameters, based upon the JSON help structure.
+
+    It will return true for a valid request; an invalid request will be sent
+    back.
+*/
+std::function<bool
+              (RestConnection & connection,
+               const RestRequest & request,
+               const RestRequestParsingContext & context)>
+createRequestValidater(const Json::Value & argHelp);
+
 template<typename... PositionedDualTypes>
 struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
 
@@ -624,11 +636,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     Obj & obj = derefPtrContext<Obj>(ptr, context);
@@ -668,11 +685,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     const Obj & obj = derefPtrContext<const Obj>(ptr, context);
@@ -716,11 +738,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     Obj & obj = derefPtrContext<Obj>(ptr, context);
@@ -761,11 +788,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     const Obj & obj = derefPtrContext<const Obj>(ptr, context);
@@ -808,11 +840,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     Obj & obj = derefPtrContext<Obj>(ptr, context);
@@ -851,11 +888,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     const Obj & obj = derefPtrContext<const Obj>(ptr, context);
@@ -898,11 +940,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     Obj & obj = derefPtrContext<Obj>(ptr, context);
@@ -942,11 +989,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context)
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     const Obj & obj = derefPtrContext<const Obj>(ptr, context);
@@ -987,11 +1039,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context) -> RestRequestRouter::MatchResult
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     return then(fn(CreateRestParameterGenerator<PositionedDualTypes, Params...>
@@ -1039,11 +1096,16 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
+        auto validater = createRequestValidater(argHelp);
+
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
                    const RestRequest & request,
                    const RestRequestParsingContext & context) -> RestRequestRouter::MatchResult
             {
+                if (!validater(connection, request, context))
+                    return RestRequestRouter::MR_YES;
+
                 auto gens = *sharedGens;
                 try {
                     return then(fn(context, CreateRestParameterGenerator<PositionedDualTypes, Params...>
