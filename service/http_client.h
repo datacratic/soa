@@ -24,13 +24,60 @@
 #include "soa/jsoncpp/value.h"
 #include "soa/service/async_event_source.h"
 #include "soa/service/http_header.h"
-
+#include "soa/service/http_endpoint.h"
+#include "jml/arch/futex.h"
+#include "jml/utils/string_functions.h"
 
 namespace Datacratic {
 
 /* Forward declarations */
 
 struct HttpClientCallbacks;
+
+/** The response of a request.  Has a return code and a body. */
+struct HttpClientResponse {
+    HttpClientResponse()
+        : code_(0), errorCode_(0)
+    {
+    }
+
+    /** Return code of the REST call. */
+    int code() const {
+        return code_;
+    }
+
+    /** Body of the REST call. */
+    std::string body() const
+    {
+        return body_;
+    }
+
+    Json::Value jsonBody() const
+    {
+        return Json::parse(body_);
+    }
+
+    /** Get the given response header of the REST call. */
+    std::string getHeader(const std::string & name) const
+    {
+        auto it = header_.headers.find(name);
+        if (it == header_.headers.end())
+            it = header_.headers.find(ML::lowercase(name));
+        if (it == header_.headers.end())
+            throw ML::Exception("required header " + name + " not found");
+        return it->second;
+    }
+
+    long code_;
+    std::string body_;
+    HttpHeader header_;
+
+    /// Error code for request, normally a CURL code, 0 is OK
+    int errorCode_;
+
+    /// Error string for an error request, empty is OK
+    std::string errorMessage_;
+};
 
 
 /****************************************************************************/
@@ -101,6 +148,7 @@ struct HttpRequest {
 };
 
 
+
 /****************************************************************************/
 /* HTTP CLIENT IMPL                                                         */
 /****************************************************************************/
@@ -160,6 +208,46 @@ enum struct HttpClientError {
 
 std::ostream & operator << (std::ostream & stream, HttpClientError error);
 
+struct HttpSyncFuture {
+
+    HttpSyncFuture()
+        : done(0)
+    {
+    }
+
+    operator
+    std::function<void (const HttpRequest &, HttpClientError, int, std::string &&, std::string &&)>
+    ()
+    {
+        return [=](const HttpRequest&, HttpClientError error, int statusCode,
+                   std::string&& headers, std::string&& body) {
+            if (error != HttpClientError::None) {
+                response.errorCode_ = static_cast<int>(error);
+            }
+            else {
+                response.code_ = statusCode;
+                response.body_ = std::move(body);
+
+                response.header_.parse(headers);
+
+            }
+
+            done = 1;
+            ML::futex_wake(done);
+        };
+    }
+
+    HttpClientResponse get() const {
+        while (!done)
+            ML::futex_wait(done, 0);
+
+        return response;
+    }
+
+private:
+    int done;
+    HttpClientResponse response;
+};
 
 /****************************************************************************/
 /* HTTP CLIENT                                                              */
@@ -241,6 +329,13 @@ struct HttpClient : public AsyncEventSource {
                               queryParams, headers, timeout);
     }
 
+    /** Performs a synchronous GET request.
+     */
+    HttpClientResponse getSync(const std::string & resource,
+             const RestParams & queryParams = RestParams(),
+             const RestParams & headers = RestParams(),
+             int timeout = -1);
+
     /** Performs a POST request, using similar parameters as get with the
      * addition of "content" which defines the contents body and type.
      *
@@ -257,6 +352,14 @@ struct HttpClient : public AsyncEventSource {
                               queryParams, headers, timeout);
     }
 
+    /** Performs a synchronous POST request
+     */
+    HttpClientResponse postSync(const std::string & resource,
+              const HttpRequest::Content & content = HttpRequest::Content(),
+              const RestParams & queryParams = RestParams(),
+              const RestParams & headers = RestParams(),
+              int timeout = -1);
+
     /** Performs a PUT request in a similar fashion to "post" above.
      *
      *  Returns "true" when the request could successfully be enqueued.
@@ -271,6 +374,14 @@ struct HttpClient : public AsyncEventSource {
         return enqueueRequest("PUT", resource, callbacks, content,
                               queryParams, headers, timeout);
     }
+
+    /** Performs a synchronous PUT request.
+     */
+    HttpClientResponse putSync(const std::string & resource,
+             const HttpRequest::Content & content = HttpRequest::Content(),
+             const RestParams & queryParams = RestParams(),
+             const RestParams & headers = RestParams(),
+             int timeout = -1);
 
     /** Performs a DELETE request. Note that this method cannot be named
      * "delete", which is a reserved keyword in C++.
@@ -287,6 +398,13 @@ struct HttpClient : public AsyncEventSource {
                               HttpRequest::Content(),
                               queryParams, headers, timeout);
     }
+
+    /** Performs a synchronous DELETE request.
+     */
+    HttpClientResponse delSync(const std::string & resource,
+             const RestParams & queryParams = RestParams(),
+             const RestParams & headers = RestParams(),
+             int timeout = -1);
 
     /** Enqueue (or perform) the specified request */
     bool enqueueRequest(const std::string & verb,

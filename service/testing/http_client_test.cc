@@ -609,3 +609,46 @@ BOOST_AUTO_TEST_CASE( test_http_client_expect_100_continue )
     service.shutdown();
 }
 #endif
+
+BOOST_AUTO_TEST_CASE( test_synchronous_requests )
+{
+    ML::Watchdog watchdog(10);
+    cerr << "client_expect_100_continue" << endl;
+
+    auto proxies = make_shared<ServiceProxies>();
+
+    HttpGetService service(proxies);
+    service.addResponse("GET", "/hello", 200, "world");
+    service.addResponse("POST", "/foo", 200, "bar");
+    service.addResponse("PUT", "/ying", 200, "yang");
+    service.start();
+
+    string baseUrl("http://127.0.0.1:"
+                   + to_string(service.port()));
+
+    auto client = make_shared<HttpClient>(baseUrl, 4);
+
+    MessageLoop loop;
+    loop.addSource("HttpClient", client);
+    loop.start();
+
+    {
+        auto resp = client->getSync("/hello");
+        BOOST_CHECK_EQUAL(resp.code_, 200);
+    }
+
+    {
+        auto resp = client->getSync("/not-found");
+        BOOST_CHECK_EQUAL(resp.code_, 404);
+    }
+
+    {
+        auto resp = client->postSync("/foo");
+        BOOST_CHECK_EQUAL(resp.code_, 200);
+    }
+
+    {
+        auto resp = client->putSync("/ying");
+        BOOST_CHECK_EQUAL(resp.code_, 200);
+    }
+}
