@@ -1429,6 +1429,9 @@ struct DefaultDescription<std::set<T> >
 inline std::string stringToKey(const std::string & str, std::string *) { return str; }
 inline std::string keyToString(const std::string & str) { return str; }
 
+inline Utf8String stringToKey(const std::string & str, Utf8String *) { return Utf8String(str); }
+inline std::string keyToString(const Utf8String & str) { return str.rawString(); }
+
 template<typename T>
 inline T stringToKey(const std::string & str, T *) { return boost::lexical_cast<T>(str); }
 
@@ -1838,6 +1841,22 @@ std::string jsonEncodeStr(const T & obj,
     StreamJsonPrintingContext context(stream);
     desc->printJson(&obj, context);
     return std::move(stream.str());
+}
+
+// jsonEncode implementation for any type which:
+// 1) has a default description;
+// 2) does NOT have a toJson() function (there is a simpler overload for this case)
+// This one writes utf-8 characters without escaping them
+template<typename T>
+Utf8String jsonEncodeUtf8(const T & obj,
+                          decltype(getDefaultDescription((T *)0)) * = 0)
+{
+    static auto desc = getDefaultDescriptionShared<T>();
+    std::ostringstream stream;
+    StreamJsonPrintingContext context(stream);
+    context.writeUtf8 = true;
+    desc->printJson(&obj, context);
+    return Utf8String(std::move(stream.str()), false /* check */);
 }
 
 // jsonEncode implementation for any type which:

@@ -43,42 +43,51 @@ Utf8String::Utf8String(const string & in, bool check)
     : data_(in)
 {
     if (check)
-    {
-        // Check if we find an invalid encoding
-        string::const_iterator end_it = utf8::find_invalid(in.begin(), in.end());
-        if (end_it != in.end())
-        {
-            throw ML::Exception("Invalid sequence within utf-8 string");
-        }
-    }
+        doCheck();
 }
 
 Utf8String::Utf8String(const char *start, unsigned int len, bool check)
     :data_(start, len)
 {
     if (check)
-    {
-        // Check if we find an invalid encoding
-        string::const_iterator end_it = utf8::find_invalid(data_.begin(), data_.end());
-        if (end_it != data_.end())
-        {
-            throw ML::Exception("Invalid sequence within utf-8 string");
-        }
-    }
+        doCheck();
 }
 
 Utf8String::Utf8String(string && in, bool check)
     : data_(std::move(in))
 {
     if (check)
-    {
-        // Check if we find an invalid encoding
-        string::const_iterator end_it = utf8::find_invalid(data_.begin(), data_.end());
-        if (end_it != data_.end())
+        doCheck();
+}
+
+Utf8String::Utf8String(const char * in, bool check)
+    : data_(in)
+{
+    if (check)
+        doCheck();
+}
+
+Utf8String::Utf8String(const std::basic_string<char32_t> & str)
+{
+    // TODO: less inefficient way of doing it...
+
+    Utf8String result;
+    for (auto & c: str)
+        result += c;
+    
+    *this = std::move(result);
+}
+
+void
+Utf8String::
+doCheck() const
+{
+    // Check if we find an invalid encoding
+    string::const_iterator end_it = utf8::find_invalid(data_.begin(), data_.end());
+    if (end_it != data_.end())
         {
             throw ML::Exception("Invalid sequence within utf-8 string");
         }
-    }
 }
 
 Utf8String::const_iterator
@@ -98,6 +107,19 @@ Utf8String &Utf8String::operator+=(const Utf8String &utf8str)
     data_ += utf8str.data_;
     return *this;
 }
+
+Utf8String& Utf8String::operator += (char32_t ch)
+{
+    char buf[16];  // shouldn't need more than 5
+    char * p = buf;
+
+    p = utf8::append(ch, p);
+
+    data_.append(buf, p - buf);
+
+    return *this;
+}
+
 
 std::ostream & operator << (std::ostream & stream, const Utf8String & str)
 {
@@ -131,6 +153,46 @@ string Utf8String::extractAscii() const
         }
     }
     return s;
+}
+
+size_t Utf8String::length() const
+{
+    return std::distance(begin(), end());
+}
+
+bool Utf8String::startsWith(const Utf8String & prefix) const
+{
+    auto it1 = begin(), end1 = end();
+    auto it2 = prefix.begin(), end2 = prefix.end();
+
+    while (it1 != end1 && it2 != end2 && *it1 == *it2) {
+        ++it1;
+        ++it2;
+    }
+
+    return it2 == end2;
+}
+
+bool Utf8String::startsWith(const char * prefix) const
+{
+    return startsWith(Utf8String(prefix));
+}
+
+bool Utf8String::startsWith(const std::string & prefix) const
+{
+    return startsWith(Utf8String(prefix));
+}
+
+void Utf8String::replace(ssize_t startIndex, ssize_t endIndex,
+                         const Utf8String & replaceWith)
+{
+    std::basic_string<char32_t> str(begin(), end());
+    std::basic_string<char32_t> replaceWith2(replaceWith.begin(), replaceWith.end());
+
+    str.replace(startIndex, endIndex, replaceWith2);
+
+    Utf8String result(str);
+    *this = std::move(result);
 }
 
 /*****************************************************************************/

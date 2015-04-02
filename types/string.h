@@ -56,7 +56,11 @@ public:
 
     explicit Utf8String(std::string &&in, bool check=true) ;
 
-    explicit Utf8String(const char *start, unsigned int len, bool check=true);
+    explicit Utf8String(const char * in, bool check=true) ;
+    
+    Utf8String(const char *start, unsigned int len, bool check=true);
+
+    Utf8String(const std::basic_string<char32_t> & str);
 
     Utf8String & operator=(Utf8String && str) noexcept
     {
@@ -105,7 +109,17 @@ public:
         data_+=str;
     	return *this;
     }
+
+    Utf8String&  operator+=(const char * str)
+    {
+        data_+=str;
+    	return *this;
+    }
+
     Utf8String &operator+=(const Utf8String &utf8str);
+
+    Utf8String& operator += (char32_t ch);
+
     /*
      * Returns access to the underlying representation - unsafe
      */
@@ -113,6 +127,16 @@ public:
     const std::string & utf8String() const { return data_; }
     const char * rawData() const { return data_.c_str(); }
     size_t rawLength() const { return data_.length() ; }
+
+    bool startsWith(const Utf8String & prefix) const;
+    bool startsWith(const char * prefix) const;
+    bool startsWith(const char32_t * prefix) const;
+    bool startsWith(const std::string & prefix) const;
+
+    void replace(ssize_t startIndex, ssize_t endIndex,
+                 const Utf8String & with);
+
+    size_t length() const;
 
     void serialize(ML::DB::Store_Writer & store) const;
     void reconstitute(ML::DB::Store_Reader & store);
@@ -124,9 +148,29 @@ public:
         return data_ == other.data_;
     }
 
+    bool operator == (const char * other) const
+    {
+        return data_ == other;
+    }
+
+    bool operator == (const std::string & other) const
+    {
+        return data_ == other;
+    }
+    
     bool operator != (const Utf8String & other) const
     {
         return data_ != other.data_;
+    }
+
+    bool operator != (const std::string & other) const
+    {
+        return data_ != other;
+    }
+
+    bool operator != (const char * & other) const
+    {
+        return data_ != other;
     }
 
     bool operator < (const Utf8String & other) const
@@ -134,9 +178,96 @@ public:
         return data_ < other.data_;
     }
 
+    bool operator < (const char * other) const
+    {
+        return data_ < other;
+    }
+
+    bool operator < (const std::string & other) const
+    {
+        return data_ < other;
+    }
+
+    bool operator >= (const Utf8String & other) const
+    {
+        return data_ >= other.data_;
+    }
+
+    bool operator >= (const char * other) const
+    {
+        return data_ >= other;
+    }
+
+    bool operator >= (const std::string & other) const
+    {
+        return data_ >= other;
+    }
+
 private:
+    /** Check for invalid code points in the string. */
+    void doCheck() const;
+
     std::string data_; // original utf8-encoded string
 };
+
+inline bool operator == (const char * str1, const Utf8String & s2)
+{
+    return s2 == str1;
+}
+
+inline bool operator == (const std::string & str1, const Utf8String & s2)
+{
+    return s2 == str1;
+}
+
+inline bool operator != (const char * str1, const Utf8String & s2)
+{
+    return s2 != str1;
+}
+
+inline bool operator != (const std::string & str1, const Utf8String & s2)
+{
+    return s2 != str1;
+}
+
+inline bool operator < (const char * str1, const Utf8String & s2)
+{
+    return s2 >= str1;
+}
+
+inline bool operator < (const std::string & str1, const Utf8String & s2)
+{
+    return s2 >= str1;
+}
+
+inline Utf8String operator + (Utf8String str1, const Utf8String & str2)
+{
+    return str1 += str2;
+}
+
+inline Utf8String operator + (Utf8String str1, const char * str2)
+{
+    return str1 += str2;
+}
+
+inline Utf8String operator + (Utf8String str1, const std::string & str2)
+{
+    return str1 += str2;
+}
+
+inline Utf8String operator + (const char * str1, const Utf8String & str2)
+{
+    Utf8String result(str1);
+    result += str2;
+    return result;
+}
+
+inline Utf8String operator + (const std::string & str1, const Utf8String & str2)
+{
+    Utf8String result(str1);
+    result += str2;
+    return result;
+}
 
 inline void swap(Utf8String & s1, Utf8String & s2)
 {
@@ -288,3 +419,18 @@ typedef Utf8String UnicodeString;
 
 } // namespace Datacratic
 
+namespace std {
+
+template<typename T> struct hash;
+
+template<>
+struct hash<Datacratic::Utf8String>
+    : public std::unary_function<Datacratic::Utf8String, size_t>
+{
+    size_t operator()(const Datacratic::Utf8String & str) const
+    {
+        return std::hash<std::string>()(str.rawString());
+    }
+};
+
+} // namespace std

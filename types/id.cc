@@ -494,6 +494,13 @@ toString() const
     }
 }
 
+Utf8String
+Id::
+toUtf8String() const
+{
+    return Utf8String(toString());
+}
+
 bool
 Id::
 complexEqual(const Id & other) const

@@ -9,6 +9,7 @@
 
 #include "city.h" // Google city hash function
 #include <string>
+#include "string.h"
 #include "jml/utils/unnamed_bool.h"
 #include "jml/db/persistent_fwd.h"
 #include "jml/utils/less.h"
@@ -85,6 +86,13 @@ struct Id {
         parse(value, type);
     }
     
+    explicit Id(const Utf8String & value,
+                Type type = UNKNOWN)
+        : type(NONE), val1(0), val2(0)
+    {
+        parse(value, type);
+    }
+    
     explicit Id(const char * value, size_t len,
                 Type type = UNKNOWN)
         : type(NONE), val1(0), val2(0)
@@ -149,9 +157,17 @@ struct Id {
     {
         parse(value.c_str(), value.size(), type);
     }
+
+    void parse(const Utf8String & value, Type type = UNKNOWN)
+    {
+        parse(value.rawData(), value.rawLength(), type);
+    }
+
     void parse(const char * value, size_t len, Type type = UNKNOWN);
     
     std::string toString() const;
+
+    Utf8String toUtf8String() const;
 
     /** Return the length of the string returned by toString() */
     size_t toStringLength() const;
