@@ -56,6 +56,13 @@ BOOST_AUTO_TEST_CASE( test_uuid_id )
     BOOST_CHECK_EQUAL(id.type, Id::UUID);
     BOOST_CHECK_EQUAL(id.toString(), uuid);
     checkSerializeReconstitute(id);
+
+    // Almost uuid, caps are not allowed so it's a string
+    string notUuid = "0828398C-5965-11E0-84C8-0026B937C8E1";
+    id = Id(notUuid);
+    BOOST_CHECK_EQUAL(id.type, Id::STR);
+    BOOST_CHECK_EQUAL(id.toString(), notUuid);
+    checkSerializeReconstitute(id);
 }
 
 BOOST_AUTO_TEST_CASE( test_goog64_id )
