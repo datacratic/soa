@@ -58,6 +58,7 @@ LIBSERVICES_SOURCES := \
 	rest_service_endpoint.cc \
 	http_rest_endpoint.cc \
 	http_rest_service.cc \
+	http_exception.cc \
 	rest_request.cc \
 	http_named_endpoint.cc \
 	rest_proxy.cc \

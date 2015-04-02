@@ -9,17 +9,18 @@
 
 #include "jml/arch/exception.h"
 #include "soa/any/any.h"
+#include "soa/types/string.h"
 
 namespace Datacratic {
 
 struct HttpReturnException: public ML::Exception {
-    HttpReturnException(int code, const std::string & message, Any body)
-        : ML::Exception(message), code(code), body(body)
+    HttpReturnException(int code, const Utf8String & message, Any body = Any())
+        : ML::Exception(message.rawData()), code(code), body(body)
     {
     }
 
-    HttpReturnException(int code, const std::string & message)
-        : ML::Exception(message), code(code)
+    HttpReturnException(int code, const std::string & message, Any body = Any())
+        : ML::Exception(message), code(code), body(body)
     {
     }
 
@@ -30,5 +31,12 @@ struct HttpReturnException: public ML::Exception {
     int code;
     Any body;
 };
+
+
+/** Rethrow an exception, adding some extra context to it.  The exception is
+    obtained from std::current_exception().
+*/
+void rethrowHttpException(int code, const Utf8String & message, Any details = Any()) JML_NORETURN;
+void rethrowHttpException(int code, const std::string & message, Any details = Any()) JML_NORETURN;
 
 } // namespace Datacratic
