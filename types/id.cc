@@ -161,7 +161,6 @@ parse(const char * value, size_t len, Type type)
                         // capital Hex must not parse
                         failed = true;
                         return val;
-                        continue;
                     }
                     int v = hexToDec(c);
                     if (v == -1) {
