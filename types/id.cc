@@ -157,7 +157,7 @@ parse(const char * value, size_t len, Type type)
                 unsigned long long val = 0;
                 for (unsigned i = start;  i != start + len;  ++i) {
                     int c = p[i];
-                    if (c >= 65 && c <= 70) {
+                    if (c >= 'A' && c <= 'F') {
                         // capital Hex must not parse
                         failed = true;
                         return val;
