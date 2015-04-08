@@ -8,8 +8,11 @@
 #include <boost/iostreams/stream_buffer.hpp>
 #include "http_rest_proxy.h"
 #include "jml/utils/ring_buffer.h"
+#include <chrono>
+
 
 using namespace std;
+
 
 namespace Datacratic {
 
@@ -74,7 +77,12 @@ struct HttpStreamingDownloadSource {
         void stop()
         {
             shutdown = true;
-            dataQueue.push("");
+
+
+            while (!dataQueue.tryPush("")) {
+                string item;
+                dataQueue.tryPop(item, 0.001);
+            }
 
             for (thread & th: threads) {
                 th.join();
@@ -132,7 +140,9 @@ struct HttpStreamingDownloadSource {
                         }
                         if (shutdown)
                             return false;
-                        dataQueue.push(data);
+                        while (!shutdown && !dataQueue.tryPush(data)) {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        }
                         return !shutdown;
                     };
 
@@ -154,17 +164,20 @@ struct HttpStreamingDownloadSource {
                                       false /* exceptions */,
                                       onData, onHeader);
                 
+                if (shutdown)
+                    return;
+
                 if (resp.code() != 200) {
                     throw ML::Exception("HTTP code %d reading %s\n\n%s",
                                         errorCode, urlStr.c_str(),
                                         string(errorBody, 0, 1024).c_str());
                 }
                 
-                dataQueue.push("");
+                dataQueue.tryPush("");
                 
             } catch (const std::exception & exc) {
                 lastExc = std::current_exception();
-                dataQueue.push("");
+                dataQueue.tryPush("");
             }
         }
 
