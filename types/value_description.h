@@ -1756,6 +1756,21 @@ T jsonDecodeStr(const std::string & json, T * = 0,
 // 1) has a default description;
 // 2) does NOT have a fromJson() function (there is a simpler overload for this case)
 template<typename T>
+T jsonDecodeStr(const Utf8String & json, T * = 0,
+                decltype(getDefaultDescription((T *)0)) * = 0)
+{
+    T result;
+
+    static auto desc = getDefaultDescriptionShared<T>();
+    StreamingJsonParsingContext context(json.rawString(), json.rawData(), json.rawLength());
+    desc->parseJson(&result, context);
+    return result;
+}
+
+// jsonDecode implementation for any type which:
+// 1) has a default description;
+// 2) does NOT have a fromJson() function (there is a simpler overload for this case)
+template<typename T>
 T jsonDecodeStream(std::istream & stream, T * = 0,
                    decltype(getDefaultDescription((T *)0)) * = 0,
                    typename std::enable_if<!hasFromJson<T>::value>::type * = 0)
