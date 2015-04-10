@@ -1,0 +1,1 @@
+$(eval $(call test,any_test,any types arch utils,boost))
