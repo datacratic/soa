@@ -11,7 +11,7 @@
 #include <ostream>
 
 #include "jml/utils/exc_assert.h"
-#include "jml/utils/json_parsing.h"
+#include "json_parsing.h"
 
 #include "soa/jsoncpp/value.h"
 #include "soa/types/string.h"
@@ -98,7 +98,7 @@ struct StreamJsonPrintingContext
         if (path.back().memberNum != 0)
             stream << ",";
         stream << '\"';
-        ML::jsonEscape(memberName, stream);
+        jsonEscape(memberName, stream);
         stream << "\":";
     }
 
@@ -187,7 +187,7 @@ struct StreamJsonPrintingContext
     virtual void writeString(const std::string & s)
     {
         stream << '\"';
-        ML::jsonEscape(s, stream);
+        jsonEscape(s, stream);
         stream << '\"';
     }
 

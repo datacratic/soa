@@ -12,7 +12,7 @@
 #include <iostream>
 #include "jml/db/persistent.h"
 #include "soa/types/string.h"
-#include "soa/types/json_parsing.h"
+#include "soa/types/json_parsing_context.h"
 #include "soa/types/json_printing.h"
 
 using namespace Datacratic;

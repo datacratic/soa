@@ -7,3 +7,4 @@ $(eval $(call test,value_description_test,types arch utils value_description,boo
 $(eval $(call test,value_instance_test,types arch utils value_description,boost))
 $(eval $(call test,periodic_utils_test,types,boost))
 $(eval $(call program,id_profile,types))
+$(eval $(call test,json_parsing_test,utils value_description,boost))

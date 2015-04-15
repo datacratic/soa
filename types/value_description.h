@@ -18,7 +18,7 @@
 #include "jml/utils/exc_assert.h"
 #include "jml/utils/filter_streams.h"
 #include "jml/utils/smart_ptr_utils.h"
-#include "json_parsing.h"
+#include "json_parsing_context.h"
 #include "json_printing.h"
 #include "value_description_fwd.h"
 #include "soa/utils/type_traits.h"
