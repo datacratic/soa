@@ -139,10 +139,6 @@ struct Any {
     template<typename T>
     T convert(const ValueDescription & desc = *getDefaultDescriptionShared<T>()) const
     {
-        if (!type_)
-            throw ML::Exception("bad Any cast: null value can't convert to '%s'",
-                                ML::type_name<T>().c_str());
-
         // If the same type, conversion is trivial
         if (type_ == &typeid(T))
             return *reinterpret_cast<T *>(obj_.get());
@@ -152,7 +148,14 @@ struct Any {
         //if (res)
         //    return *reinterpret_cast<const T *>(res);
 
-        if (type_ == &typeid(Json::Value)) {
+        if (!type_) {
+            T result;
+            Json::Value v;
+            StructuredJsonParsingContext context(v);
+            desc.parseJson(&result, context);
+            return result;
+        }
+        else if (type_ == &typeid(Json::Value)) {
             T result;
             StructuredJsonParsingContext context(*reinterpret_cast<const Json::Value *>(obj_.get()));
             desc.parseJson(&result, context);
