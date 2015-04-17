@@ -612,7 +612,10 @@ std::function<bool
               (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
-createRequestValidater(const Json::Value & argHelp);
+createRequestValidater(const Json::Value & argHelp, std::set<std::string> ignore);
+
+/** Return a set of ignored query parameters for the given request filter. */
+std::set<std::string> getIgnoredArgs(const RequestFilter & filter);
 
 template<typename... PositionedDualTypes>
 struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
@@ -624,7 +627,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindSync(Return (Obj::* pmf) (Args...),
+    bindSync(std::set<std::string> ignoreArgs,
+             Return (Obj::* pmf) (Args...),
              Ptr ptr,
              Params&&... params)
     {
@@ -636,7 +640,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -673,7 +677,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindSync(Return (Obj::* pmf) (Args...) const,
+    bindSync(std::set<std::string> ignoreArgs,
+             Return (Obj::* pmf) (Args...) const,
              Ptr ptr,
              Params&&... params)
     {
@@ -685,7 +690,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -725,7 +730,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindSyncReturn(const TransformResultFn & fn,
+    bindSyncReturn(std::set<std::string> ignoreArgs,
+                   const TransformResultFn & fn,
                    Return (Obj::* pmf) (Args...),
                    Ptr ptr,
                    Params&&... params)
@@ -738,7 +744,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -775,7 +781,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindSyncReturn(const TransformResultFn & fn,
+    bindSyncReturn(std::set<std::string> ignoreArgs,
+                   const TransformResultFn & fn,
                    Return (Obj::* pmf) (Args...) const,
                    Ptr ptr,
                    Params&&... params)
@@ -788,7 +795,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -828,7 +835,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindSyncReturnStatus(std::pair<int, Return> (Obj::* pmf) (Args...),
+    bindSyncReturnStatus(std::set<std::string> ignoreArgs,
+                         std::pair<int, Return> (Obj::* pmf) (Args...),
                          Ptr ptr,
                          Params&&... params)
     {
@@ -840,7 +848,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -876,7 +884,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindSyncReturnStatus(Return (Obj::* pmf) (Args...) const,
+    bindSyncReturnStatus(std::set<std::string> ignoreArgs,
+                         Return (Obj::* pmf) (Args...) const,
                          Ptr ptr,
                          Params&&... params)
     {
@@ -888,7 +897,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -928,7 +937,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindAsync(Return (Obj::* pmf) (Args...),
+    bindAsync(std::set<std::string> ignoreArgs,
+              Return (Obj::* pmf) (Args...),
               Ptr ptr,
               Params&&... params)
     {
@@ -940,7 +950,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -977,7 +987,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindAsync(Return (Obj::* pmf) (Args...) const,
+    bindAsync(std::set<std::string> ignoreArgs,
+              Return (Obj::* pmf) (Args...) const,
               Ptr ptr,
               Params&&... params)
     {
@@ -989,7 +1000,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -1026,7 +1037,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params, typename ThenFn>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindAsyncThen(const ThenFn & then,
+    bindAsyncThen(std::set<std::string> ignoreArgs,
+                  const ThenFn & then,
                   const ExcFn & excFn,
                   const std::function<Return (Args...)> & fn,
                   Params&&... params)
@@ -1039,7 +1051,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -1083,7 +1095,8 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
              typename... Params, typename ThenFn>
     static
     std::pair<RestRequestRouter::OnProcessRequest, Json::Value>
-    bindAsyncThenContext(const ThenFn & then,
+    bindAsyncThenContext(std::set<std::string> ignoreArgs,
+                         const ThenFn & then,
                          const ExcFn & excFn,
                          const std::function<Return (const RestRequestParsingContext &, Args...)> & fn,
                          Params&&... params)
@@ -1096,7 +1109,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
         // Necessary to deal with a compiler bug
         auto sharedGens = std::make_shared<decltype(gens)>(std::move(gens));
 
-        auto validater = createRequestValidater(argHelp);
+        auto validater = createRequestValidater(argHelp, ignoreArgs);
 
         RestRequestRouter::OnProcessRequest result
             = [=] (RestConnection & connection,
@@ -1153,7 +1166,7 @@ addRouteSyncReturn(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindSyncReturn(transformResult,
+        ::bindSyncReturn(getIgnoredArgs(filter), transformResult,
                          pmf, ptr, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
@@ -1196,12 +1209,12 @@ template<typename Return, typename Obj, typename... Args, typename Ptr,
          typename... Params>
 void
 addRouteReturnStatus(RestRequestRouter & router,
-                         PathSpec path, RequestFilter filter,
-                         const std::string & description,
-                         const std::string & resultDescription,
-                         std::pair<int, Return> (Obj::* pmf) (Args...),
-                         Ptr ptr,
-                         Params&&... params)
+                     PathSpec path, RequestFilter filter,
+                     const std::string & description,
+                     const std::string & resultDescription,
+                     std::pair<int, Return> (Obj::* pmf) (Args...),
+                     Ptr ptr,
+                     Params&&... params)
 {
     static_assert(sizeof...(Args) == sizeof...(Params),
                   "member function and parameter arity must match");
@@ -1211,7 +1224,7 @@ addRouteReturnStatus(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindSyncReturnStatus(pmf, ptr, std::forward<Params>(params)...);
+        ::bindSyncReturnStatus(getIgnoredArgs(filter), pmf, ptr, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
     help["result"] = resultDescription;
@@ -1238,7 +1251,7 @@ addRouteReturnStatus(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindSyncReturnStatus(pmf, ptr, std::forward<Params>(params)...);
+        ::bindSyncReturnStatus(getIgnoredArgs(filter), pmf, ptr, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
     help["result"] = resultDescription;
@@ -1265,7 +1278,7 @@ addRouteSync(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindSync(pmf, ptr, std::forward<Params>(params)...);
+        ::bindSync(getIgnoredArgs(filter), pmf, ptr, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
     
@@ -1291,7 +1304,7 @@ addRouteSync(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindSync(pmf, ptr, std::forward<Params>(params)...);
+        ::bindSync(getIgnoredArgs(filter), pmf, ptr, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
         
@@ -1316,7 +1329,7 @@ addRouteAsync(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindAsync(pmf, ptr, std::forward<Params>(params)...);
+        ::bindAsync(getIgnoredArgs(filter), pmf, ptr, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
 
@@ -1341,7 +1354,7 @@ addRouteAsync(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindAsync(pmf, ptr, std::forward<Params>(params)...);
+        ::bindAsync(getIgnoredArgs(filter), pmf, ptr, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
         
@@ -1368,7 +1381,7 @@ addRouteAsyncThen(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindAsyncThen(then, exc, fn, std::forward<Params>(params)...);
+        ::bindAsyncThen(getIgnoredArgs(filter), then, exc, fn, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
     help["result"] = resultDescription;
@@ -1424,7 +1437,7 @@ addRouteAsyncThenContext(RestRequestRouter & router,
     typedef ML::PositionedDualTypeList<0, ArgsList, ParamsList> PositionedTypes;
 
     auto res = RestRequestBinder<typename PositionedTypes::List>
-        ::bindAsyncThenContext(then, exc, fn, std::forward<Params>(params)...);
+        ::bindAsyncThenContext(getIgnoredArgs(filter), then, exc, fn, std::forward<Params>(params)...);
     auto & cb = res.first;
     auto & help = res.second;
     help["result"] = resultDescription;

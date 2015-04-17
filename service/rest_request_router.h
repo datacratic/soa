@@ -138,6 +138,9 @@ struct RequestFilter {
     /// Fill out the JSON object with help about the filters
     void getHelp(Json::Value & result) const;
 
+    /// Return a list of query parameter that should be ignored
+    std::set<std::string> getIgnoredQueryParameters() const;
+
 private:
     /// Internal method to separate the list of verbs into either verbs or
     /// filters

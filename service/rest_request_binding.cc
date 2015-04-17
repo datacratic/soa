@@ -90,11 +90,10 @@ std::function<bool
               (RestConnection & connection,
                const RestRequest & request,
                const RestRequestParsingContext & context)>
-createRequestValidater(const Json::Value & argHelp)
+createRequestValidater(const Json::Value & argHelp,
+                       std::set<std::string> ignored)
 {
-    //cerr << "creating validator with help " << argHelp << endl;
-
-    std::set<std::string> acceptedParams;
+    std::set<std::string> acceptedParams = std::move(ignored);
 
     if (!argHelp.isNull()) {
         for (auto & p: argHelp["requestParams"]) {
@@ -110,6 +109,8 @@ createRequestValidater(const Json::Value & argHelp)
             bool hadError = false;
             Json::Value details;
             
+            details["argHelp"] = argHelp;
+        
             for (auto & s: request.params) {
                 if (!acceptedParams.count(s.first)) {
                     hadError = true;
@@ -138,6 +139,11 @@ createRequestValidater(const Json::Value & argHelp)
         };
 
     return result;
+}
+
+std::set<std::string> getIgnoredArgs(const RequestFilter & filter)
+{
+    return filter.getIgnoredQueryParameters();
 }
 
 

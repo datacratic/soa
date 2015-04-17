@@ -214,6 +214,18 @@ getHelp(Json::Value & result) const
     }
 }
 
+std::set<std::string>
+RequestFilter::
+getIgnoredQueryParameters() const
+{
+    std::set<std::string> result;
+    for (auto & f: filters) {
+        if (f.location == RequestParamFilter::QUERY)
+            result.insert(f.param);
+    }
+    return result;
+}
+
 std::ostream & operator << (std::ostream & stream, const RequestFilter & filter)
 {
     return stream;
