@@ -33,15 +33,10 @@ std::string restEncode(const T & val,
     return boost::lexical_cast<std::string>(val);
 }
 
-inline std::string restEncode(const Utf8String & str)
-{
-    return str.rawString();
-}
-
-inline Utf8String restDecode(std::string str, Utf8String *)
-{
-    return Utf8String(str);
-}
+const std::string & restEncode(const Utf8String & str);
+Utf8String restDecode(std::string str, Utf8String *);
+bool restDecode(const std::string & str, bool *);
+std::string restEncode(bool b);
 
 template<typename T, typename Enable = void>
 struct RestCodec {

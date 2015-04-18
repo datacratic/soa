@@ -64,6 +64,7 @@ LIBSERVICES_SOURCES := \
 	rest_proxy.cc \
 	rest_request_router.cc \
 	rest_request_binding.cc \
+	rest_request_params.cc \
 	in_process_rest_connection.cc \
 	runner.cc \
 	sink.cc \
@@ -82,6 +83,7 @@ LIBSERVICES_SOURCES := \
 	event_publisher.cc \
 	event_subscriber.cc \
 	nsq_client.cc \
+
 
 LIBSERVICES_LINK := opstats curl curlpp boost_regex zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description credentials runner_common boost_filesystem 
 
