@@ -450,7 +450,7 @@ process(const RestRequest & request,
 
         if (f.location == RequestParamFilter::QUERY) {
             for (auto & p: request.params) {
-                if (p.first == f.param && p.second == f.value) {
+                if (p.first == f.param && (f.value == "*" || p.second == f.value)) {
                     matched = true;
                     break;
                 }
