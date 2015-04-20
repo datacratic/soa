@@ -230,4 +230,6 @@ reconstitute(ML::DB::Store_Reader & store)
     *this = Url(original);
 }
 
+std::string urlDocumentationUri;
+
 } // namespace Datacratic

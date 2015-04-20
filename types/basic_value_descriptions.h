@@ -123,9 +123,17 @@ struct DefaultDescription<Utf32String> :
         }
 };
 
+extern std::string urlDocumentationUri;
+
 template<>
 struct DefaultDescription<Url>
     : public ValueDescriptionI<Url, ValueKind::ATOM> {
+
+
+    DefaultDescription()
+    {
+        this->documentationUri = urlDocumentationUri;
+    }
 
     virtual void parseJsonTyped(Url * val,
                                 JsonParsingContext & context) const
