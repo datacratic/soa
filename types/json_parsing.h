@@ -25,23 +25,14 @@ std::string jsonEscape(const std::string & str);
 
 void jsonEscape(const std::string & str, std::ostream & out);
 
-/*
- * If non-ascii characters are found an exception is thrown
- */
-std::string expectJsonStringAscii(ML::Parse_Context & context);
+std::string expectJsonString(ML::Parse_Context & context);
 
 /*
- * If non-ascii characters are found an exception is thrown.
  * Output goes into the given buffer, of the given maximum length.
  * If it doesn't fit, then return zero.
  */
-ssize_t expectJsonStringAscii(ML::Parse_Context & context, char * buf,
+ssize_t expectJsonString(ML::Parse_Context & context, char * buf,
                              size_t maxLength);
-
-/*
- * if non-ascii characters are found we replace them by an ascii character that is supplied
- */
-std::string expectJsonStringAsciiPermissive(ML::Parse_Context & context, char c);
 
 bool matchJsonString(ML::Parse_Context & context, std::string & str);
 
@@ -54,14 +45,6 @@ expectJsonArray(ML::Parse_Context & context,
 void
 expectJsonObject(ML::Parse_Context & context,
                  const std::function<void (const std::string &, ML::Parse_Context &)> & onEntry);
-
-/** Expect a Json object and call the given callback.  The keys are assumed
-    to be ASCII which means no embedded nulls, and so the key can be passed
-    as a const char *.
-*/
-void
-expectJsonObjectAscii(ML::Parse_Context & context,
-                      const std::function<void (const char *, ML::Parse_Context &)> & onEntry);
 
 bool
 matchJsonObject(ML::Parse_Context & context,
@@ -113,7 +96,7 @@ expectJson(ML::Parse_Context & context)
 {
     context.skip_whitespace();
     if (*context == '"')
-        return expectJsonStringAscii(context);
+        return expectJsonString(context);
     else if (context.match_literal("null"))
         return Json::Value();
     else if (context.match_literal("true"))
@@ -134,49 +117,6 @@ expectJson(ML::Parse_Context & context)
                          [&] (const std::string & key, ML::Parse_Context & context)
                          {
                              result[key] = expectJson(context);
-                         });
-        return result;
-    } else {
-        JsonNumber number = expectJsonNumber(context);
-        switch (number.type) {
-        case JsonNumber::UNSIGNED_INT:
-            return number.uns;
-        case JsonNumber::SIGNED_INT:
-            return number.sgn;
-        case JsonNumber::FLOATING_POINT:
-            return number.fp;
-        default:
-            throw ML::Exception("logic error in expectJson");
-        }
-    }
-}
-
-inline Json::Value
-expectJsonAscii(ML::Parse_Context & context)
-{
-    context.skip_whitespace();
-    if (*context == '"')
-        return expectJsonStringAscii(context);
-    else if (context.match_literal("null"))
-        return Json::Value();
-    else if (context.match_literal("true"))
-        return Json::Value(true);
-    else if (context.match_literal("false"))
-        return Json::Value(false);
-    else if (*context == '[') {
-        Json::Value result(Json::arrayValue);
-        expectJsonArray(context,
-                        [&] (int i, ML::Parse_Context & context)
-                        {
-                            result[i] = expectJsonAscii(context);
-                        });
-        return result;
-    } else if (*context == '{') {
-        Json::Value result(Json::objectValue);
-        expectJsonObjectAscii(context,
-                         [&] (const char * key, ML::Parse_Context & context)
-                         {
-                             result[key] = expectJsonAscii(context);
                          });
         return result;
     } else {

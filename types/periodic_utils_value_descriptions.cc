@@ -13,7 +13,7 @@ struct TimePeriodDescription: public ValueDescriptionT<TimePeriod> {
     virtual void parseJsonTyped(TimePeriod * val,
                                 JsonParsingContext & context) const
     {
-        val->parse(context.expectStringAscii());
+        val->parse(context.expectString());
     }
 
     virtual void printJsonTyped(const TimePeriod * val,

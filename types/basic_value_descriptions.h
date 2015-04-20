@@ -63,7 +63,7 @@ struct DefaultDescription<std::string>
     virtual void parseJsonTyped(std::string * val,
                                 JsonParsingContext & context) const
     {
-        *val = context.expectStringAscii();
+        *val = context.expectString();
     }
 
     virtual void printJsonTyped(const std::string * val,
@@ -85,7 +85,7 @@ struct DefaultDescription<Utf8String>
     virtual void parseJsonTyped(Utf8String * val,
                                 JsonParsingContext & context) const
     {
-        *val = context.expectStringUtf8();
+        *val = context.expectString();
     }
 
     virtual void printJsonTyped(const Utf8String * val,
@@ -100,13 +100,14 @@ struct DefaultDescription<Utf8String>
     }
 };
 
+#if 0
 template<>
 struct DefaultDescription<Utf32String> :
     public ValueDescriptionI<Utf32String, ValueKind::STRING> {
         virtual void parseJsonTyped(Utf32String *val,
                                     JsonParsingContext & context) const
         {
-            auto utf8Str = context.expectStringUtf8();
+            auto utf8Str = context.expectString();
             *val = Utf32String::fromUtf8(utf8Str);
         }
 
@@ -123,6 +124,7 @@ struct DefaultDescription<Utf32String> :
             return val->empty();
         }
 };
+#endif
 
 template<>
 struct DefaultDescription<Url>
@@ -131,7 +133,7 @@ struct DefaultDescription<Url>
     virtual void parseJsonTyped(Url * val,
                                 JsonParsingContext & context) const
     {
-        *val = Url(context.expectStringUtf8());
+        *val = Url(context.expectString());
     }
 
     virtual void printJsonTyped(const Url * val,
@@ -576,7 +578,7 @@ struct DefaultDescription<Date>
         if (context.isNumber())
             *val = Date::fromSecondsSinceEpoch(context.expectDouble());
         else if (context.isString()) {
-            std::string s = context.expectStringAscii();
+            std::string s = context.expectString();
             if (s.length() >= 11
                 && s[4] == '-'
                 && s[7] == '-'
@@ -623,7 +625,7 @@ struct Iso8601TimestampValueDescription: public DefaultDescription<Date> {
         if (context.isNumber())
             *val = Date::fromSecondsSinceEpoch(context.expectDouble());
         else if (context.isString())
-            *val = Date::parseIso8601DateTime(context.expectStringAscii());
+            *val = Date::parseIso8601DateTime(context.expectString());
         else context.exception("expected date");
     }
 
@@ -976,7 +978,7 @@ struct DefaultDescription<TaggedInt>
                                 JsonParsingContext & context) const
     {
         if (context.isString()) {
-            std::string s = context.expectStringAscii();
+            std::string s = context.expectString();
             val->val = boost::lexical_cast<int>(s);
         }
         else val->val = context.expectInt();
@@ -1004,7 +1006,7 @@ struct DefaultDescription<TaggedIntDef<defValue> >
                                 JsonParsingContext & context) const
     {
         if (context.isString()) {
-            std::string s = context.expectStringAscii();
+            std::string s = context.expectString();
             val->val = boost::lexical_cast<int>(s);
         }
         else val->val = context.expectInt();
@@ -1033,7 +1035,7 @@ struct DefaultDescription<TaggedInt64>
                                 JsonParsingContext & context) const
     {
         if (context.isString()) {
-            std::string s = context.expectStringAscii();
+            std::string s = context.expectString();
             val->val = boost::lexical_cast<int64_t>(s);
         }
         else val->val = context.expectLongLong();
@@ -1059,7 +1061,7 @@ struct DefaultDescription<TaggedInt64Def<defValue> >
                                 JsonParsingContext & context) const
     {
         if (context.isString()) {
-            std::string s = context.expectStringAscii();
+            std::string s = context.expectString();
             val->val = boost::lexical_cast<int64_t>(s);
         }
         else val->val = context.expectLongLong();
@@ -1348,7 +1350,7 @@ struct CommaSeparatedListDescription
             std::string res;
             auto onElement = [&] ()
                 {
-                    std::string s = context.expectStringAscii();
+                    std::string s = context.expectString();
                     if (!res.empty())
                         res += ", ";
                     res += s;
@@ -1358,7 +1360,7 @@ struct CommaSeparatedListDescription
             *val = res;
         }
         else {
-            *val = context.expectStringAscii();
+            *val = context.expectString();
         }
     }
 
@@ -1386,7 +1388,7 @@ struct Utf8CommaSeparatedListDescription
             Utf8String res;
             auto onElement = [&] ()
                 {
-                    Utf8String s = context.expectStringUtf8();
+                    Utf8String s(context.expectString());
                     if (!res.empty())
                         res += ", ";
                     res += s;
@@ -1396,7 +1398,7 @@ struct Utf8CommaSeparatedListDescription
             *val = res;
         }
         else {
-            *val = context.expectStringUtf8();
+            *val = context.expectString();
         }
     }
 

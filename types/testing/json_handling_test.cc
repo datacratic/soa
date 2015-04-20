@@ -36,7 +36,7 @@ BOOST_AUTO_TEST_CASE(test_utf8_round_trip_streaming_binary)
 
     {
         StringJsonParsingContext context(stream.str());
-        Utf8String str2 = context.expectStringUtf8();
+        Utf8String str2(context.expectString());
         BOOST_CHECK_EQUAL(str, str2);
     }
 }
@@ -59,7 +59,7 @@ BOOST_AUTO_TEST_CASE(test_utf8_round_trip_streaming_ascii)
 
     {
         StringJsonParsingContext context(stream.str());
-        Utf8String str2 = context.expectStringUtf8();
+        Utf8String str2(context.expectString());
         BOOST_CHECK_EQUAL(str, str2);
     }
 }

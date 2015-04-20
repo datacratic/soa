@@ -24,6 +24,7 @@ writeStringUtf8(const Utf8String & s)
 
     for (auto it = s.begin(), end = s.end();  it != end;  ++it) {
         int c = *it;
+        std::cerr << std::hex << "Codepoint: " << c << std::endl;
         if (c >= ' ' && c < 127 && c != '\"' && c != '\\')
             stream << (char)c;
         else {

@@ -1138,7 +1138,7 @@ struct EnumDescription: public ValueDescriptionT<Enum> {
     virtual void parseJsonTyped(Enum * val, JsonParsingContext & context) const
     {
         if (context.isString()) {
-            std::string s = context.expectStringAscii();
+            std::string s = context.expectString();
             auto it = parse.find(s);
             if (it == parse.end())
                 context.exception("unknown value for " + this->typeName

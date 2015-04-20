@@ -7,6 +7,7 @@
 
 #include "json_parsing.h"
 #include "jml/arch/format.h"
+#include "soa/utf8cpp/source/utf8.h"
 
 
 using namespace std;
@@ -195,7 +196,7 @@ std::string expectJsonStringAsciiPermissive(Parse_Context & context, char sub)
     return result;
 }
 
-ssize_t expectJsonStringAscii(Parse_Context & context, char * buffer, size_t maxLength)
+ssize_t expectJsonString(Parse_Context & context, char * buffer, size_t maxLength)
 {
     skipJsonWhitespace(context);
     context.expect_literal('"');
@@ -205,7 +206,19 @@ ssize_t expectJsonStringAscii(Parse_Context & context, char * buffer, size_t max
 
     // Try multiple times to make it fit
     while (!context.match_literal('"')) {
-        int c = *context++;
+        int c = *context;
+        if (c < 0 || c > 127) {
+            // Unicode
+            c = utf8::unchecked::next(context);
+
+            char * p1 = buffer + pos;
+            char * p2 = p1;
+            pos += utf8::append(c, p2) - p1;
+
+            continue;
+        }
+
+        ++context;
         if (c == '\\') {
             c = *context++;
             switch (c) {
@@ -219,9 +232,6 @@ ssize_t expectJsonStringAscii(Parse_Context & context, char * buffer, size_t max
             case '"': c = '"';   break;
             case 'u': {
                 int code = context.expect_hex4();
-                if (code<0 || code>255) {
-                    context.exception(format("non 8bit char %d", code));
-                }
                 c = code;
                 break;
             }
@@ -229,12 +239,16 @@ ssize_t expectJsonStringAscii(Parse_Context & context, char * buffer, size_t max
                 context.exception("invalid escaped char");
             }
         }
-        if (c < 0 || c >= 127)
-           context.exception("invalid JSON ASCII string character");
         if (pos == bufferSize) {
             return -1;
         }
-        buffer[pos++] = c;
+
+        if (c < ' ' || c >= 127) {
+            char * p1 = buffer + pos;
+            char * p2 = p1;
+            pos += utf8::append(c, p2) - p1;
+        }
+        else buffer[pos++] = c;
     }
 
     buffer[pos] = 0; // null terminator
@@ -242,7 +256,7 @@ ssize_t expectJsonStringAscii(Parse_Context & context, char * buffer, size_t max
     return pos;
 }
 
-std::string expectJsonStringAscii(Parse_Context & context)
+std::string expectJsonString(Parse_Context & context)
 {
     skipJsonWhitespace(context);
     context.expect_literal('"');
@@ -265,7 +279,31 @@ std::string expectJsonStringAscii(Parse_Context & context)
         pos += charsMatched;
 #endif
 
-        int c = *context++;
+        // We need up to 4 characters to add a new UTF-8 code point
+        if (pos >= bufferSize - 4) {
+            size_t newBufferSize = bufferSize * 8;
+            char * newBuffer = new char[newBufferSize];
+            std::copy(buffer, buffer + bufferSize, newBuffer);
+            if (buffer != internalBuffer)
+                delete[] buffer;
+            buffer = newBuffer;
+            bufferSize = newBufferSize;
+        }
+
+        int c = *context;
+
+        if (c < 0 || c > 127) {
+            // Unicode
+            c = utf8::unchecked::next(context);
+
+            char * p1 = buffer + pos;
+            char * p2 = p1;
+            pos += utf8::append(c, p2) - p1;
+
+            continue;
+        }
+        ++context;
+
         if (c == '\\') {
             c = *context++;
             switch (c) {
@@ -279,9 +317,6 @@ std::string expectJsonStringAscii(Parse_Context & context)
             case '"': c = '"';   break;
             case 'u': {
                 int code = context.expect_hex4();
-                if (code<0 || code>255) {
-                    context.exception(format("non 8bit char %d", code));
-                }
                 c = code;
                 break;
             }
@@ -289,18 +324,12 @@ std::string expectJsonStringAscii(Parse_Context & context)
                 context.exception("invalid escaped char");
             }
         }
-        if (c < 0 || c >= 127)
-           context.exception("invalid JSON ASCII string character");
-        if (pos == bufferSize) {
-            size_t newBufferSize = bufferSize * 8;
-            char * newBuffer = new char[newBufferSize];
-            std::copy(buffer, buffer + bufferSize, newBuffer);
-            if (buffer != internalBuffer)
-                delete[] buffer;
-            buffer = newBuffer;
-            bufferSize = newBufferSize;
+        if (c < ' ' || c > 127) {
+            char * p1 = buffer + pos;
+            char * p2 = p1;
+            pos += utf8::append(c, p2) - p1;
         }
-        buffer[pos++] = c;
+        else buffer[pos++] = c;
     }
     
     string result(buffer, buffer + pos);
@@ -362,7 +391,7 @@ expectJsonObject(Parse_Context & context,
     for (;;) {
         skipJsonWhitespace(context);
 
-        string key = expectJsonStringAscii(context);
+        string key = expectJsonString(context);
 
         skipJsonWhitespace(context);
 
@@ -371,47 +400,6 @@ expectJsonObject(Parse_Context & context,
         skipJsonWhitespace(context);
 
         onEntry(key, context);
-
-        skipJsonWhitespace(context);
-
-        if (!context.match_literal(',')) break;
-    }
-
-    skipJsonWhitespace(context);
-    context.expect_literal('}');
-}
-
-void
-expectJsonObjectAscii(Parse_Context & context,
-                      const std::function<void (const char *, Parse_Context &)> & onEntry)
-{
-    skipJsonWhitespace(context);
-
-    if (context.match_literal("null"))
-        return;
-
-    context.expect_literal('{');
-
-    skipJsonWhitespace(context);
-
-    if (context.match_literal('}')) return;
-
-    for (;;) {
-        skipJsonWhitespace(context);
-
-        char keyBuffer[1024];
-
-        ssize_t done = expectJsonStringAscii(context, keyBuffer, 1024);
-        if (done == -1)
-            context.exception("JSON key is too long");
-
-        skipJsonWhitespace(context);
-
-        context.expect_literal(':');
-
-        skipJsonWhitespace(context);
-
-        onEntry(keyBuffer, context);
 
         skipJsonWhitespace(context);
 
@@ -438,7 +426,7 @@ matchJsonObject(Parse_Context & context,
     for (;;) {
         skipJsonWhitespace(context);
 
-        string key = expectJsonStringAscii(context);
+        string key = expectJsonString(context);
 
         skipJsonWhitespace(context);
         if (!context.match_literal(':')) return false;
