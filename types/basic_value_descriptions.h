@@ -69,7 +69,7 @@ struct DefaultDescription<std::string>
     virtual void printJsonTyped(const std::string * val,
                                 JsonPrintingContext & context) const
     {
-        context.writeString(*val);
+        context.writeStringUtf8(*val);
     }
 
     virtual bool isDefaultTyped(const std::string * val) const
@@ -1320,7 +1320,7 @@ struct CommaSeparatedListDescription
     virtual void printJsonTyped(const std::string * val,
                                 JsonPrintingContext & context) const
     {
-        context.writeString(*val);
+        context.writeStringUtf8(*val);
     }
 
     virtual bool isDefaultTyped(const std::string * val) const
