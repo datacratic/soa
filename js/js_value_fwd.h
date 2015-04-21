@@ -9,7 +9,6 @@
 #define __js__js_value_fwd_h__
 
 #include <string>
-#include "soa/types/string.h"
 #include <boost/utility/enable_if.hpp>
 #include <boost/type_traits/is_enum.hpp>
 #include <boost/type_traits/is_same.hpp>
@@ -37,8 +36,6 @@ void to_js(JSValue & jsval, double value);
 void to_js_bool(JSValue & jsval, bool value);
 void to_js(JSValue & jsval, const char * value);
 void to_js(JSValue & jsval, const std::string & value);
-void to_js(JSValue & jsval, const Utf8String & value);
-void to_js(JSValue & jsval, const Utf32String & value);
 void to_js(JSValue & jsval, const Json::Value & value);
 void to_js(JSValue & jsval, const JSValue & value);
 
@@ -59,8 +56,6 @@ unsigned long long from_js(const JSValue & val, unsigned long long *);
 float from_js(const JSValue & val, float *);
 double from_js(const JSValue & val, double *);
 std::string from_js(const JSValue & val, std::string *);
-Utf8String from_js(const JSValue & val, Utf8String *);
-Utf32String from_js(const JSValue & val, Utf32String *);
 bool from_js(const JSValue & val, bool *);
 Json::Value from_js(const JSValue & val, Json::Value *);
 Json::Value from_js_ref(const JSValue & val, Json::Value *);

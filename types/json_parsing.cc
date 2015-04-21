@@ -209,6 +209,7 @@ ssize_t expectJsonString(Parse_Context & context, char * buffer, size_t maxLengt
         int c = *context;
         if (c < 0 || c > 127) {
             // Unicode
+            /* @Todo Check that the codepoint is valid */
             c = utf8::unchecked::next(context);
 
             char * p1 = buffer + pos;
@@ -294,6 +295,7 @@ std::string expectJsonString(Parse_Context & context)
 
         if (c < 0 || c > 127) {
             // Unicode
+            /* @Todo Check that the codepoint is valid */
             c = utf8::unchecked::next(context);
 
             char * p1 = buffer + pos;

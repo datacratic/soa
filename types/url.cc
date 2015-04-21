@@ -37,20 +37,6 @@ Url(const std::string & s_)
     init(original);
 }
 
-Url::
-Url(const Utf8String & s_)
-    : original(s_.rawString())
-{
-    init(original);
-}
-
-Url::
-Url(const Utf32String & s_)
-        : original(s_.utf8String())
-{
-    init(original);
-}
-
 void
 Url::init(std::string s)
 {
@@ -86,15 +72,6 @@ toString() const
     if (valid())
         return canonical();
     return original;
-}
-
-Utf8String
-Url::
-toUtf8String() const
-{
-    if (valid())
-        return Utf8String(canonical());
-    return Utf8String(original);
 }
 
 const char *

@@ -14,7 +14,6 @@
 #include "json_parsing.h"
 
 #include "soa/jsoncpp/value.h"
-#include "soa/types/string.h"
 
 
 namespace Datacratic {
@@ -47,7 +46,7 @@ struct JsonPrintingContext {
     virtual void writeFloat(float f) = 0;
     virtual void writeDouble(double d) = 0;
     virtual void writeString(const std::string & s) = 0;
-    virtual void writeStringUtf8(const Utf8String & s) = 0;
+    virtual void writeStringUtf8(const std::string & s) = 0;
     virtual void writeBool(bool b) = 0;
     virtual void writeNull() = 0;
 
@@ -191,7 +190,10 @@ struct StreamJsonPrintingContext
         stream << '\"';
     }
 
-    virtual void writeStringUtf8(const Utf8String & s);
+    /* @Todo @FixMe: this function should be merged with writeString since we now assume
+       that a std::string can contain UTF-8 encoded characters
+    */
+    virtual void writeStringUtf8(const std::string & s);
 
     virtual void writeJson(const Json::Value & val)
     {
@@ -313,7 +315,7 @@ struct StructuredJsonPrintingContext
         *current = s;
     }
 
-    virtual void writeStringUtf8(const Utf8String & s)
+    virtual void writeStringUtf8(const std::string & s)
     {
         *current = s;
     }

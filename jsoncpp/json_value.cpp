@@ -8,7 +8,6 @@
 #include <utility>
 #include <cstring>
 #include <cmath>
-# include "soa/types/string.h"
 #ifdef JSON_USE_CPPTL
 # include <cpptl/conststring.h>
 #endif
@@ -379,18 +378,6 @@ Value::Value( const std::string &value )
 
 }
 
-Value::Value( const Datacratic::Utf8String &value )
-   : type_( stringValue )
-   , allocated_( true )
-   , comments_( 0 )
-# ifdef JSON_VALUE_USE_INTERNAL_MAP
-   , itemIsUsed_( 0 )
-#endif
-{
-   value_.string_ = valueAllocator()->duplicateStringValue( value.rawData(),
-                                                            (unsigned int)value.rawLength() );
-
-}
 Value::Value( const StaticString &value )
    : type_( stringValue )
    , allocated_( false )

@@ -11,7 +11,6 @@
 #include "jml/utils/parse_context.h"
 #include "jml/utils/compact_vector.h"
 #include "soa/types/id.h"
-#include "soa/types/string.h"
 #include <boost/algorithm/string.hpp>
 
 

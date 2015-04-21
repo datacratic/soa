@@ -78,53 +78,6 @@ struct DefaultDescription<std::string>
     }
 };
 
-template<>
-struct DefaultDescription<Utf8String>
-    : public ValueDescriptionI<Utf8String, ValueKind::STRING> {
-
-    virtual void parseJsonTyped(Utf8String * val,
-                                JsonParsingContext & context) const
-    {
-        *val = context.expectString();
-    }
-
-    virtual void printJsonTyped(const Utf8String * val,
-                                JsonPrintingContext & context) const
-    {
-        context.writeStringUtf8(*val);
-    }
-
-    virtual bool isDefaultTyped(const Utf8String * val) const
-    {
-        return val->empty();
-    }
-};
-
-#if 0
-template<>
-struct DefaultDescription<Utf32String> :
-    public ValueDescriptionI<Utf32String, ValueKind::STRING> {
-        virtual void parseJsonTyped(Utf32String *val,
-                                    JsonParsingContext & context) const
-        {
-            auto utf8Str = context.expectString();
-            *val = Utf32String::fromUtf8(utf8Str);
-        }
-
-        virtual void printJsonTyped(const Utf32String *val,
-                                     JsonPrintingContext & context) const
-        {
-            std::string utf8Str;
-            utf8::utf32to8(val->begin(), val->end(), std::back_inserter(utf8Str));
-            context.writeStringUtf8(Utf8String { utf8Str });
-        }
-
-        virtual bool isDefaultTyped(const Utf32String *val) const
-        {
-            return val->empty();
-        }
-};
-#endif
 
 template<>
 struct DefaultDescription<Url>
@@ -139,7 +92,7 @@ struct DefaultDescription<Url>
     virtual void printJsonTyped(const Url * val,
                                 JsonPrintingContext & context) const
     {
-        context.writeStringUtf8(val->toUtf8String());
+        context.writeStringUtf8(val->toString());
     }
 
     virtual bool isDefaultTyped(const Url * val) const
@@ -1295,7 +1248,7 @@ struct DefaultDescription<ML::compact_vector<T, Internal> >
     }
 };
 
-typedef Utf8String CSList;  // comma-separated list
+typedef std::string CSList;  // comma-separated list
 
 template<typename T>
 struct List: public ML::compact_vector<T, 3> {
@@ -1377,43 +1330,6 @@ struct CommaSeparatedListDescription
 
 };
 
-
-struct Utf8CommaSeparatedListDescription
-    : public ValueDescriptionI<Utf8String, ValueKind::STRING> {
-
-    virtual void parseJsonTyped(Utf8String * val,
-                                JsonParsingContext & context) const
-    {
-        if (context.isArray()) {
-            Utf8String res;
-            auto onElement = [&] ()
-                {
-                    Utf8String s(context.expectString());
-                    if (!res.empty())
-                        res += ", ";
-                    res += s;
-                };
-
-            context.forEachElement(onElement);
-            *val = res;
-        }
-        else {
-            *val = context.expectString();
-        }
-    }
-
-    virtual void printJsonTyped(const Utf8String * val,
-                                JsonPrintingContext & context) const
-    {
-        context.writeStringUtf8(*val);
-    }
-
-    virtual bool isDefaultTyped(const Utf8String * val) const
-    {
-        return val->empty();
-    }
-
-};
 
 template<typename T>
 struct DefaultDescription<Optional<T> >

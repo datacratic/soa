@@ -8,6 +8,7 @@
 #include "jml/utils/exc_assert.h"
 
 #include "json_printing.h"
+#include "soa/utf8cpp/source/utf8.h"
 
 
 using namespace std;
@@ -18,16 +19,19 @@ namespace Datacratic {
 
 void
 StreamJsonPrintingContext::
-writeStringUtf8(const Utf8String & s)
+writeStringUtf8(const std::string & s)
 {
     stream << '\"';
 
-    for (auto it = s.begin(), end = s.end();  it != end;  ++it) {
-        int c = *it;
-        if (c >= ' ' && c < 127 && c != '\"' && c != '\\')
-            stream << (char)c;
+    utf8::iterator<std::string::const_iterator> it(s.begin(), s.begin(), s.end());
+    utf8::iterator<std::string::const_iterator> end(s.end(), s.begin(), s.end());
+    
+    for (;  it != end;  ++it) {
+        auto codepoint = *it;
+        if (codepoint >= ' ' && codepoint < 127 && codepoint != '\"' && codepoint != '\\')
+            stream << static_cast<char>(codepoint);
         else {
-            switch (c) {
+            switch (codepoint) {
             case '\t': stream << "\\t";  break;
             case '\n': stream << "\\n";  break;
             case '\r': stream << "\\r";  break;
@@ -35,16 +39,20 @@ writeStringUtf8(const Utf8String & s)
             case '\f': stream << "\\f";  break;
             case '/':
             case '\\':
-            case '\"': stream << '\\' << (char)c;  break;
+            case '\"': stream << '\\' << static_cast<char>(codepoint);  break;
             default:
                 if (writeUtf8) {
                     char buf[4];
-                    char * p = utf8::unchecked::append(c, buf);
+                    std::fill(buf, buf + sizeof buf, 0);
+                    // utf8::iterator should already check for codepoint validity, so we
+                    // don't need to check a second time when encoding the codepoint in the
+                    // resulting buffer
+                    char * p = utf8::unchecked::append(codepoint, buf);
                     stream.write(buf, p - buf);
                 }
                 else {
-                    ExcAssert(c >= 0 && c < 65536);
-                    stream << ML::format("\\u%04x", (unsigned)c);
+                    ExcAssert(codepoint >= 0 && codepoint < 65536);
+                    stream << ML::format("\\u%04x", static_cast<unsigned>(codepoint));
                 }
             }
         }

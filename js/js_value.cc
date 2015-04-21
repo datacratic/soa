@@ -11,12 +11,12 @@
 #include "jml/arch/demangle.h"
 #include "jml/arch/backtrace.h"
 #include "soa/types/date.h"
-#include "soa/types/string.h"
 #include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #include "soa/jsoncpp/json.h"
 #include "node/node_buffer.h"
 #include <cxxabi.h>
+
 using namespace std;
 using namespace ML;
 using namespace Datacratic::JS;
@@ -155,16 +155,6 @@ void to_js(JSValue & jsval, const std::string & value)
     }
 }
 
-void to_js(JSValue & jsval, const Utf8String & value)
-{
-	jsval = v8::String::New(value.rawData(), value.rawLength());
-}
-
-void to_js(JSValue & jsval, const Utf32String & value)
-{
-    std::string utf8Str { value.utf8String() };
-	jsval = v8::String::New(utf8Str.c_str(), utf8Str.size());
-}
 void to_js(JSValue & jsval, const char * value)
 {
     jsval = v8::String::New(value);
@@ -401,7 +391,7 @@ std::string from_js(const JSValue & val, std::string *)
     }
     else
     {
-    	return *v8::String::AsciiValue(val);
+    	return *v8::String::Utf8Value(val);
     }
 }
 
@@ -454,7 +444,7 @@ Json::Value from_js(const JSValue & val, Json::Value *)
     }
     if(val->IsString())
     {
-       	return from_js(val, (Utf8String *)0);
+       	return from_js(val, (string *)0);
     }
     if(val->IsInt32())
     {
@@ -480,16 +470,6 @@ Date from_js(const JSValue & val, Date *)
         throw ML::Exception("Couldn't convert from " + cstr(val) + " to Datacratic::Date");
     return Date::fromSecondsSinceEpoch(v8::Date::Cast(*val)->NumberValue()
                                        / 1000.0);
-}
-
-Utf8String from_js(const JSValue & val, Utf8String *)
-{
-	return Utf8String(*v8::String::Utf8Value(val)) ;
-}
-
-Utf32String from_js(const JSValue & val, Utf32String *)
-{
-    return Utf32String(*v8::String::Utf8Value(val));
 }
 
 Json::Value from_js_ref(const JSValue & val, Json::Value *)

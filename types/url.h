@@ -19,14 +19,11 @@ namespace Datacratic {
 struct Url {
     Url();
     explicit Url(const std::string & s);
-    explicit Url(const Utf8String & s);
-    explicit Url(const Utf32String & s);
     ~Url();
 
     void init(std::string s);
 
-    Utf8String toUtf8String() const;
-    std::string toString() const;  // should be Utf8 by default
+    std::string toString() const;
 
     const char * c_str() const;
 

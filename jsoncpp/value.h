@@ -13,7 +13,6 @@
 # include <boost/type_traits/is_unsigned.hpp>
 # include <boost/type_traits/is_convertible.hpp>
 # include <boost/utility/enable_if.hpp>
-# include "soa/types/string.h"
 
 # ifndef JSON_USE_CPPTL_SMALLMAP
 #  include <map>
@@ -236,7 +235,6 @@ namespace Json {
        */
       Value( const StaticString &value );
       Value( const std::string &value );
-      Value( const Datacratic::Utf8String &value );
 # ifdef JSON_USE_CPPTL
       Value( const CppTL::ConstString &value );
 # endif

@@ -16,7 +16,6 @@
 #include "soa/service/zmq.hpp"
 #include "soa/jsoncpp/value.h"
 #include "soa/types/date.h"
-#include "soa/types/string.h"
 #include "soa/service/port_range_service.h"
 #include "jml/arch/format.h"
 #include "jml/arch/exception.h"
@@ -143,16 +142,6 @@ recvAllNonBlocking(zmq::socket_t & sock)
 inline zmq::message_t encodeMessage(const std::string & message)
 {
     return message;
-}
-
-inline zmq::message_t encodeMessage(const Utf8String & message)
-{
-    return message.rawString();
-}
-
-inline zmq::message_t encodeMessage(const Utf32String & message)
-{
-    return message.utf8String();
 }
 
 inline zmq::message_t encodeMessage(const char * msg)
