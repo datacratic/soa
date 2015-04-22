@@ -186,8 +186,30 @@ parseJson(void * output, JsonParsingContext & context) const
             return;
         }
         
-        if (!context.isObject())
-            context.exception("expected structure of type " + structName);
+        if (!context.isObject()) {
+            std::string typeName;
+            if (context.isNumber())
+                typeName = "number";
+            else if (context.isBool())
+                typeName = "boolean";
+            else if (context.isString())
+                typeName = "string";
+            else if (context.isNull())
+                typeName = "null";
+            else if (context.isArray())
+                typeName = "array";
+            else typeName = "<<unknown type>>";
+                    
+            std::string msg
+                = "expected object of type "
+                + structName + ", but instead a "
+                + typeName + " was provided";
+
+            if (context.isString())
+                msg += ".  Did you accidentally JSON encode your object into a string?";
+
+            context.exception(msg);
+        }
 
         auto onMember = [&] ()
             {
