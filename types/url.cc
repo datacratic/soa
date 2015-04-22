@@ -54,6 +54,20 @@ Url(const Utf32String & s_)
 void
 Url::init(std::string s)
 {
+    // URLs like file://filename.txt which reference a file in the CWD come out
+    // as file://filename.txt/ because GURL requires everything to have a path.
+    // We fix it by inserting "./" into the path.  Still is an unhandled corner
+    // case for where the filename itself has a slash in it, but I'm not sure
+    // that can be addressed via a URL anyway since there's no way to escape
+    // separators.
+
+    if (s.find("file://") == 0
+        && s.find('/', 7) == string::npos) {
+        // file URI with no path, just a filename
+        // insert a ./ path
+        s.insert(7, "./");
+    }
+
     if (s == "") {
         url.reset(new GURL(s));
         return;

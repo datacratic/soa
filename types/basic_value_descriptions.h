@@ -144,7 +144,8 @@ struct DefaultDescription<Url>
     virtual void printJsonTyped(const Url * val,
                                 JsonPrintingContext & context) const
     {
-        context.writeStringUtf8(val->toUtf8String());
+        // Write it back exactly the same way it came in
+        context.writeStringUtf8(Utf8String(val->original));
     }
 
     virtual bool isDefaultTyped(const Url * val) const
