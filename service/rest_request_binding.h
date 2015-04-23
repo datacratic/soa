@@ -602,6 +602,15 @@ template<typename T>
 struct RestRequestBinder {
 };
 
+#define REST_BINDING_CATCH_ERRORS \
+    catch (const std::exception & exc) { \
+        return sendExceptionResponse(connection, exc); \
+    } catch (...) { \
+        connection.sendErrorResponse(400, "unknown exception"); \
+        return RestRequestRouter::MR_ERROR; \
+    }
+
+
 /** Create a function that validates that the request doesn't have any unknown
     parameters, based upon the JSON help structure.
 
@@ -658,13 +667,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                                    );
                         
                     connection.sendResponse(200);
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -708,13 +711,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                                    );
                         
                     connection.sendResponse(200);
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -761,13 +758,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                                               ::apply(gens, connection, request, context)...
                                               );
                     connection.sendResponse(200, fn(res));
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -813,13 +804,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                                               );
                     
                     connection.sendResponse(200, fn(res));
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -865,13 +850,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                                               ::apply(gens, connection, request, context)...
                                               );
                     connection.sendResponse(res.first, res.second);
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -915,13 +894,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                                               );
                     
                     connection.sendResponse(res.first, res.second);
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -966,13 +939,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                     ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                    ::apply(gens, connection, request, context)...
                                    );
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -1016,13 +983,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                     ((obj).*(pmf))(CreateRestParameterGenerator<PositionedDualTypes, Params...>
                                    ::apply(gens, connection, request, context)...
                                    );
-                } catch (const std::exception & exc) {
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
-                } catch (...) {
-                    connection.sendErrorResponse(400, "unknown exception");
-                    return RestRequestRouter::MR_ERROR;
-                }
+                } REST_BINDING_CATCH_ERRORS;
 
                 return RestRequestRouter::MR_YES;
             };
@@ -1071,8 +1032,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                     if (excFn)
                         return excFn(exc.what(), std::current_exception(), 
                                      connection, request, context);
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
+                    return sendExceptionResponse(connection, exc);
                 } catch (...) {
                     if (excFn)
                         return excFn("unknown exception", std::current_exception(),
@@ -1129,8 +1089,7 @@ struct RestRequestBinder<ML::TypeList<PositionedDualTypes...> > {
                     if (excFn)
                         return excFn(exc.what(), std::current_exception(), 
                                      connection, request, context);
-                    connection.sendErrorResponse(400, exc.what());
-                    return RestRequestRouter::MR_ERROR;
+                    return sendExceptionResponse(connection, exc);
                 } catch (...) {
                     if (excFn)
                         return excFn("unknown exception", std::current_exception(),

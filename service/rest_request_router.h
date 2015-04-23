@@ -16,6 +16,8 @@
 #include "jml/arch/demangle.h"
 #include "jml/arch/exception.h"
 #include "soa/types/value_description.h"
+#include "http_exception.h"
+
 //#include <regex>
 #include <boost/regex.hpp>
 
@@ -566,6 +568,16 @@ struct RestRequestRouter {
     bool terminal;
     Json::Value argHelp;
 };
+
+/** Send an HTTP response in response to an exception. */
+RestRequestRouter::MatchResult
+sendExceptionResponse(RestConnection & connection,
+                      const std::exception & exc);
+
+/** Turn an exception into a structure containing the information contained
+    within it.
+*/
+Json::Value extractException(const std::exception & exc);
 
 
 } // namespace Datacratic

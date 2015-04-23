@@ -65,7 +65,7 @@ getHelp(Json::Value & result) const
         break;
     }
     default:
-        throw ML::Exception("unknown path parameter");
+        throw HttpReturnException(400, "unknown path parameter");
     }
 }
     
@@ -87,7 +87,7 @@ numCapturedElements() const
     case STRING: return 1;
     case REGEX: return rex.mark_count() + 1;
     default:
-        throw ML::Exception("unknown mark count");
+        throw HttpReturnException(400, "unknown mark count");
     }
 }
 
@@ -357,9 +357,7 @@ processRequest(RestConnection & connection,
             if (mr == MR_YES || mr == MR_ASYNC || mr == MR_ERROR)
                 return mr;
         } catch (const std::exception & exc) {
-            connection.sendErrorResponse(500, ML::format("threw exception: %s",
-                                                         exc.what()));
-            return MR_YES;
+            return sendExceptionResponse(connection, exc);
         } catch (...) {
             connection.sendErrorResponse(500, "unknown exception");
             return MR_YES;
@@ -420,7 +418,7 @@ matchPath(const RestRequest & request,
     }
     case PathSpec::NONE:
     default:
-        throw ML::Exception("unknown rest request type");
+        throw HttpReturnException(400, "unknown rest request type");
     }
 
     return true;
@@ -515,7 +513,7 @@ addRoute(PathSpec path, RequestFilter filter,
          ExtractObject extractObject)
 {
     if (rootHandler)
-        throw ML::Exception("can't add a sub-route to a terminal route");
+        throw HttpReturnException(400, "can't add a sub-route to a terminal route");
 
     Route route;
     route.path = path;
@@ -590,12 +588,11 @@ addAutodocRoute(PathSpec autodocPath, PathSpec helpPath,
         string path = context.resources.back();
 
         if (path.find("..") != string::npos) {
-            throw ML::Exception("not dealing with path with .. in it");
+            throw HttpReturnException(400, "not dealing with path with .. in it");
         }
 
         if (path.find(autodocPathStr) != 0) {
-            throw ML::Exception("not serving file not under %",
-                                autodocPathStr.c_str());
+            throw HttpReturnException(400, "not serving file not under " + autodocPathStr);
         }
 
         string filename = path.substr(autodocPathStr.size());
@@ -888,7 +885,7 @@ getStaticRouteHandler(const string & dir) const {
         //cerr << "static content for " << path << endl;
 
         if (path.find("..") != string::npos) {
-            throw ML::Exception("not dealing with path with .. in it");
+            throw HttpReturnException(400, "not dealing with path with .. in it");
         }
 
         string filename = dir + "/" + path;
@@ -929,6 +926,40 @@ serveStaticDirectory(const std::string & route, const std::string & dir) {
              getStaticRouteHandler(dir),
              Json::Value());
 }
+
+RestRequestRouter::MatchResult
+sendExceptionResponse(RestConnection & connection,
+                      const std::exception & exc)
+{
+    Json::Value val = extractException(exc);
+
+    int code = 400;
+
+    if (val.isMember("httpCode")) {
+        code = val["httpCode"].asInt();
+    }
+
+    connection.sendResponse(code, val);
+    return RestRequestRouter::MR_ERROR;
+}
+
+Json::Value extractException(const std::exception & exc)
+{
+    const HttpReturnException * http
+        = dynamic_cast<const HttpReturnException *>(&exc);
+
+    Json::Value val;
+    val["error"] = exc.what();
+
+    if (http) {
+        val["httpCode"] = http->code;
+        if (!http->body.empty())
+            val["details"] = jsonEncode(http->body);
+    }
+    
+    return val;
+}
+
 
 
 } // namespace Datacratic
