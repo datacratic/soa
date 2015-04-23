@@ -34,6 +34,7 @@ struct Any {
           type_(&typeid(val)),
           desc_(desc)
     {
+        ExcAssertEqual(desc->type, type_);
     }
 
     /** Construct directly from Json, with a known type */
