@@ -9,6 +9,7 @@
 #define BOOST_TEST_DYN_LINK
 
 #include "soa/types/json_parsing.h"
+#include "soa/utf8cpp/source/utf8.h"
 #include "jml/utils/info.h"
 
 #include <boost/test/unit_test.hpp>
@@ -86,4 +87,49 @@ BOOST_AUTO_TEST_CASE( test1 )
     BOOST_CHECK_THROW(testHex4("002", 2), std::exception);
     BOOST_CHECK_THROW(testHex4("002G", 2), std::exception);
     BOOST_CHECK_THROW(testHex4("002.", 2), std::exception);
+}
+
+Parse_Context ctx(const std::string& str) {
+    return Parse_Context(str, str.c_str(), str.c_str() + str.size());
+}
+
+static void title(std::string str) {
+    std::cerr << str << std::endl;
+    std::cerr << std::string(str.size(), '-') << std::endl;
+}
+
+BOOST_AUTO_TEST_CASE ( test_unicode_parsing )
+{
+
+    title("Regular ascii");
+    {
+        std::string asciiJson = "{ \"foo\": \"bar\" }";
+
+        Parse_Context context = ctx(asciiJson);
+        expectJsonObject(context, [](const std::string& str, ML::Parse_Context& context) {
+            BOOST_CHECK_EQUAL(str, "foo");
+            BOOST_CHECK_EQUAL(expectJsonString(context), "bar");
+        });
+    }
+
+    title("Valid UTF-8, smiley face");
+    {
+        std::string unicodeJson = "{ \"data\": \"\xE2\x98\xBA happy\" }";
+        Parse_Context context = ctx(unicodeJson);
+        expectJsonObject(context, [](const std::string& str, ML::Parse_Context& context) {
+            BOOST_CHECK_EQUAL(str, "data");
+            BOOST_CHECK_EQUAL(expectJsonString(context), "\xE2\x98\xBA happy");
+        });
+    }
+
+    title("Invalid UTF-8, overlong sequence");
+    {
+        /* Overlong dot encoded in two bytes */
+        std::string unicodeJson = "{ \"data\": \"\xC0\xAE\" }";
+        Parse_Context context = ctx(unicodeJson);
+        expectJsonObject(context, [](const std::string& str, ML::Parse_Context& context) {
+            /* @FixMe: make it pass */
+            BOOST_CHECK_THROW(expectJsonString(context), utf8::invalid_utf8);
+        });
+    }
 }

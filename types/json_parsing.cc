@@ -20,6 +20,10 @@ namespace Datacratic {
 /* JSON UTILITIES                                                            */
 /*****************************************************************************/
 
+inline bool isStrictAscii(uint32_t codepoint) {
+    return codepoint < 0x80;
+}
+
 void skipJsonWhitespace(Parse_Context & context)
 {
     // Fast-path for the usual case for not EOF and no whitespace
@@ -105,95 +109,43 @@ bool matchJsonString(Parse_Context & context, std::string & str)
 
     while (!context.match_literal('"')) {
         if (context.eof()) return false;
-        int c = *context++;
-        //if (c < 0 || c >= 127)
-        //    context.exception("invalid JSON string character");
-        if (c != '\\') {
-            result.push_back(c);
+        int codepoint = *context;
+        if (!isStrictAscii(codepoint)) {
+            codepoint = utf8::unchecked::next(context);
+
+            utf8::append(codepoint, std::back_inserter(result));
             continue;
         }
-        c = *context++;
-        switch (c) {
-        case 't': result.push_back('\t');  break;
-        case 'n': result.push_back('\n');  break;
-        case 'r': result.push_back('\r');  break;
-        case 'f': result.push_back('\f');  break;
-        case 'b': result.push_back('\b');  break;
-        case '/': result.push_back('/');   break;
-        case '\\':result.push_back('\\');  break;
-        case '"': result.push_back('"');   break;
-        case 'u': {
-            int code = context.expect_hex4();
-            if (code<0 || code>255)
-            {
+        ++context;
+
+        if (codepoint == '\\') {
+            codepoint = *context++;
+            switch (codepoint) {
+            case 't': codepoint = '\t';  break;
+            case 'n': codepoint = '\n';  break;
+            case 'r': codepoint = '\r';  break;
+            case 'f': codepoint = '\f';  break;
+            case 'b': codepoint = '\b';  break;
+            case '/': codepoint = '/';   break;
+            case '\\':codepoint = '\\';  break;
+            case '"': codepoint = '"';   break;
+            case 'u': {
+                codepoint = context.expect_hex4();
+                break;
+            }
+            default:
                 return false;
             }
-            result.push_back(code);
-            break;
         }
-        default:
-            return false;
+        if (!isStrictAscii(codepoint)) {
+            utf8::append(codepoint, std::back_inserter(result));
         }
+        else result.push_back(codepoint);
     }
 
     token.ignore();
     str = result;
     return true;
-}
-
-std::string expectJsonStringAsciiPermissive(Parse_Context & context, char sub)
-{
-    skipJsonWhitespace(context);
-    context.expect_literal('"');
-
-    char internalBuffer[4096];
-
-    char * buffer = internalBuffer;
-    size_t bufferSize = 4096;
-    size_t pos = 0;
-
-    // Try multiple times to make it fit
-    while (!context.match_literal('"')) {
-        int c = *context++;
-        if (c == '\\') {
-            c = *context++;
-            switch (c) {
-            case 't': c = '\t';  break;
-            case 'n': c = '\n';  break;
-            case 'r': c = '\r';  break;
-            case 'f': c = '\f';  break;
-            case 'b': c = '\b';  break;
-            case '/': c = '/';   break;
-            case '\\':c = '\\';  break;
-            case '"': c = '"';   break;
-            case 'u': {
-                int code = context.expect_hex4();
-                c = code;
-                break;
-            }
-            default:
-                context.exception("invalid escaped char");
-            }
-        }
-        if (c < ' ' || c >= 127)
-            c = sub;
-        if (pos == bufferSize) {
-            size_t newBufferSize = bufferSize * 8;
-            char * newBuffer = new char[newBufferSize];
-            std::copy(buffer, buffer + bufferSize, newBuffer);
-            if (buffer != internalBuffer)
-                delete[] buffer;
-            buffer = newBuffer;
-            bufferSize = newBufferSize;
-        }
-        buffer[pos++] = c;
-    }
-
-    string result(buffer, buffer + pos);
-    if (buffer != internalBuffer)
-        delete[] buffer;
-    
-    return result;
 }
 
 ssize_t expectJsonString(Parse_Context & context, char * buffer, size_t maxLength)
@@ -206,34 +158,31 @@ ssize_t expectJsonString(Parse_Context & context, char * buffer, size_t maxLengt
 
     // Try multiple times to make it fit
     while (!context.match_literal('"')) {
-        int c = *context;
-        if (c < 0 || c > 127) {
-            // Unicode
-            /* @Todo Check that the codepoint is valid */
-            c = utf8::unchecked::next(context);
+        int codepoint = *context;
+        if (!isStrictAscii(codepoint)) {
+            codepoint = utf8::unchecked::next(context);
 
             char * p1 = buffer + pos;
             char * p2 = p1;
-            pos += utf8::append(c, p2) - p1;
+            pos += utf8::append(codepoint, p2) - p1;
 
             continue;
         }
 
         ++context;
-        if (c == '\\') {
-            c = *context++;
-            switch (c) {
-            case 't': c = '\t';  break;
-            case 'n': c = '\n';  break;
-            case 'r': c = '\r';  break;
-            case 'f': c = '\f';  break;
-            case 'b': c = '\b';  break;
-            case '/': c = '/';   break;
-            case '\\':c = '\\';  break;
-            case '"': c = '"';   break;
+        if (codepoint == '\\') {
+            codepoint = *context++;
+            switch (codepoint) {
+            case 't': codepoint = '\t';  break;
+            case 'n': codepoint = '\n';  break;
+            case 'r': codepoint = '\r';  break;
+            case 'f': codepoint = '\f';  break;
+            case 'b': codepoint = '\b';  break;
+            case '/': codepoint = '/';   break;
+            case '\\':codepoint = '\\';  break;
+            case '"': codepoint = '"';   break;
             case 'u': {
-                int code = context.expect_hex4();
-                c = code;
+                codepoint = context.expect_hex4();
                 break;
             }
             default:
@@ -244,12 +193,12 @@ ssize_t expectJsonString(Parse_Context & context, char * buffer, size_t maxLengt
             return -1;
         }
 
-        if (c < ' ' || c >= 127) {
+        if (!isStrictAscii(codepoint)) {
             char * p1 = buffer + pos;
             char * p2 = p1;
-            pos += utf8::append(c, p2) - p1;
+            pos += utf8::append(codepoint, p2) - p1;
         }
-        else buffer[pos++] = c;
+        else buffer[pos++] = codepoint;
     }
 
     buffer[pos] = 0; // null terminator
@@ -291,47 +240,44 @@ std::string expectJsonString(Parse_Context & context)
             bufferSize = newBufferSize;
         }
 
-        int c = *context;
+        int codepoint = *context;
 
-        if (c < 0 || c > 127) {
-            // Unicode
-            /* @Todo Check that the codepoint is valid */
-            c = utf8::unchecked::next(context);
+        if (!isStrictAscii(codepoint)) {
+            codepoint = utf8::unchecked::next(context);
 
             char * p1 = buffer + pos;
             char * p2 = p1;
-            pos += utf8::append(c, p2) - p1;
+            pos += utf8::append(codepoint, p2) - p1;
 
             continue;
         }
         ++context;
 
-        if (c == '\\') {
-            c = *context++;
-            switch (c) {
-            case 't': c = '\t';  break;
-            case 'n': c = '\n';  break;
-            case 'r': c = '\r';  break;
-            case 'f': c = '\f';  break;
-            case 'b': c = '\b';  break;
-            case '/': c = '/';   break;
-            case '\\':c = '\\';  break;
-            case '"': c = '"';   break;
+        if (codepoint == '\\') {
+            codepoint = *context++;
+            switch (codepoint) {
+            case 't': codepoint = '\t';  break;
+            case 'n': codepoint = '\n';  break;
+            case 'r': codepoint = '\r';  break;
+            case 'f': codepoint = '\f';  break;
+            case 'b': codepoint = '\b';  break;
+            case '/': codepoint = '/';   break;
+            case '\\':codepoint = '\\';  break;
+            case '"': codepoint = '"';   break;
             case 'u': {
-                int code = context.expect_hex4();
-                c = code;
+                codepoint = context.expect_hex4();
                 break;
             }
             default:
                 context.exception("invalid escaped char");
             }
         }
-        if (c < ' ' || c > 127) {
+        if (!isStrictAscii(codepoint)) {
             char * p1 = buffer + pos;
             char * p2 = p1;
-            pos += utf8::append(c, p2) - p1;
+            pos += utf8::append(codepoint, p2) - p1;
         }
-        else buffer[pos++] = c;
+        else buffer[pos++] = codepoint;
     }
     
     string result(buffer, buffer + pos);
