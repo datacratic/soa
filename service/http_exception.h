@@ -14,13 +14,13 @@
 namespace Datacratic {
 
 struct HttpReturnException: public ML::Exception {
-    HttpReturnException(int code, const Utf8String & message, Any body = Any())
-        : ML::Exception(message.rawData()), code(code), body(body)
+    HttpReturnException(int httpCode, const Utf8String & message, Any details = Any())
+        : ML::Exception(message.rawData()), message(message), httpCode(httpCode), details(details)
     {
     }
 
-    HttpReturnException(int code, const std::string & message, Any body = Any())
-        : ML::Exception(message), code(code), body(body)
+    HttpReturnException(int httpCode, const std::string & message, Any details = Any())
+        : ML::Exception(message), message(message), httpCode(httpCode),details(details)
     {
     }
 
@@ -28,15 +28,17 @@ struct HttpReturnException: public ML::Exception {
     {
     }
 
-    int code;
-    Any body;
+    Utf8String message;
+    int httpCode;
+    Any details;
 };
 
 
 /** Rethrow an exception, adding some extra context to it.  The exception is
     obtained from std::current_exception().
 */
-void rethrowHttpException(int code, const Utf8String & message, Any details = Any()) JML_NORETURN;
-void rethrowHttpException(int code, const std::string & message, Any details = Any()) JML_NORETURN;
+void rethrowHttpException(int httpCode, const Utf8String & message, Any details = Any()) JML_NORETURN;
+void rethrowHttpException(int httpCode, const std::string & message, Any details = Any()) JML_NORETURN;
+
 
 } // namespace Datacratic

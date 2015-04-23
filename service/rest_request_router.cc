@@ -952,9 +952,9 @@ Json::Value extractException(const std::exception & exc)
     val["error"] = exc.what();
 
     if (http) {
-        val["httpCode"] = http->code;
-        if (!http->body.empty())
-            val["details"] = jsonEncode(http->body);
+        val["httpCode"] = http->httpCode;
+        if (!http->details.empty())
+            val["details"] = jsonEncode(http->details);
     }
     
     return val;
