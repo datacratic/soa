@@ -20,6 +20,37 @@ namespace Datacratic {
 /* JSON UTILITIES                                                            */
 /*****************************************************************************/
 
+
+// Simple iterator wrapper around Parse_Context to enable the use of utf8cpp
+// functions which require an iterator range.
+struct ContextIterator : public std::iterator<std::input_iterator_tag, char>
+{
+    ContextIterator() : context(nullptr) {}
+    ContextIterator(Parse_Context& context) : context(&context) {}
+
+    char operator * () const { return **context; }
+
+    ContextIterator& operator++() { (*context)++; return *this; }
+    ContextIterator& operator++(int) { (*context)++; return *this; }
+
+    bool operator!=(const ContextIterator& other) const
+    {
+        return !this->operator==(other);
+    }
+
+    bool operator==(const ContextIterator& other) const
+    {
+        auto eof = [&] (Parse_Context* context) {
+            return !context || context->eof();
+        };
+
+        return eof(context) == eof(other.context);
+    }
+
+private:
+    Parse_Context* context;
+};
+
 inline bool isStrictAscii(uint32_t codepoint) {
     return codepoint < 0x80;
 }
@@ -111,9 +142,9 @@ bool matchJsonString(Parse_Context & context, std::string & str)
         if (context.eof()) return false;
         int codepoint = *context;
         if (!isStrictAscii(codepoint)) {
-            codepoint = utf8::unchecked::next(context);
-
-            utf8::append(codepoint, std::back_inserter(result));
+            ContextIterator it(context), end;
+            codepoint = utf8::next(it, end);
+            utf8::unchecked::append(codepoint, std::back_inserter(result));
             continue;
         }
         ++context;
@@ -160,11 +191,12 @@ ssize_t expectJsonString(Parse_Context & context, char * buffer, size_t maxLengt
     while (!context.match_literal('"')) {
         int codepoint = *context;
         if (!isStrictAscii(codepoint)) {
-            codepoint = utf8::unchecked::next(context);
+            ContextIterator it(context), end;
+            codepoint = utf8::next(it, end);
 
             char * p1 = buffer + pos;
             char * p2 = p1;
-            pos += utf8::append(codepoint, p2) - p1;
+            pos += utf8::unchecked::append(codepoint, p2) - p1;
 
             continue;
         }
@@ -220,15 +252,6 @@ std::string expectJsonString(Parse_Context & context)
     // Try multiple times to make it fit
     while (!context.match_literal('"')) {
 
-#if 0 // attempt to do it a block at a time
-        char * bufferEnd = cbuffer + bufferSize;
-
-        int charsMatched
-            = context.match_text(buffer + pos, buffer + bufferSize,
-                                 "\"\\");
-        pos += charsMatched;
-#endif
-
         // We need up to 4 characters to add a new UTF-8 code point
         if (pos >= bufferSize - 4) {
             size_t newBufferSize = bufferSize * 8;
@@ -243,11 +266,12 @@ std::string expectJsonString(Parse_Context & context)
         int codepoint = *context;
 
         if (!isStrictAscii(codepoint)) {
-            codepoint = utf8::unchecked::next(context);
+            ContextIterator it(context), end;
+            codepoint = utf8::next(it, end);
 
             char * p1 = buffer + pos;
             char * p2 = p1;
-            pos += utf8::append(codepoint, p2) - p1;
+            pos += utf8::unchecked::append(codepoint, p2) - p1;
 
             continue;
         }

@@ -127,9 +127,11 @@ BOOST_AUTO_TEST_CASE ( test_unicode_parsing )
         /* Overlong dot encoded in two bytes */
         std::string unicodeJson = "{ \"data\": \"\xC0\xAE\" }";
         Parse_Context context = ctx(unicodeJson);
-        expectJsonObject(context, [](const std::string& str, ML::Parse_Context& context) {
-            /* @FixMe: make it pass */
-            BOOST_CHECK_THROW(expectJsonString(context), utf8::invalid_utf8);
-        });
+
+        Set_Trace_Exceptions guard(false);
+        auto fn = [](const std::string& str, ML::Parse_Context& context) {
+            expectJsonString(context);
+        };
+        BOOST_CHECK_THROW(expectJsonObject(context, fn), std::exception);
     }
 }
