@@ -288,7 +288,7 @@ handleRequest(RestConnection & connection,
     //JML_TRACE_EXCEPTIONS(false);
 
     RestRequestParsingContext context(request);
-    MatchResult res = processRequest(connection, request, context);
+    RestRequestMatchResult res = processRequest(connection, request, context);
     if (res == MR_NO) {
         connection.sendErrorResponse(404, "unknown resource " + request.verb + " " + request.resource);
     }
@@ -312,8 +312,7 @@ ML::Env_Option<bool, true> TRACE_REST_REQUESTS("TRACE_REST_REQUESTS", false);
 
 } // file scope
 
-RestRequestRouter::
-MatchResult
+RestRequestMatchResult
 RestRequestRouter::
 processRequest(RestConnection & connection,
                const RestRequest & request,
@@ -352,7 +351,7 @@ processRequest(RestConnection & connection,
         if (debug)
             cerr << "  trying subroute " << sr.router->description << endl;
         try {
-            MatchResult mr = sr.process(request, context, connection);
+            RestRequestMatchResult mr = sr.process(request, context, connection);
             //cerr << "returned " << mr << endl;
             if (mr == MR_YES || mr == MR_ASYNC || mr == MR_ERROR)
                 return mr;
@@ -424,7 +423,7 @@ matchPath(const RestRequest & request,
     return true;
 }
 
-RestRequestRouter::MatchResult
+RestRequestMatchResult
 RestRequestRouter::Route::
 process(const RestRequest & request,
         RestRequestParsingContext & context,
@@ -927,7 +926,7 @@ serveStaticDirectory(const std::string & route, const std::string & dir) {
              Json::Value());
 }
 
-RestRequestRouter::MatchResult
+RestRequestMatchResult
 sendExceptionResponse(RestConnection & connection,
                       const std::exception & exc)
 {

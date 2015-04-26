@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "rest_request_fwd.h"
 #include "rest_request.h"
 #include "rest_connection.h"
 #include "soa/jsoncpp/json.h"
@@ -361,15 +362,14 @@ std::ostream & operator << (std::ostream & stream,
 struct RestRequestRouter {
 
     typedef RestConnection ConnectionId;
+    typedef RestRequestMatchResult MatchResult;
 
-    enum MatchResult {
-        MR_NO,     ///< Didn't match but can continue
-        MR_YES,    ///< Did match
-        MR_ERROR,  ///< Error
-        MR_ASYNC   ///< Handled, but asynchronously
-    };    
+    static constexpr RestRequestMatchResult MR_NO = Datacratic::MR_NO;
+    static constexpr RestRequestMatchResult MR_YES = Datacratic::MR_YES;
+    static constexpr RestRequestMatchResult MR_ERROR = Datacratic::MR_ERROR;
+    static constexpr RestRequestMatchResult MR_ASYNC = Datacratic::MR_ASYNC;
 
-    typedef std::function<MatchResult (RestConnection & connection,
+    typedef std::function<RestRequestMatchResult (RestConnection & connection,
                                        const RestRequest & request,
                                        RestRequestParsingContext & context)>
          OnProcessRequest;
@@ -394,7 +394,7 @@ struct RestRequestRouter {
     virtual void handleRequest(RestConnection & connection,
                                const RestRequest & request) const;
 
-    virtual MatchResult
+    virtual RestRequestMatchResult
     processRequest(RestConnection & connection,
                    const RestRequest & request,
                    RestRequestParsingContext & context) const;
@@ -462,7 +462,7 @@ struct RestRequestRouter {
         bool matchPath(const RestRequest & request,
                        RestRequestParsingContext & context) const;
 
-        MatchResult process(const RestRequest & request,
+        RestRequestMatchResult process(const RestRequest & request,
                             RestRequestParsingContext & context,
                             RestConnection & connection) const;
 
@@ -570,7 +570,7 @@ struct RestRequestRouter {
 };
 
 /** Send an HTTP response in response to an exception. */
-RestRequestRouter::MatchResult
+RestRequestMatchResult
 sendExceptionResponse(RestConnection & connection,
                       const std::exception & exc);
 
