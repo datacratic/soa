@@ -98,6 +98,16 @@ static void title(std::string str) {
     std::cerr << std::string(str.size(), '-') << std::endl;
 }
 
+static void checkThrow(std::string json) {
+    Parse_Context context = ctx(json);
+
+    Set_Trace_Exceptions guard(false);
+    auto fn = [](const std::string& str, ML::Parse_Context& context) {
+        expectJsonString(context);
+    };
+    BOOST_CHECK_THROW(expectJsonObject(context, fn), std::exception);
+}
+
 BOOST_AUTO_TEST_CASE ( test_unicode_parsing )
 {
 
@@ -123,13 +133,14 @@ BOOST_AUTO_TEST_CASE ( test_unicode_parsing )
     }
 
     title("Invalid UTF-8, overlong sequence");
-    {
-        /* Overlong dot encoded in two bytes */
-        std::string unicodeJson = "{ \"data\": \"\xC0\xAE\" }";
-        Parse_Context context = ctx(unicodeJson);
-        expectJsonObject(context, [](const std::string& str, ML::Parse_Context& context) {
-            /* @FixMe: make it pass */
-            BOOST_CHECK_THROW(expectJsonString(context), utf8::invalid_utf8);
-        });
-    }
+    /* Overlong dot encoded in two bytes */
+    checkThrow("{ \"data\": \"\xC0\xAE\" }");
+
+    title("Invalid UTF-8, one missing byte");
+    /* Monkey face, last byte missing */
+    checkThrow("{ \"data\": \"\xF0\x9F\x90\" }");
+
+    title("Invalid UTF-8, invalid byte");
+    /* Monkey face, invalid last byte */
+    checkThrow("{ \"data\": \"\xF0\x9F\x90\x34\" }");
 }
