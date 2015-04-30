@@ -65,6 +65,7 @@ BOOST_AUTO_TEST_CASE( test_uuid_id )
     BOOST_CHECK_EQUAL(idCaps.toString(), uuidCaps);
     checkSerializeReconstitute(idCaps);
     BOOST_CHECK_NE(idCaps, id);
+    BOOST_CHECK_EQUAL(idCaps.hash(), id.hash());
 
     // mixed case
     string uuidMixed = "0828398C-5965-11e0-84c8-0026b937c8e1";
