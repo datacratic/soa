@@ -78,6 +78,13 @@ Utf8String::Utf8String(const std::basic_string<char32_t> & str)
     *this = std::move(result);
 }
 
+Utf8String::Utf8String(const_iterator first, const const_iterator & last)
+    : data_(first.base(), last.base())
+{
+    // No need to check, since it comes from an Utf8String where it must
+    // have been checked already.
+}
+
 void
 Utf8String::
 doCheck() const
@@ -158,6 +165,13 @@ string Utf8String::extractAscii() const
 size_t Utf8String::length() const
 {
     return std::distance(begin(), end());
+}
+
+Utf8String::const_iterator
+Utf8String::
+find(int c) const
+{
+    return std::find(begin(), end(), c);
 }
 
 bool Utf8String::startsWith(const Utf8String & prefix) const

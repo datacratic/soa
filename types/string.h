@@ -27,6 +27,9 @@ struct JSValue;
 class Utf8String
 {
 public:
+    typedef utf8::iterator<std::string::const_iterator> const_iterator;
+    typedef utf8::iterator<std::string::iterator> iterator;
+
     static Utf8String fromLatin1(const std::string & lat1Str);
 
     /** Allow default construction of an empty string. */
@@ -61,6 +64,8 @@ public:
     Utf8String(const char *start, unsigned int len, bool check=true);
 
     Utf8String(const std::basic_string<char32_t> & str);
+
+    Utf8String(const_iterator first, const const_iterator & last);
 
     Utf8String & operator=(Utf8String && str) noexcept
     {
@@ -98,9 +103,6 @@ public:
         return data_.empty();
     }
 
-    typedef utf8::iterator<std::string::const_iterator> const_iterator;
-    typedef utf8::iterator<std::string::iterator> iterator;
-
     const_iterator begin() const;
     const_iterator end() const ;
 
@@ -137,6 +139,8 @@ public:
                  const Utf8String & with);
 
     size_t length() const;
+
+    const_iterator find(int c) const;
 
     void serialize(ML::DB::Store_Writer & store) const;
     void reconstitute(ML::DB::Store_Reader & store);
