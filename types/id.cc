@@ -397,6 +397,7 @@ toStringLength() const
     case NULLID:
         return 4;
     case UUID:
+    case UUID_CAPS:
         // AGID: --> 0828398c-5965-11e0-84c8-0026b937c8e1
         return 36;
     case GOOG128: {
