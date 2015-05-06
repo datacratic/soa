@@ -24,6 +24,54 @@ struct HttpReturnException: public ML::Exception {
     {
     }
 
+    template<typename T>
+    static void addToDetails(Json::Value & details, const std::string & key, T && val)
+    {
+        details[key] = jsonEncode(val);
+    }
+
+    template<typename T>
+    static void addToDetails(Json::Value & details, const Utf8String & key, T && val)
+    {
+        details[key.rawString()] = jsonEncode(val);
+    }
+
+    static void addListToDetails(Json::Value & details)
+    {
+    }
+
+    template<typename Str, typename Val, typename... OtherKeyValuePairs>
+    static void addListToDetails(Json::Value & details, const Str & str, Val && val,
+                          OtherKeyValuePairs&&... otherKeyValuePairs)
+    {
+        addToDetails(details, str, std::forward<Val>(val));
+        addListToDetails(details, std::forward<OtherKeyValuePairs>(otherKeyValuePairs)...);
+    }
+
+    template<typename Str, typename Val, typename... OtherKeyValuePairs>
+    HttpReturnException(int httpCode, const std::string & message,
+                        const Str & key, Val&& val,
+                        OtherKeyValuePairs&&... otherKeyValuePairs)
+        : ML::Exception(message), message(message), httpCode(httpCode)
+    {
+        Json::Value ourDetails;
+        addListToDetails(ourDetails, key, std::forward<Val>(val),
+                         std::forward<OtherKeyValuePairs>(otherKeyValuePairs)...);
+        this->details = std::move(ourDetails);
+    }
+
+    template<typename Str, typename Val, typename... OtherKeyValuePairs>
+    HttpReturnException(int httpCode, const Utf8String & message,
+                        const Str & key, Val&& val,
+                        OtherKeyValuePairs&&... otherKeyValuePairs)
+        : ML::Exception(message.rawData()), message(message), httpCode(httpCode)
+    {
+        Json::Value ourDetails;
+        addListToDetails(ourDetails, key, std::forward<Val>(val),
+                         std::forward<OtherKeyValuePairs>(otherKeyValuePairs)...);
+        this->details = std::move(ourDetails);
+    }
+
     ~HttpReturnException() throw ()
     {
     }
@@ -39,6 +87,34 @@ struct HttpReturnException: public ML::Exception {
 */
 void rethrowHttpException(int httpCode, const Utf8String & message, Any details = Any()) JML_NORETURN;
 void rethrowHttpException(int httpCode, const std::string & message, Any details = Any()) JML_NORETURN;
+
+template<typename Key, typename Val, typename... OtherKeyValuePairs>
+void rethrowHttpException(int httpCode, const Utf8String & message,
+                          Key && key, Val && val, OtherKeyValuePairs&&... details) JML_NORETURN;
+
+template<typename Key, typename Val, typename... OtherKeyValuePairs>
+void rethrowHttpException(int httpCode, const std::string & message,
+                          Key && key, Val && val, OtherKeyValuePairs&&... details) JML_NORETURN;
+
+template<typename Key, typename Val, typename... OtherKeyValuePairs>
+void rethrowHttpException(int httpCode, const Utf8String & message,
+                          Key && key, Val && val, OtherKeyValuePairs&&... otherDetails)
+{
+    Json::Value details;
+    HttpReturnException::addListToDetails(details, std::forward<Key>(key), std::forward<Val>(val),
+                                          std::forward<OtherKeyValuePairs>(otherDetails)...);
+    rethrowHttpException(httpCode, message, details);
+}
+
+template<typename Key, typename Val, typename... OtherKeyValuePairs>
+void rethrowHttpException(int httpCode, const std::string & message,
+                          Key && key, Val && val, OtherKeyValuePairs&&... otherDetails)
+{
+    Json::Value details;
+    HttpReturnException::addListToDetails(details, std::forward<Key>(key), std::forward<Val>(val),
+                                          std::forward<OtherKeyValuePairs>(otherDetails)...);
+    rethrowHttpException(httpCode, message, details);
+}
 
 
 } // namespace Datacratic

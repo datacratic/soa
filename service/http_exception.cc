@@ -14,8 +14,8 @@ namespace Datacratic {
 
 void rethrowHttpException(int httpCode, const Utf8String & message, Any details)
 {
+    JML_TRACE_EXCEPTIONS(false);
     try {
-        JML_TRACE_EXCEPTIONS(false);
         std::rethrow_exception(std::current_exception());
     } catch (const HttpReturnException & http) {
         Json::Value details2 = jsonEncode(details);
