@@ -563,9 +563,9 @@ Value::operator=( const Value &other )
 Value &
 Value::operator=( Value &&other )
 {
-   Value temp( other );
-   swap( temp );
-   return *this;
+    Value temp( std::move(other) );
+    swap( temp );
+    return *this;
 }
 
 void
