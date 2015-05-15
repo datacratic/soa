@@ -61,15 +61,30 @@ struct RestCodec {
 
 template<typename T>
 struct JsonStrCodec {
-    static T decode(const std::string & str)
+    JsonStrCodec(std::shared_ptr<const ValueDescriptionT<T> > desc
+                 = getDefaultDescriptionShared<T>())
+        : desc(std::move(desc))
     {
-        return jsonDecodeStr<T>(str);
     }
 
-    static std::string encode(const T & t)
+    T decode(const std::string & str) const
     {
-        return jsonEncodeStr(t);
+        T result;
+
+        StreamingJsonParsingContext context(str, str.c_str(), str.length());
+        desc->parseJson(&result, context);
+        return result;
     }
+
+    std::string encode(const T & obj) const
+    {
+        std::ostringstream stream;
+        StreamJsonPrintingContext context(stream);
+        desc->printJson(&obj, context);
+        return std::move(stream.str());
+    }
+
+    std::shared_ptr<const ValueDescriptionT<T> > desc;
 };
 
 
@@ -86,15 +101,17 @@ struct RestParam {
     {
     }
 
-    RestParam(const std::string & name, const std::string & description)
-        : name(name), description(description)
+    RestParam(const std::string & name, const std::string & description,
+              Codec codec = Codec())
+        : name(name), description(description),
+          codec(std::move(codec))
     {
         //std::cerr << "created RestParam with " << name << " at "
         //          << this << std::endl;
     }
     
     RestParam(const RestParam & other)
-        : name(other.name), description(other.description)
+        : name(other.name), description(other.description), codec(other.codec)
     {
         //std::cerr << "copied RestParam with " << name << " to "
         //          << this << std::endl;
@@ -102,6 +119,7 @@ struct RestParam {
 
     std::string name;
     std::string description;
+    Codec codec;
 
 private:
     void operator = (const RestParam & other);
@@ -120,9 +138,11 @@ struct RestParamDefault {
     RestParamDefault(const std::string & name,
                      const std::string & description,
                      T defaultValue,
-                     const std::string & defaultValueStr)
+                     const std::string & defaultValueStr,
+                     Codec codec = Codec())
         : name(name), description(description), defaultValue(defaultValue),
-          defaultValueStr(defaultValueStr)
+          defaultValueStr(defaultValueStr),
+          codec(std::move(codec))
     {
         //std::cerr << "created RestParam with " << name << " at "
         //          << this << std::endl;
@@ -130,9 +150,11 @@ struct RestParamDefault {
 
     RestParamDefault(const std::string & name,
                      const std::string & description,
-                     T defaultValue = T())
+                     T defaultValue = T(),
+                     Codec codec = Codec())
         : name(name), description(description), defaultValue(defaultValue),
-          defaultValueStr(Codec::encode(defaultValue))
+          defaultValueStr(codec.encode(defaultValue)),
+          codec(std::move(codec))
     {
         //std::cerr << "created RestParam with " << name << " at "
         //          << this << std::endl;
@@ -141,7 +163,8 @@ struct RestParamDefault {
     RestParamDefault(const RestParamDefault & other)
         : name(other.name), description(other.description),
           defaultValue(other.defaultValue),
-          defaultValueStr(other.defaultValueStr)
+          defaultValueStr(other.defaultValueStr),
+          codec(other.codec)
     {
         //std::cerr << "copied RestParam with " << name << " to "
         //          << this << std::endl;
@@ -151,6 +174,7 @@ struct RestParamDefault {
     std::string description;
     T defaultValue;
     std::string defaultValueStr;
+    Codec codec;
 
 private:
     void operator = (const RestParamDefault & other);
@@ -166,8 +190,9 @@ struct RestParamJson : public RestParam<T, Codec> {
     {
     }
 
-    RestParamJson(const std::string & name, const std::string & description)
-        : RestParam<T, Codec>(name, description)
+    RestParamJson(const std::string & name, const std::string & description,
+                  Codec codec = Codec())
+        : RestParam<T, Codec>(name, description, std::move(codec))
     {
     }
     
@@ -189,9 +214,10 @@ struct RestParamJsonDefault : public RestParamDefault<T, Codec> {
     RestParamJsonDefault(const std::string & name,
                          const std::string & description,
                          T defaultValue = T(),
-                         const std::string & defaultValueStr = "")
+                         const std::string & defaultValueStr = "",
+                         Codec codec = Codec())
         : RestParamDefault<T, Codec>(name, description, defaultValue,
-                                     defaultValueStr)
+                                     defaultValueStr, std::move(codec))
     {
     }
     

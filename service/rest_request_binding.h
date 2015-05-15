@@ -309,7 +309,7 @@ createParameterExtractor(Json::Value & argHelp,
     details.
 */
 template<typename T, typename Codec>
-static std::function<decltype(Codec::decode(std::declval<std::string>()))
+static std::function<decltype(((Codec *)0)->decode(std::declval<std::string>()))
                      (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
@@ -333,7 +333,7 @@ createParameterExtractor(Json::Value & argHelp,
         {
             //std::cerr << "getting value of " << p.name << std::endl;
             std::string paramValue = request.params.getValue(p.name);
-            return Codec::decode(paramValue);
+            return p.codec.decode(paramValue);
         };
 }
 
@@ -364,7 +364,7 @@ createParameterExtractor(Json::Value & argHelp,
             std::string paramValue;
             T result;
             if (request.params.hasValue(p.name)) 
-                result = Codec::decode(request.params.getValue(p.name));
+                result = p.codec.decode(request.params.getValue(p.name));
             else result = p.defaultValue;
             return result;
         };
@@ -405,7 +405,7 @@ createParameterExtractor(Json::Value & argHelp,
     details.
 */
 template<typename T, typename Codec>
-static std::function<decltype(Codec::decode(std::declval<std::string>()))
+static std::function<decltype(((Codec *)0)->decode(std::declval<std::string>()))
                      (RestConnection & connection,
                       const RestRequest & request,
                       const RestRequestParsingContext & context)>
