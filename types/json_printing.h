@@ -172,15 +172,17 @@ struct StreamJsonPrintingContext
 
     virtual void writeFloat(float f)
     {
-        if (std::isfinite(f))
-            stream << f;
+        if (std::isfinite(f)) {
+            writeFiniteDouble(f);
+        }
         else stream << "\"" << f << "\"";
     }
 
     virtual void writeDouble(double d)
     {
-        if (std::isfinite(d))
-            stream << d;
+        if (std::isfinite(d)) {
+            writeFiniteDouble(d);
+        }
         else stream << "\"" << d << "\"";
     }
 
@@ -203,6 +205,14 @@ struct StreamJsonPrintingContext
         stream << (b ? "true": "false");
     }
 
+private:
+    void writeFiniteDouble(double d)
+    {
+        char buffer[DBL_MAX_10_EXP+1];
+        int res = snprintf(buffer, sizeof(buffer), "%f", d);
+        ExcAssert(res < sizeof(buffer));
+        stream.write(buffer, res);
+    }
 };
 
 
