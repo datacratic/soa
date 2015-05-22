@@ -46,7 +46,7 @@ EndpointBase(const std::string & name)
       numTransports(0), shutdown_(false), disallowTimers_(false),
       pollingMode_(MIN_CONTEXT_SWITCH_POLLING)
 {
-    Epoller::init(16384);
+    Epoller::init(16384, 1000);
     auto wakeupData = make_shared<EpollData>(EpollData::EpollDataType::WAKEUP,
                                              wakeup.fd());
     epollDataSet.insert(wakeupData);
@@ -117,7 +117,7 @@ spinup(int num_threads, bool synchronous)
 
     threadsActive_ = 0;
 
-    totalSleepTime.resize(num_threads, 1.0);
+    resourceUsage.resize(num_threads);
 
     for (unsigned i = 0;  i < num_threads;  ++i) {
         boost::thread * thread
@@ -509,232 +509,18 @@ runEventThread(int threadNum, int numThreads)
 
     ML::atomic_inc(threadsActive_);
     futex_wake(threadsActive_);
-    //cerr << "threadsActive_ " << threadsActive_ << endl;
 
     while (!shutdown_) {
-        switch (pollingMode_) {
-        case MIN_CONTEXT_SWITCH_POLLING:
-            doMinCtxSwitchPolling(threadNum, numThreads);
-            break;
-        case MIN_LATENCY_POLLING:
-            doMinLatencyPolling(threadNum, numThreads);
-            break;
-        case MIN_CPU_POLLING:
-            doMinCpuPolling(threadNum, numThreads);
-            break;
-        default:
-            throw ML::Exception("unhandled polling mode");
-        }
-    }
-
-    // cerr << "thread shutting down" << endl;
-
-    ML::atomic_dec(threadsActive_);
-    futex_wake(threadsActive_);
-}
-
-void
-EndpointBase::
-doMinCtxSwitchPolling(int threadNum, int numThreads)
-{
-    bool debug = false;
-    //debug = name() == "Backchannel";
-    //debug = threadNum == 7;
-
-    ML::Duty_Cycle_Timer duty;
-
-    Epoller::OnEvent beforeSleep = [&] ()
-        {
-            duty.notifyBeforeSleep();
-        };
-
-    Epoller::OnEvent afterSleep = [&] ()
-        {
-            duty.notifyAfterSleep();
-        };
-
-    // Where does my timeslice start?
-    double timesliceUs = 1000.0 / numThreads;
-    int myStartUs = timesliceUs * threadNum;
-    int myEndUs   = timesliceUs * (threadNum + 1);
-
-    if (debug) {
-        static ML::Spinlock lock;
-        lock.acquire();
-        cerr << "threadNum = " << threadNum << " of " << name()
-             << " numThreads = " << numThreads
-             << " myStartUs = " << myStartUs
-             << " myEndUs = " << myEndUs
-             << endl;
-        lock.release();
-    }
-
-    Date lastCheck = Date::now();
-    // bool forceInSlice = false;
-
-    while (!shutdown_) {
-        Date now = Date::now();
-        
-        if (now.secondsSince(lastCheck) > 1.0 && debug) {
-            ML::Duty_Cycle_Timer::Stats stats = duty.stats();
-            string msg = format("control thread for %s: "
-                                "events %lld sleeping %lld "
-                                "processing %lld duty %.2f%%",
-                                name().c_str(),
-                                (long long)stats.numWakeups,
-                                (long long)stats.usAsleep,
-                                (long long)stats.usAwake,
-                                stats.duty_cycle() * 100.0);
-            cerr << msg << flush;
-            duty.clear();
-            lastCheck = now;
-        }
-
-        int us = now.fractionalSeconds() * 1000000;
-        int fracms = us % 1000;  // fractional part of the millisecond
-        
-        if (debug && false) {
-            cerr << "now = " << now.print(6) << " us = " << us
-                 << " fracms = " << fracms << " myStartUs = "
-                 << myStartUs << " myEndUs = " << myEndUs
-                 << endl;
-        }
-
-        // Are we in our timeslice?
-        if (/* forceInSlice
-               || */(fracms >= myStartUs && fracms < myEndUs)) {
-            // Yes... then sleep in epoll_wait...
-            int usToWait = myEndUs - fracms;
-            if (usToWait < 0 || usToWait > timesliceUs)
-                usToWait = timesliceUs;
-
-            totalSleepTime[threadNum] += double(usToWait) / 1000000.0;
-            int numHandled = handleEvents(usToWait, 4, handleEvent,
-                                          beforeSleep, afterSleep);
-            if (debug && false)
-                cerr << "  in slice: handled " << numHandled << " events "
-                     << "for " << usToWait << " microseconds "
-                     << " taken " << Date::now().secondsSince(now) * 1000000
-                     << "us" << endl;
-            if (numHandled == -1) break;
-            // forceInSlice = false;
-        }
-        else {
-            // No... try to handle something and then sleep if we don't
-            // find anything to do
-            int numHandled = handleEvents(0, 1, handleEvent,
-                                          beforeSleep, afterSleep);
-            if (debug && false)
-                cerr << "  out of slice: handled " << numHandled << " events"
-                     << endl;
-            if (numHandled == -1) break;
-            if (numHandled == 0) {
-                // Sleep until our timeslice
-                duty.notifyBeforeSleep();
-                int usToSleep = myStartUs - fracms;
-                if (usToSleep < 0)
-                    usToSleep += 1000;
-                ExcAssertGreaterEqual(usToSleep, 0);
-                if (debug && false)
-                    cerr << "sleeping for " << usToSleep << " micros" << endl;
-
-                double secToSleep = double(usToSleep) / 1000000.0;
-                totalSleepTime[threadNum] += secToSleep;
-
-                ML::sleep(secToSleep);
-                duty.notifyAfterSleep();
-                // forceInSlice = true;
-
-                if (debug && false)
-                    cerr << " slept for "
-                         << Date::now().secondsSince(now) * 1000000
-                         << "us when " << usToSleep << " requested"
-                         << endl;
-            }
-        }
-    }
-}
-
-void
-EndpointBase::
-doMinLatencyPolling(int threadNum, int numThreads)
-{
-    bool wasBusy = false;
-    Date sleepStart = Date::now();
-
-    while (!shutdown_) {
-        // Busy loop polling which reduces the latency jitter caused by
-        // the fancy polling scheme below. Should eventually be replaced
-        // something a little less CPU intensive.
-        Date beforePoll = Date::now();
-        bool isBusy = handleEvents(0, 4, handleEvent) > 0;
-
-        // This ensures that our load sampling mechanism is still somewhat
-        // meaningfull even though we never sleep.
-        if (wasBusy != isBusy) {
-
-            if (wasBusy && !isBusy) sleepStart = beforePoll;
-
-            // We don't want to include the time we spent doing stuff.
-            else totalSleepTime[threadNum] += beforePoll - sleepStart;
-
-            wasBusy = isBusy;
-        }
-    }
-}
-
-void
-EndpointBase::
-doMinCpuPolling(int threadNum, int numThreads)
-{
-    bool debug = false;
-
-    ML::Duty_Cycle_Timer duty;
-
-    auto beforeSleep = [&] () {
-        duty.notifyBeforeSleep();
-    };
-
-    auto afterSleep = [&] () {
-        duty.notifyAfterSleep();
-    };
-
-    if (debug) {
-        cerr << ("threadNum = " + to_string(threadNum)
-                 + " of " + name()
-                 + " numThreads = " + to_string(numThreads)
-                 + "\n");
-    }
-
-    Date lastCheck = Date::now();
-
-    while (!shutdown_) {
-        handleEvents(0, -1, handleEvent, beforeSleep, afterSleep);
-
-        Date now = Date::now();
-        if (now.secondsSince(lastCheck) > 1.0 && debug) {
-            ML::Duty_Cycle_Timer::Stats stats = duty.stats();
-            string msg = format("control thread for %s: "
-                                "events %lld sleeping %lld "
-                                "processing %lld duty %.2f%%",
-                                name().c_str(),
-                                (long long)stats.numWakeups,
-                                (long long)stats.usAsleep,
-                                (long long)stats.usAwake,
-                                stats.duty_cycle() * 100.0);
-            cerr << msg << flush;
-            duty.clear();
-            lastCheck = now;
-        }
+        getrusage(RUSAGE_THREAD, &resourceUsage[threadNum]);
+        handleEvents(0, 4, handleEvent);
     }
 }
 
 int
 EndpointBase::
 modePollTimeout(enum PollingMode mode)
-    const
+const
 {
     return (mode == MIN_CPU_POLLING) ? 1000 : 0;
 }
-
 } // namespace Datacratic

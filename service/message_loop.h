@@ -9,6 +9,7 @@
 
 #include <thread>
 #include <functional>
+#include <sys/resource.h>
 
 #include "jml/arch/wakeup_fd.h"
 #include "jml/arch/spinlock.h"
@@ -40,11 +41,11 @@ struct MessageLoop : public Epoller {
     typedef std::function<void ()> OnStop;
 
     MessageLoop(int numThreads = 1, double maxAddedLatency = 0.0005,
-                int epollTimeout = 0);
+                int epollTimeout = 500);
     ~MessageLoop();
 
     void init(int numThreads = 1, double maxAddedLatency = 0.0005,
-              int epollTimeout = 0);
+              int epollTimeout = 500);
 
     void start(const OnStop & onStop = OnStop());
 
@@ -102,8 +103,6 @@ struct MessageLoop : public Epoller {
 
     virtual bool processOne();
 
-    virtual bool poll() const;
-
     /** Remove the given source from the list of active sources.
 
         Note that this function call will not take effect immediately. All work
@@ -123,13 +122,10 @@ struct MessageLoop : public Epoller {
     */
     bool removeSourceSync(AsyncEventSource * source);
 
-    /** Re-check if anything needs to poll. */
-    void checkNeedsPoll();
-
     /** Total number of seconds that this message loop has spent sleeping.
         Can be polled regularly to determine the duty cycle of the loop.
      */
-    double totalSleepSeconds() const { return totalSleepTime_; }
+    rusage getResourceUsage() const { return resourceUsage; }
 
     void debug(bool debugOn);
     
@@ -188,7 +184,7 @@ private:
     bool debug_;
 
     /** Number of secs that the message loop has spent sleeping. */
-    double totalSleepTime_;
+    rusage resourceUsage;
 
     /** Number of seconds of latency we're allowed to add in order to reduce
         the number of context switches.
