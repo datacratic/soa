@@ -1410,9 +1410,9 @@ expectTime()
 
     if (match_literal('.')) {
         size_t start = get_offset();
-        int millis = expect_int();
+        unsigned long long frac = expect_unsigned_long_long();
         size_t end = get_offset();
-        double seconds = double(millis) / pow(10, end-start);
+        double seconds = double(frac) / pow(10, end-start);
         date.addSeconds(seconds);
     }
 
