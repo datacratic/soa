@@ -94,6 +94,11 @@ inline std::string dtoa(double floatVal)
         
     if (sign)
         toReturn.insert(0, "-");
+
+    if (toReturn.back() == '.') {
+        toReturn.erase(toReturn.size()-1, 1);
+    }
+
     return toReturn;
 }
 
