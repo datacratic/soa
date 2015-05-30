@@ -358,13 +358,14 @@ parse(const char * value, size_t len, Type type)
     // Fall back to string
     r.type = STR;
     r.len = len;
-    char * s = new char[r.len];
-    r.str = s;
+    char * s = new char[r.len + 4];
+    StringRep * sr = new (s) StringRep(1);  // one reference
+    r.str = sr;
     r.ownstr = true;
 #if 0
     memcpy(s, value, len);
 #else
-    std::copy(value, value + len, s);
+    std::copy(value, value + len, sr->data);
 #endif
     finish();
     return;
@@ -515,7 +516,7 @@ toString() const
     case COMPOUND2:
         return compoundId1().toString() + ":" + compoundId2().toString();
     case STR:
-        return std::string(str, str + len);
+        return std::string(str->data, str->data + len);
     default:
         throw ML::Exception("unknown ID type");
     }
@@ -533,7 +534,7 @@ Id::
 complexEqual(const Id & other) const
 {
     if (type == STR)
-        return len == other.len && (str == other.str || std::equal(str, str + len, other.str));
+        return len == other.len && (str == other.str || std::equal(str->data, str->data + len, other.str->data));
     else if (type == COMPOUND2) {
         return compoundId1() == other.compoundId1()
             && compoundId2() == other.compoundId2();
@@ -546,8 +547,8 @@ Id::
 complexLess(const Id & other) const
 {
     if (type == STR)
-        return std::lexicographical_compare(str, str + len,
-                                            other.str, other.str + other.len);
+        return std::lexicographical_compare(str->data, str->data + len,
+                                            other.str->data, other.str->data + other.len);
     else if (type == COMPOUND2) {
         return ML::less_all(compoundId1(), other.compoundId1(),
                             compoundId2(), other.compoundId2());
@@ -564,7 +565,7 @@ complexHash() const
     return CityHash64(converted.c_str(), converted.size());
 #else
     if (type == STR)
-        return CityHash64(str, len);
+        return CityHash64(str->data, len);
     else if (type == COMPOUND2) {
         return Hash128to64(make_pair(compoundId1().hash(),
                                      compoundId2().hash()));
@@ -581,7 +582,13 @@ complexDestroy()
 {
     if (type < STR) return;
     if (type == STR) {
-        if (ownstr) delete[] str;
+        if (ownstr) {
+            int before = str->ref.fetch_add(-1, std::memory_order_relaxed);
+
+            if (before == 1) {
+                delete[] (char *)str;
+            }
+        }
         str = 0;
         ownstr = false;
     }
@@ -601,10 +608,7 @@ complexFinishCopy()
 {
     if (type == STR) {
         if (!ownstr) return;
-        const char * oldStr = str;
-        char * s = new char[len];
-        str = s;
-        std::copy(oldStr, oldStr + len, s);
+        str->ref.fetch_add(1, std::memory_order_relaxed);
     }
     else if (type == COMPOUND2) {
         //cerr << "cmp1 = " << cmp1 << " cmp2 = " << cmp2 << " type = "
@@ -642,7 +646,7 @@ serialize(ML::DB::Store_Writer & store) const
         store.save_binary(&val2, 8);
         break;
     case STR:
-        store << string(str, str + len);
+        store << string(str->data, str->data + len);
         break;
     case COMPOUND2:
         compoundId1().serialize(store);
@@ -713,9 +717,10 @@ reconstitute(ML::DB::Store_Reader & store)
         store >> s;
         r.len = s.size();
         r.ownstr = true;
-        char * s2 = new char[s.size()];
-        r.str = s2;
-        std::copy(s.begin(), s.end(), s2);
+        char * s2 = new char[s.size() + 4];
+        StringRep * sr = new (s2) StringRep(1);
+        r.str = sr;
+        std::copy(s.begin(), s.end(), sr->data);
         break;
     }
     case COMPOUND2: {

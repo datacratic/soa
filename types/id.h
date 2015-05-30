@@ -14,6 +14,8 @@
 #include "jml/db/persistent_fwd.h"
 #include "jml/utils/less.h"
 #include "jml/arch/exception.h"
+#include <atomic>
+
 
 namespace Json {
 struct Value;
@@ -116,7 +118,7 @@ struct Id {
     {
     }
 
-    Id(Id && other)
+    Id(Id && other) noexcept
         : type(other.type),
           val1(other.val1), val2(other.val2)
     {
@@ -131,7 +133,7 @@ struct Id {
             complexFinishCopy();
     }
 
-    Id & operator = (Id && other)
+    Id & operator = (Id && other) noexcept
     {
         if (type >= STR)
             complexDestroy();
@@ -243,6 +245,16 @@ struct Id {
     uint8_t type;
     uint8_t unused[3];
 
+    struct StringRep {
+        StringRep(int n)
+            : ref(n)
+        {
+        }
+
+        std::atomic<int> ref;
+        char data[0];
+    };
+
     union {
         // 128 byte integer
         struct {
@@ -270,7 +282,8 @@ struct Id {
         struct {
             uint64_t len:56;
             uint64_t ownstr:8;
-            const char * str;
+            //const char * str;
+            StringRep * str;
         };
 
         // compound2
