@@ -19,6 +19,38 @@ namespace Datacratic {
 /* ANY                                                                       */
 /*****************************************************************************/
 
+Any
+Any::
+getField(const std::string & fieldName) const
+{
+    if (empty())
+        return Any();
+    if (is<Json::Value>()) {
+        // Extract JSON directly
+        const Json::Value & val = as<Json::Value>();
+        Any result;
+        if (val.isObject()) {
+            result.type_ = type_;
+            result.obj_ = shared_ptr<void>(obj_, (void *)(&val.atStr(fieldName)));
+            result.desc_ = desc_;
+        }
+        return result;
+    }
+    else {
+        // Use value description to get field
+        ExcAssert(desc_);
+        const ValueDescription::FieldDescription * field
+            = desc_->hasField(obj_.get(), fieldName);
+        Any result;
+        if (field) {
+            result.type_ = field->description->type;
+            result.obj_ = shared_ptr<void>(obj_, (void *)(field->getFieldPtr(obj_.get())));
+            result.desc_ = field->description.get();
+        }
+        return result;
+    }
+}
+
 static TypedAnyDescription payloadDesc;
 
 Any

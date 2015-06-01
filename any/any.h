@@ -250,6 +250,11 @@ struct Any {
         type_ = &typeid(Json::Value);
     }
 
+    /** Return the value of the given field (for a structure).  Throws if the field
+        does not exist.
+    */
+    Any getField(const std::string & fieldName) const;
+
 private:
     friend class TypedAnyDescription;
     friend class BareAnyDescription;
