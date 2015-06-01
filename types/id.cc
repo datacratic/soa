@@ -766,4 +766,47 @@ fromJson(const Json::Value & val)
     else return Id(val.asString());
 }
 
+bool
+Id::
+stringEqual(const std::string & other) const
+{
+    if (type == STR) {
+        if (len != other.length())
+            return false;
+        return std::equal(str->data, str->data + len, other.c_str());
+    }
+
+    return toString() == other;
+}
+
+bool
+Id::
+stringLess(const std::string & other) const
+{
+    if (type == STR) {
+        return std::lexicographical_compare(str->data, str->data + len,
+                                            other.c_str(), other.c_str() + other.length());
+    }
+
+    return toString() < other;
+}
+
+bool
+Id::
+stringGreaterEqual(const std::string & other) const
+{
+    return toString() >= other;
+
+#if 0
+    if (type == STR) {
+        // TODO: one pass
+        if (
+        return std::lexicographical_compare(str->data, str->data + len,
+                                            other.c_str(), other.c_str() + other.length);
+    }
+
+    return toString() < other;
+#endif
+}
+
 } // namespace Datacratic

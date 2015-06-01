@@ -172,6 +172,18 @@ struct Id {
 
     Utf8String toUtf8String() const;
 
+    /// Optimized comparison of result of toString() with other string
+    /// Equivalent to toString() == other
+    bool stringEqual(const std::string & other) const;
+
+    /// Optimized comparison of result of toString() with other string
+    /// Equivalent to toString() < other
+    bool stringLess(const std::string & other) const;
+
+    /// Optimized comparison of result of toString() with other string
+    /// Equivalent to toString() >= other
+    bool stringGreaterEqual(const std::string & other) const;
+
     /** Return the length of the string returned by toString() */
     size_t toStringLength() const;
 
