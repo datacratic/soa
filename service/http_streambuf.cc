@@ -8,6 +8,7 @@
 #include <boost/iostreams/stream_buffer.hpp>
 #include "http_rest_proxy.h"
 #include "jml/utils/ring_buffer.h"
+#include "soa/service/fs_utils.h"
 #include <chrono>
 
 
@@ -211,6 +212,136 @@ makeHttpStreamingDownload(const std::string & uri)
     return result;
 }
 
+struct HttpUrlFsHandler: UrlFsHandler {
+    HttpRestProxy proxy;
+
+    virtual FsObjectInfo getInfo(const Url & url) const
+    {
+        auto info = tryGetInfo(url);
+        if (!info)
+            throw ML::Exception("Couldn't get URI info for " + url.toString());
+        return info;
+    }
+
+    virtual FsObjectInfo tryGetInfo(const Url & url) const
+    {
+        HttpHeader header;
+        FsObjectInfo result;
+        HttpRestProxy::Response resp;
+        bool didGetHeader = false;
+
+        for (unsigned attempt = 0;  attempt < 5;  ++attempt) {
+
+            if (attempt != 0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100 * attempt + random() % 100));
+            didGetHeader = false;
+
+            auto onHeader = [&] (const HttpHeader & gotHeader)
+                {
+                    header = gotHeader;
+                    didGetHeader = true;
+
+                    // Return false to make CURL stop after the header
+                    //return false;
+                    return true;
+                };
+        
+            resp = proxy.perform("HEAD", url.toString(), HttpRestProxy::Content(),
+                                 {}, {}, 1.0, false, nullptr, onHeader,
+                                 true /* follow redirects */);
+            
+            if (!didGetHeader && resp.errorCode_ != 0) {
+                cerr << "error retrieving HEAD (retry) " << url.toString() << ": "
+                     << resp.errorMessage_ << endl;
+                continue;  // didn't get header; retry
+            }
+        
+#if 0
+            cerr << "header = " << header << endl;
+            cerr << "resp = " << resp << endl;
+            cerr << "resp.responseCode = " << resp.code_ << endl;
+            cerr << "resp.errorCode = " << resp.errorCode_ << endl;
+            cerr << "resp.errorMessage = " << resp.errorMessage_ << endl;
+            cerr << "header.responseCode() = " << header.responseCode() << endl;
+#endif
+
+            if (header.responseCode() == 200) {
+                result.exists = true;
+                result.etag = header.tryGetHeader("etag");
+                result.size = header.contentLength;
+                string lastModified = header.tryGetHeader("last-modified");
+                if (!lastModified.empty()) {
+                    static const char format[] = "%a, %d %b %Y %H:%M:%S %Z"; // rfc 1123
+                    struct tm tm;
+                    bzero(&tm, sizeof(tm));
+                    if (strptime(lastModified.c_str(), format, &tm)) {
+                        result.lastModified = Date(1900 + tm.tm_year, tm.tm_mon + 1, tm.tm_mday,
+                                                   tm.tm_hour, tm.tm_min, tm.tm_sec);
+                    }
+                }
+                
+                return result;
+            }
+
+            if (header.responseCode() >= 400 && header.responseCode() < 500) {
+                result.exists = false;
+                return result;
+            }
+
+            if (header.responseCode() >= 500 && header.responseCode() < 600) {
+                continue;
+            }
+
+            cerr << "don't know what to do with response code " << header.responseCode()
+                 << " from HEAD" << endl;
+        }
+
+        throw ML::Exception("Couldn't reach server to determine HEAD of '"
+                            + url.toString() + "': HTTP code "
+                            + (didGetHeader ? to_string(header.responseCode()) : string("(unknown)"))
+                            + " " + resp.errorMessage_);
+
+        //if (resp.hasHeader("content-type"))
+        //    result.contentType = resp.getHeader("content-type");
+        
+        //cerr << "result = " << result.lastModified << endl;
+
+        return result;
+    }
+
+    virtual size_t getSize(const Url & url) const
+    {
+        return getInfo(url).size;
+    }
+
+    virtual std::string getEtag(const Url & url) const
+    {
+        return getInfo(url).etag;
+    }
+
+    virtual void makeDirectory(const Url & url) const
+    {
+        // no-op
+    }
+
+    virtual bool erase(const Url & url, bool throwException) const
+    {
+        throw ML::Exception("Http URIs don't support DELETE");
+    }
+
+    /** For each object under the given prefix (object or subdirectory),
+        call the given callback.
+    */
+    virtual bool forEach(const Url & prefix,
+                         const OnUriObject & onObject,
+                         const OnUriSubdir & onSubdir,
+                         const std::string & delimiter,
+                         const std::string & startAt) const
+    {
+        throw ML::Exception("Http URIs don't support listing");
+    }
+};
+
 /** Register Http with the filter streams API so that a filter_stream can be
     used to treat an Http object as a simple stream.
 */
@@ -242,6 +373,9 @@ struct RegisterHttpHandler {
     {
         ML::registerUriHandler("http", getHttpHandler);
         ML::registerUriHandler("https", getHttpHandler);
+
+        registerUrlFsHandler("http", new HttpUrlFsHandler());
+        registerUrlFsHandler("https", new HttpUrlFsHandler());
     }
 
 } registerHttpHandler;
