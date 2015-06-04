@@ -111,6 +111,12 @@ size_t getUriSize(const std::string & filename);
 // Return an etag for either a file or an s3 object
 std::string getUriEtag(const std::string & filename);
 
+// Return the scheme for the URI
+std::string getUriScheme(const std::string & uri);
+
+// Return the path (everything after the scheme) for the URI
+std::string getUriPath(const std::string & uri);
+
 /* Create the directories for the given path.  For S3 it does nothing;
    for normal directories it does mkdir -p
 

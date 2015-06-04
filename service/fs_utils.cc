@@ -48,7 +48,42 @@ Registry& getRegistry()
 
 namespace Datacratic {
 
-/* LOCALURLFSHANDLER */
+
+/* ensures that local filenames are represented as urls */
+Url makeUrl(const string & urlStr)
+{
+    if (urlStr.empty())
+        throw ML::Exception("can't makeUrl on empty url");
+
+    /* scheme is specified */
+    if (urlStr.find("://") != string::npos) {
+        return Url(urlStr);
+    }
+    /* absolute local filenames */
+    else if (urlStr[0] == '/') {
+        return Url("file://" + urlStr);
+    }
+    /* relative filenames */
+    else {
+        char cCurDir[PATH_MAX + 1];
+        string filename(getcwd(cCurDir, sizeof(cCurDir)));
+        filename += "/" + urlStr;
+
+        return Url("file://" + filename);
+    }
+}
+
+// Return the scheme for the URI
+std::string getUriScheme(const std::string & uri)
+{
+    return makeUrl(uri).scheme();
+}
+
+// Return the path (everything after the scheme) for the URI
+std::string getUriPath(const std::string & uri)
+{
+    return makeUrl(uri).path();
+}
 
 static FsObjectInfo extractInfo(const struct stat & stats)
 {
@@ -60,6 +95,8 @@ static FsObjectInfo extractInfo(const struct stat & stats)
 
     return objectInfo;
 }
+
+/* LOCALURLFSHANDLER */
 
 struct LocalUrlFsHandler : public UrlFsHandler {
 
@@ -185,35 +222,6 @@ struct AtInit {
     }
 } atInit;
 
-
-/* ensures that local filenames are represented as urls */
-Url makeUrl(const string & urlStr)
-{
-    if (urlStr.empty())
-        throw ML::Exception("can't makeUrl on empty url");
-
-    /* scheme is specified */
-    if (urlStr.find("://") != string::npos) {
-        return Url(urlStr);
-    }
-    /* absolute local filenames */
-    else if (urlStr[0] == '/') {
-        return Url("file://" + urlStr);
-    }
-    /* relative filenames */
-    else {
-        char cCurDir[PATH_MAX + 1];
-        string filename(getcwd(cCurDir, sizeof(cCurDir)));
-        filename += "/" + urlStr;
-
-        return Url("file://" + filename);
-    }
-}
-
-}
-
-
-namespace Datacratic {
 
 /* URLFSHANDLER */
 
