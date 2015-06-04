@@ -67,16 +67,26 @@ struct HttpRestProxy {
         }
 
         /** Get the given response header of the REST call. */
-        std::string getHeader(const std::string & name) const
+        const std::pair<const std::string, std::string> *
+        hasHeader(const std::string & name) const
         {
             auto it = header_.headers.find(name);
             if (it == header_.headers.end())
                 it = header_.headers.find(ML::lowercase(name));
             if (it == header_.headers.end())
-                throw ML::Exception("required header " + name + " not found");
-            return it->second;
+                return nullptr;
+            return &(*it);
         }
 
+        /** Get the given response header of the REST call. */
+        std::string getHeader(const std::string & name) const
+        {
+            auto p = hasHeader(name);
+            if (!p)
+                throw ML::Exception("required header " + name + " not found");
+            return p->second;
+        }
+        
         long code_;
         std::string body_;
         HttpHeader header_;
@@ -225,7 +235,7 @@ struct HttpRestProxy {
                      OnData onData = nullptr,
                      OnHeader onHeader = nullptr,
                      bool followRedirect = false) const;
-
+    
     /** URI that will be automatically prepended to resources passed in to
         the perform() methods
     */
