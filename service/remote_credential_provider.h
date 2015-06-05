@@ -1,4 +1,4 @@
-/** remote_credential_provider.cc
+/** remote_credential_provider.h                                   -*- C++ -*-
     Jeremy Barnes, 12 November 2014
     Copyright (c) 2014 Datacratic Inc.  All rights reserved.
 
