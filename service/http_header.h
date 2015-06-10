@@ -42,6 +42,12 @@ struct RestParams
     {
     }
 
+    RestParams(const std::map<std::string, std::string> & params)
+        : std::vector<std::pair<std::string, std::string> >
+          (params.begin(), params.end())
+    {
+    }
+
     bool hasValue(const std::string & key) const;
 
     /** Return the value of the given key.  Throws an exception if it's not
