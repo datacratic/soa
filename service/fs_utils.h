@@ -13,6 +13,8 @@
 
 #include "soa/types/date.h"
 #include "soa/types/url.h"
+#include "soa/types/value_description.h"
+
 
 namespace Datacratic {
 
@@ -40,6 +42,8 @@ struct FsObjectInfo {
 
     JML_IMPLEMENT_OPERATOR_BOOL(exists);
 };
+
+DECLARE_STRUCTURE_DESCRIPTION(FsObjectInfo);
 
 
 /*****************************************************************************/

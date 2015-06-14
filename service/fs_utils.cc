@@ -14,6 +14,7 @@
 
 #include "boost/filesystem.hpp"
 #include "googleurl/src/url_util.h"
+#include "soa/types/basic_value_descriptions.h"
 
 #include "fs_utils.h"
 #include "jml/utils/guard.h"
@@ -48,6 +49,26 @@ Registry& getRegistry()
 
 namespace Datacratic {
 
+DEFINE_STRUCTURE_DESCRIPTION(FsObjectInfo);
+
+FsObjectInfoDescription::
+FsObjectInfoDescription()
+{
+    addField("exists", &FsObjectInfo::exists,
+             "Does the object exist?");
+    addField("lastModified", &FsObjectInfo::lastModified,
+             "Date the object was last modified");
+    addField("size", &FsObjectInfo::size,
+             "Size in bytes of the object");
+    addField("etag", &FsObjectInfo::etag,
+             "Entity tag (unique hash) for object");
+    addField("storageClass", &FsObjectInfo::storageClass,
+             "Storage class of object if applicable");
+    addField("ownerId", &FsObjectInfo::ownerId,
+             "ID of owner");
+    addField("ownerName", &FsObjectInfo::ownerName,
+             "Name of owner");
+}
 
 /* ensures that local filenames are represented as urls */
 Url makeUrl(const string & urlStr)
