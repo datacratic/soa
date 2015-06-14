@@ -70,6 +70,14 @@ FsObjectInfoDescription()
              "Name of owner");
 }
 
+static bool acceptUrisWithoutScheme = true;
+
+/// Set a GLOBAL flag that URIs without a scheme will not be accepted
+void setGlobalAcceptUrisWithoutScheme(bool accept)
+{
+    acceptUrisWithoutScheme = accept;
+}
+
 /* ensures that local filenames are represented as urls */
 Url makeUrl(const string & urlStr)
 {
@@ -79,6 +87,9 @@ Url makeUrl(const string & urlStr)
     /* scheme is specified */
     if (urlStr.find("://") != string::npos) {
         return Url(urlStr);
+    }
+    else if (!acceptUrisWithoutScheme) {
+        throw ML::Exception("Cannot accept URI without scheme (if you want a file, add file://): " + urlStr);
     }
     /* absolute local filenames */
     else if (urlStr[0] == '/') {

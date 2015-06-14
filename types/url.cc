@@ -74,7 +74,8 @@ Url::init(std::string s)
     }
 
     if (s.find("://") == string::npos) {
-        s = "http://" + s;
+        throw ML::Exception("Attempt to create a URL without a scheme: if you mean http:// or file:// then add it explicitly: " + s);
+        //s = "http://" + s;
     }
     url.reset(new GURL(s));
 

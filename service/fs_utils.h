@@ -102,6 +102,9 @@ void registerUrlFsHandler(const std::string & scheme,
 /* FREE FUNCTIONS                                                            */
 /*****************************************************************************/
 
+/// Set a GLOBAL flag that URIs without a scheme will not be accepted
+void setGlobalAcceptUrisWithoutScheme(bool accept);
+
 // Return the object info for either a file or an S3 object
 FsObjectInfo getUriObjectInfo(const std::string & filename);
 
