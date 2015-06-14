@@ -603,7 +603,11 @@ addAutodocRoute(PathSpec autodocPath, PathSpec helpPath,
             return RestRequestRouter::MR_YES;
         }
 
-        ML::File_Read_Buffer buf(autodocFilesPath + "/" + filename);
+        string filenameToLoad = autodocFilesPath + "/" + filename;
+        if (filenameToLoad.find("file://") == 0)
+            filenameToLoad = string(filenameToLoad, 7);
+
+        ML::File_Read_Buffer buf(filenameToLoad);
 
         string mimeType = "text/plain";
         if (filename.find(".html") != string::npos) {
@@ -896,9 +900,11 @@ getStaticRouteHandler(const string & dir) const {
             return MR_YES;
         }
 
-        ML::filter_istream stream(filename);
+        string filenameToLoad = filename;
+        if (filenameToLoad.find("file://") == 0)
+            filenameToLoad = string(filenameToLoad, 7);
 
-        ML::File_Read_Buffer buf(filename);
+        ML::File_Read_Buffer buf(filenameToLoad);
 
         string mimeType = "text/plain";
         if (filename.find(".html") != string::npos) {
