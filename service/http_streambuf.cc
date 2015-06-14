@@ -174,7 +174,7 @@ struct HttpStreamingDownloadSource {
                                         string(errorBody, 0, 1024).c_str());
                 }
                 
-                dataQueue.tryPush("");
+                dataQueue.push("");
                 
             } catch (const std::exception & exc) {
                 lastExc = std::current_exception();
