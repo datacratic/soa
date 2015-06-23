@@ -279,7 +279,7 @@ from_js(const JSValue & val, const std::map<K, V, H> * = 0)
         throw ML::Exception("invalid JSValue for map extraction");
     }
     
-    std::unordered_map<K, V, H> result;
+    std::map<K, V, H> result;
 
     v8::HandleScope scope;
 
