@@ -59,7 +59,7 @@ struct MultiAggregator {
 
     /** Record, generic version. */
     void record(const std::string & stat,
-                EventType type = ET_COUNT,
+                StatEventType type = ET_COUNT,
                 float value = 1.0,
                 std::initializer_list<int> extra = DefaultOutcomePercentiles);
 
