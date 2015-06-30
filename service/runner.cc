@@ -107,7 +107,7 @@ Runner()
 Runner::
 ~Runner()
 {
-    waitTermination();
+    kill(SIGTERM, false);
 }
 
 void
@@ -388,6 +388,15 @@ run(const vector<string> & command,
     }
 
     runImpl(command, onTerminate, stdOutSink, stdErrSink);
+    int counter = 1;
+    while (childPid_ == -1) {
+        ML::sleep(0.1);
+        ++ counter;
+        if (counter % 50 == 0) {
+            cerr << "Runner waiting after child...\n";
+            counter = 1;
+        }
+    }
 }
 
 RunResult
