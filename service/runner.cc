@@ -163,14 +163,6 @@ handleChildStatus(const struct epoll_event & event)
                     (status.launchErrno,
                      strLaunchError(status.launchErrorCode));
                 task_.statusState = ProcessState::STOPPED;
-                childPid_ = -2;
-                ML::futex_wake(childPid_);
-
-                if (stdInSink_ && stdInSink_->state != OutputSink::CLOSED) {
-                    stdInSink_->requestClose();
-                }
-                attemptTaskTermination();
-                break;
             }
 
             switch (status.state) {
@@ -182,9 +174,14 @@ handleChildStatus(const struct epoll_event & event)
                 ML::futex_wake(childPid_);
                 break;
             case ProcessState::STOPPED:
-                childPid_ = -3;
+                if (task_.runResult.state == RunResult::LAUNCH_ERROR) {
+                    childPid_ = -2;
+                }
+                else {
+                    task_.runResult.updateFromStatus(status.childStatus);
+                    childPid_ = -3;
+                }
                 ML::futex_wake(childPid_);
-                task_.runResult.updateFromStatus(status.childStatus);
                 task_.statusState = ProcessState::DONE;
                 if (stdInSink_ && stdInSink_->state != OutputSink::CLOSED) {
                     stdInSink_->requestClose();
@@ -351,7 +348,7 @@ attemptTaskTermination()
             cerr << "childPid_ >= 0\n";
         }
         if (!(task_.statusState == ProcessState::STOPPED
-              || task_.statusState == DONE)) {
+              || task_.statusState == ProcessState::DONE)) {
             cerr << "task status != stopped/done\n";
         }
     }
@@ -514,7 +511,17 @@ doRunImpl(const vector<string> & command,
         throw ML::Exception(errno, "Runner::run fork");
     }
     else if (task_.wrapperPid == 0) {
-        task_.runWrapper(command, childFds);
+        try {
+            task_.runWrapper(command, childFds);
+        }
+        catch (...) {
+            ProcessStatus status;
+            status.state = ProcessState::STOPPED;
+            status.setErrorCodes(errno, LaunchError::SUBTASK_LAUNCH);
+            childFds.writeStatus(status);
+            
+            exit(-1);
+        }
     }
     else {
         task_.statusState = ProcessState::LAUNCHING;
@@ -638,16 +645,6 @@ void
 Runner::Task::
 runWrapper(const vector<string> & command, ProcessFds & fds)
 {
-    auto dieWithErrno = [&] (const char * message) {
-        ProcessStatus status;
-
-        status.state = ProcessState::STOPPED;
-        status.setErrorCodes(errno, LaunchError::SUBTASK_LAUNCH);
-        fds.writeStatus(status);
-
-        throw ML::Exception(errno, message);
-    };
-
     // Find runner_helper path
     string runnerHelper = findRunnerHelper();
 
@@ -691,7 +688,7 @@ runWrapper(const vector<string> & command, ProcessFds & fds)
 
     int res = execve(argv[0], argv, envp);
     if (res == -1) {
-        dieWithErrno("launching runner helper");
+        throw ML::Exception(errno, "launching runner helper");
     }
 
     throw ML::Exception("You are the King of Time!");
