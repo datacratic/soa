@@ -90,9 +90,14 @@ CreateStdPipe(bool forWriting)
 
 } // namespace
 
+
 namespace Datacratic {
 
-/* ASYNCRUNNER */
+/****************************************************************************/
+/* RUNNER                                                                   */
+/****************************************************************************/
+
+std::string Runner::runnerHelper;
 
 Runner::
 Runner()
@@ -653,33 +658,14 @@ runWrapper(const vector<string> & command, ProcessFds & fds)
     };
 
     // Find runner_helper path
-    char exeBuffer[16384];
-    ssize_t len;
-    {
-        char * res = getcwd(exeBuffer, 16384);
-        ExcAssert(res != NULL);
-        len = ::strlen(exeBuffer);
-        static const char * appendStr = "/" BIN "/runner_helper";
-        ::strcpy(&exeBuffer[len], appendStr);
-    }
+    string runnerHelper = findRunnerHelper();
 
-    {
-        // Make sure the deduced path is right
-        struct stat sb;
-        int res = stat(exeBuffer, &sb);
-        if (res != 0) {
-            string msg = "Runner error: Failed to find runner_helper. errno:"
-                         + to_string(errno) + " path:" + exeBuffer;
-            cerr << msg << endl;
-            throw ML::Exception(msg);
-        }
-    }
     vector<string> preArgs = { /*"gdb", "--tty", "/dev/pts/48", "--args"*/ /*"../strace-code/strace", "-b", "execve", "-ftttT", "-o", "runner_helper.strace"*/ };
 
 
     // Set up the arguments before we fork, as we don't want to call malloc()
     // from the fork, and it can be called from c_str() in theory.
-    len = command.size();
+    auto len = command.size();
     char * argv[len + 3 + preArgs.size()];
 
     for (unsigned i = 0;  i < preArgs.size();  ++i)
@@ -687,7 +673,7 @@ runWrapper(const vector<string> & command, ProcessFds & fds)
 
     int idx = preArgs.size();
 
-    argv[idx++] = exeBuffer;
+    argv[idx++] = (char *) runnerHelper.c_str();
 
     size_t channelsSize = 4*2*4+3+1;
     char channels[channelsSize];
@@ -718,6 +704,39 @@ runWrapper(const vector<string> & command, ProcessFds & fds)
     }
 
     throw ML::Exception("You are the King of Time!");
+}
+
+string
+Runner::Task::
+findRunnerHelper()
+{
+    string runnerHelper = Runner::runnerHelper;
+
+    if (runnerHelper.empty()) {
+        static string staticHelper;
+
+        if (staticHelper.empty()) {
+            string binDir(::getenv("BIN"));
+            if (binDir.empty()) {
+                char binBuffer[16384];
+                char * res = ::getcwd(binBuffer, 16384);
+                ExcAssert(res != NULL);
+                binDir = res;
+                binDir += "/" BIN;
+            }
+            staticHelper = binDir + "/runner_helper";
+
+            // Make sure the deduced path is right
+            struct stat sb;
+            int res = ::stat(staticHelper.c_str(), &sb);
+            if (res != 0) {
+                throw ML::Exception(errno, "checking static helper");
+            }
+        }
+        runnerHelper = staticHelper;
+    }
+
+    return runnerHelper;
 }
 
 /* This method *must* be called from attemptTaskTermination, in order to
