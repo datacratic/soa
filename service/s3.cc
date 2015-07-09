@@ -20,6 +20,7 @@
 #include "jml/arch/threads.h"
 #include "jml/arch/timers.h"
 #include "jml/utils/exc_assert.h"
+#include "jml/utils/exception_ptr.h"
 #include "jml/utils/pair_utils.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/utils/filter_streams.h"
@@ -556,7 +557,7 @@ private:
     size_t maxChunkSize;
 
     bool closed; /* whether close() was invoked */
-    ExceptionPtrHandler excPtrHandler;
+    ML::ExceptionPtrHandler excPtrHandler;
 
     /* read thread */
     uint64_t readOffset; /* number of bytes from the entire stream that
@@ -781,7 +782,7 @@ private:
 
     /* state variables, used between "start" and "stop" */
     bool closed; /* whether close() was invoked */
-    ExceptionPtrHandler excPtrHandler;
+    ML::ExceptionPtrHandler excPtrHandler;
 
     string current; /* current chunk data */
     size_t chunkSize; /* current chunk size */
@@ -2135,46 +2136,6 @@ downloadToFile(const std::string & uri, const std::string & outfile,
     };
     download(uri, onChunk, 0, endOffset);
     myFile.close();
-}
-
-
-/****************************************************************************/
-/* EXCEPTIONPTR HANDLER                                                     */
-/****************************************************************************/
-
-bool
-ExceptionPtrHandler::
-hasException()
-{
-    std::unique_lock<mutex> guard(excLock);
-    return bool(excPtr);
-}
-
-void
-ExceptionPtrHandler::
-takeException(std::exception_ptr newPtr)
-{
-    std::unique_lock<mutex> guard(excLock);
-    excPtr = newPtr;
-}
-
-void
-ExceptionPtrHandler::
-takeCurrentException()
-{
-    takeException(std::current_exception());
-}
-
-void
-ExceptionPtrHandler::
-rethrowIfSet()
-{
-    std::unique_lock<mutex> guard(excLock);
-    if (excPtr) {
-        std::exception_ptr ptr = excPtr;
-        excPtr = nullptr;
-        std::rethrow_exception(ptr);
-    }
 }
 
 
