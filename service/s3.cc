@@ -59,7 +59,7 @@ namespace {
 
 struct S3Globals {
     S3Globals()
-        : baseRetryDelay(3), numRetries(-1)
+        : baseRetryDelay(3), numRetries(-1), loop(1, 0, -1)
     {
         if (numRetries == -1) {
             char * numRetriesEnv = getenv("S3_RETRIES");
@@ -203,7 +203,7 @@ struct S3UrlFsHandler : public UrlFsHandler {
             api->eraseObject(bucket, "/" + bucketPath.second);
             return true;
         }
-        else { 
+        else {
             return api->tryEraseObject(bucket, "/" + bucketPath.second);
         }
     }
