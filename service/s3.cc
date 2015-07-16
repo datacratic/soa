@@ -955,7 +955,6 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
             state_->range.adjust(state_->requestBody.size());
         }
         state_->body.append(state_->requestBody);
-        state_->requestBody.clear();
         message = ("S3 operation failed with internal error: "
                    + errorMessage(errorCode) + "\n");
     }
@@ -978,6 +977,7 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
 
     if (restart) {
         state_->retries++;
+        state_->requestBody.clear();
         scheduleRestart();
     }
     else {
