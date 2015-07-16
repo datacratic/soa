@@ -977,6 +977,7 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
 
     if (restart) {
         state_->retries++;
+        header_.clear();
         state_->requestBody.clear();
         scheduleRestart();
     }
