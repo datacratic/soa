@@ -22,8 +22,9 @@
 #include "jml/utils/guard.h"
 #include "jml/utils/string_functions.h"
 
-#include "message_loop.h"
 #include "http_header.h"
+#include "message_loop.h"
+#include "openssl_threading.h"
 
 #include "http_client_v1.h"
 
@@ -34,6 +35,14 @@ using namespace Datacratic;
 namespace curlopt = curlpp::options;
 
 namespace {
+
+struct AtInit {
+    AtInit()
+    {
+        initOpenSSLThreading();
+    }
+} atInit;
+
 
 HttpClientError
 translateError(CURLcode curlError)

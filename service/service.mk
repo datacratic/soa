@@ -60,6 +60,7 @@ LIBSERVICES_SOURCES := \
 	rest_request_binding.cc \
 	runner.cc \
 	sink.cc \
+	openssl_threading.cc \
 	zookeeper.cc \
 	http_client.cc \
 	http_client_v1.cc \
