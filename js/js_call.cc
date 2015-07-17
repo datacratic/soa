@@ -9,10 +9,14 @@
 #include <unordered_map>
 #include "jml/arch/backtrace.h"
 #include "v8.h"
-#include "node.h"
 
+#ifndef NODEJS_DISABLED
+#include "node.h"
+#endif
 
 using namespace std;
+
+#ifndef NODEJS_DISABLED
 
 extern "C" {
     // Define as a weak symbol to avoid linker errors when linking without libeio
@@ -50,6 +54,7 @@ void FatalException(v8::TryCatch & tc)
 
 } // namespace node
 
+#endif
 
 namespace Datacratic {
 namespace JS {
@@ -65,6 +70,8 @@ struct CallInJsContextData {
     {
     }
 };
+
+#ifndef NODEJS_DISABLED
     
 static void doNothing(eio_req * req)
 {
@@ -107,8 +114,13 @@ static int doCallInJs(eio_req * req)
         }
     }
         
-    if (try_catch.HasCaught())
+    if (try_catch.HasCaught()) {
+#ifndef NODEJS_DISABLED
         node::FatalException(try_catch);
+#else
+        abort();
+#endif
+    }
     
     return 0;
 }
@@ -123,6 +135,15 @@ void callInJsThread(const boost::function<void ()> & fn)
     data->callback = fn;
     eio_custom(doNothing, EIO_PRI_DEFAULT, doCallInJs, data.release());
 }
+
+#else
+
+void callInJsThread(const boost::function<void ()> & fn)
+{
+    throw ML::Exception("Can't create cross thread callback without node");
+}
+
+#endif
 
 boost::function<void ()>
 createCrossThreadCallback(v8::Handle<v8::Function> fn,

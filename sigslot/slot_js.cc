@@ -8,8 +8,6 @@
 #include "slot_js.h"
 #include "soa/sigslot/slot.h"
 
-#include "node.h"
-
 #include "soa/js/js_value.h"
 #include "soa/js/js_utils.h"
 #include "soa/js/js_wrapped.h"
@@ -67,9 +65,9 @@ struct SlotJS : public JSWrapped2<Slot, SlotJS, SlotName, sigslotModule> {
     {
         using namespace v8;
         v8::Persistent<v8::FunctionTemplate> t = Register(New);
-        NODE_SET_PROTOTYPE_METHOD(t, "toString", toString);
-        NODE_SET_PROTOTYPE_METHOD(t, "inspect", toString);
-        NODE_SET_PROTOTYPE_METHOD(t, "call", call);
+        SET_PROTOTYPE_METHOD(t, "toString", toString);
+        SET_PROTOTYPE_METHOD(t, "inspect", toString);
+        SET_PROTOTYPE_METHOD(t, "call", call);
         t->InstanceTemplate()->SetCallAsFunctionHandler(call);
     }
 

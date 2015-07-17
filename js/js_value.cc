@@ -15,11 +15,17 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #include "soa/jsoncpp/json.h"
+
+#ifndef NODEJS_DISABLED
 #include "node/node_buffer.h"
+#endif
+
 #include <cxxabi.h>
 using namespace std;
 using namespace ML;
 using namespace Datacratic::JS;
+
+#ifndef NODEJS_DISABLED
 
 namespace node {
 
@@ -37,6 +43,8 @@ bool Buffer::HasInstance(v8::Handle<v8::Value> val)
 }
  
 } // namespace node
+
+#endif
 
 namespace Datacratic {
 namespace JS {
@@ -146,12 +154,18 @@ void to_js(JSValue & jsval, const std::string & value)
     if (isAscii)
         jsval = v8::String::New(value.c_str(), value.length());
     else {
+#ifndef NODEJS_DISABLED
+
         // We can't represent this in ASCII.  In this case, we need to use a
         // buffer.
         node::Buffer * buffer
             = node::Buffer::New(value.size());
         std::copy(value.begin(), value.end(), node::Buffer::Data(buffer));
         jsval = buffer->handle_;
+#else
+        // Assume utf-8
+        jsval = v8::String::New(value.c_str(), value.length());
+#endif
     }
 }
 
@@ -395,10 +409,14 @@ bool from_js(const JSValue & val, bool *)
 
 std::string from_js(const JSValue & val, std::string *)
 {
+#ifndef NODEJS_DISABLED
     if (node::Buffer::HasInstance(val)) {
         //cerr << "from_js with buffer" << endl;
         return string(node::Buffer::Data(val), node::Buffer::Length(val));
     }
+#else
+    if (false);
+#endif
     else
     {
          return *v8::String::AsciiValue(val);
