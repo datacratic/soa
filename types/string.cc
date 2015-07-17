@@ -152,7 +152,7 @@ string Utf8String::extractAscii() const
 {
     string s;
     for(auto it = begin(); it != end(); it++) {
-        char c = *it;
+        int c = *it;
         if (c >= ' ' && c < 127) {
             s += c;
         } else {
