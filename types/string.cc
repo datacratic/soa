@@ -162,6 +162,17 @@ string Utf8String::extractAscii() const
     return s;
 }
 
+bool
+Utf8String::isAscii() const
+{
+    for(auto it = begin(); it != end(); it++) {
+        int c = *it;
+        if (c < 0 || c >= 128)
+            return false;
+    }
+    return true;
+}
+
 size_t Utf8String::length() const
 {
     return std::distance(begin(), end());

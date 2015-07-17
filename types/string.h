@@ -146,6 +146,7 @@ public:
     void reconstitute(ML::DB::Store_Reader & store);
 
     std::string extractAscii() const;
+    bool isAscii() const;
 
     bool operator == (const Utf8String & other) const
     {
