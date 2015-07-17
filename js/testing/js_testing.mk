@@ -12,7 +12,7 @@ $(eval $(call nodejs_module,testlib2,testlib2.js,testlib1))
 
 $(eval $(call vowsjs_test,nodejs_library_test,testlib2))
 
-$(eval $(call test,js_call_test,arch js,boost))
+#$(eval $(call test,js_call_test,arch js,boost))
 
 $(eval $(call nodejs_addon,js_variable_arity_module,js_variable_arity_module.cc,js))
 $(eval $(call vowscoffee_test,js_variable_arity_test,js_variable_arity_module))

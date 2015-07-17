@@ -27,12 +27,6 @@ struct JSValue : public v8::Handle<v8::Value> {
     }
 
     template<typename T>
-    JSValue(const v8::Local<T> & val)
-        : v8::Handle<v8::Value>(val)
-    {
-    }
-
-    template<typename T>
     JSValue(const v8::Handle<T> & val)
         : v8::Handle<v8::Value>(val)
     {
@@ -56,19 +50,13 @@ struct JSObject : public v8::Handle<v8::Object> {
     }
 
     template<typename T>
-    JSObject(const v8::Local<T> & val)
-        : v8::Handle<v8::Object>(val)
-    {
-    }
-
-    template<typename T>
     JSObject(const v8::Handle<T> & val)
         : v8::Handle<v8::Object>(val)
     {
     }
 
     void initialize();
-
+    
     void add(const std::string & key, const std::string & value);
     void add(const std::string & key, const JSValue & value);
 };

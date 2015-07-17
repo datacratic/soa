@@ -5,11 +5,13 @@
 # Support functions for javascript
 
 LIBJS_SOURCES := \
-	js_wrapped.cc \
 	js_value.cc \
 	js_utils.cc \
-	js_registry.cc \
-	js_call.cc
+
+
+#	js_wrapped.cc \
+#	js_registry.cc \
+#	js_call.cc
 
 LIBJS_LINK := jsoncpp $(NODE_V8_LIB) arch utils types
 
