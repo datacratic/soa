@@ -303,6 +303,14 @@ struct S3Downloader {
             maxRqs = 5;
         chunks.resize(maxRqs);
 
+        /* Hack to ensure that the file's last modified time is earlier than 1
+           seconds before the start time of the download. Useful for the etag
+           check below. Should seldom be executed in practice. */
+        Date now = Date::now();
+        if (info.lastModified > now.plusSeconds(-1)) {
+            ML::sleep(1);
+        }
+
         /* Kick start the requests */
         ensureRequests();
     }
@@ -520,11 +528,24 @@ private:
                and throw an appropriate exception. */
             string chunkEtag = response.getHeader("etag");
             if (chunkEtag != info.etag) {
-                throw ML::Exception("chunk etag %s not equal to file etag"
-                                    " %s: file <%s> has changed during"
-                                    " download",
-                                    chunkEtag.c_str(), info.etag.c_str(),
-                                    resource.c_str());
+                auto newInfo = api->getObjectInfo(bucket, resource.substr(1));
+                string msg;
+                if (newInfo.lastModified > info.lastModified) {
+                    msg = ML::format("file '%s' has changed during download"
+                                     " (chunk etag differs from file etag)",
+                                     resource.c_str());
+                }
+                else {
+                    string oldLm = info.lastModified.print();
+                    string newLm = newInfo.lastModified.print();
+                    msg = ML::format("anomalous difference between chunk etag"
+                                     " '%s' and initial etag '%s' for file"
+                                     " '%s' (old lm = %s; new lm = %s)",
+                                     chunkEtag.c_str(), info.etag.c_str(),
+                                     resource.c_str(),
+                                     oldLm.c_str(), newLm.c_str());
+                }
+                throw ML::Exception(msg);
             }
             ExcAssertEqual(response.body().size(), chunkSize);
             Chunk & chunk = chunks[chunkNr];
