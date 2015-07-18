@@ -124,6 +124,82 @@ struct StreamJsonPrintingContext
 
 
 /*****************************************************************************/
+/* STRING JSON PRINTING CONTEXT                                              */
+/*****************************************************************************/
+
+/** Writes a JSON representation to the given ASCII string. */
+
+struct StringJsonPrintingContext
+    : public JsonPrintingContext {
+
+    StringJsonPrintingContext(std::string & str);
+
+    std::string & str;
+    bool writeUtf8;          ///< If true, utf8 chars in binary.  False: escaped ASCII
+
+    struct PathEntry {
+        PathEntry(bool isObject)
+            : isObject(isObject), memberNum(-1)
+        {
+        }
+
+        bool isObject;
+        std::string memberName;
+        int memberNum;
+    };
+
+    std::vector<PathEntry> path;
+
+    virtual void startObject();
+
+    virtual void startMember(const std::string & memberName);
+
+    virtual void endObject();
+
+    virtual void startArray(int knownSize = -1);
+
+    virtual void newArrayElement();
+
+    virtual void endArray();
+    
+    virtual void skip();
+
+    virtual void writeNull();
+
+    virtual void writeInt(int i);
+
+    virtual void writeUnsignedInt(unsigned int i);
+
+    virtual void writeLong(long int i);
+
+    virtual void writeUnsignedLong(unsigned long int i);
+
+    virtual void writeLongLong(long long int i);
+
+    virtual void writeUnsignedLongLong(unsigned long long int i);
+
+    virtual void writeFloat(float f);
+
+    virtual void writeDouble(double d);
+
+    virtual void writeString(const std::string & s);
+
+    virtual void writeStringUtf8(const Utf8String & s);
+
+    virtual void writeJson(const Json::Value & val);
+
+    virtual void writeBool(bool b);
+
+protected:
+    void write(char c);
+    void write(char c1, char c2);
+    void write(const char * str);
+    void write(const char * str, int len);
+    void write(const std::string & s);
+};
+
+
+/*****************************************************************************/
 /* STRUCTURED JSON PRINTING CONTEXT                                          */
 /*****************************************************************************/
 

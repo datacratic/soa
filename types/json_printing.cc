@@ -224,6 +224,266 @@ writeBool(bool b)
 }
 
 
+
+/*****************************************************************************/
+/* STRING JSON PRINTING CONTEXT                                              */
+/*****************************************************************************/
+
+void
+StringJsonPrintingContext::
+write(char c)
+{
+    str += c;
+}
+
+void
+StringJsonPrintingContext::
+write(char c1, char c2)
+{
+    str += c1;
+    str += c2;
+}
+
+void
+StringJsonPrintingContext::
+write(const char * s)
+{
+    str += s;
+}
+
+void
+StringJsonPrintingContext::
+write(const char * s, int len)
+{
+    str.append(s, len);
+}
+
+void
+StringJsonPrintingContext::
+write(const std::string & s)
+{
+    str.append(s);
+}
+
+void
+StringJsonPrintingContext::
+writeStringUtf8(const Utf8String & s)
+{
+    write('"');
+
+    for (auto it = s.begin(), end = s.end();  it != end;  ++it) {
+        int c = *it;
+        if (c >= ' ' && c < 127 && c != '\"' && c != '\\')
+            write((char)c);
+        else {
+            switch (c) {
+            case '\t': write('\\', 't');  break;
+            case '\n': write('\\', 'n');  break;
+            case '\r': write('\\', 'r');  break;
+            case '\b': write('\\', 'b');  break;
+            case '\f': write('\\', 'f');  break;
+            case '/':
+            case '\\':
+            case '\"': write('\\', (char)c);  break;
+            default:
+                if (writeUtf8) {
+                    char buf[4];
+                    char * p = utf8::unchecked::append(c, buf);
+                    write(buf, p - buf);
+                }
+                else {
+                    ExcAssert(c >= 0 && c < 65536);
+                    write(ML::format("\\u%04x", (unsigned)c));
+                }
+            }
+        }
+    }
+    
+    write('"');
+}
+
+StringJsonPrintingContext::
+StringJsonPrintingContext(std::string & str)
+    : str(str), writeUtf8(true)
+{
+}
+
+void
+StringJsonPrintingContext::
+startObject()
+{
+    path.push_back(true /* isObject */);
+    write('{');
+}
+
+void
+StringJsonPrintingContext::
+startMember(const std::string & memberName)
+{
+    ExcAssert(path.back().isObject);
+    //path.back().memberName = memberName;
+    ++path.back().memberNum;
+    if (path.back().memberNum != 0)
+        write(',');
+    write('\"');
+    ML::jsonEscape(memberName, str);
+    write('"', ':');
+}
+
+void
+StringJsonPrintingContext::
+endObject()
+{
+    ExcAssert(path.back().isObject);
+    path.pop_back();
+    write('}');
+}
+
+void
+StringJsonPrintingContext::
+startArray(int knownSize)
+{
+    path.push_back(false /* isObject */);
+    write('[');
+}
+
+void
+StringJsonPrintingContext::
+newArrayElement()
+{
+    ExcAssert(!path.back().isObject);
+    ++path.back().memberNum;
+    if (path.back().memberNum != 0)
+        write(',');
+}
+
+void
+StringJsonPrintingContext::
+endArray()
+{
+    ExcAssert(!path.back().isObject);
+    path.pop_back();
+    write(']');
+}
+    
+void
+StringJsonPrintingContext::
+skip()
+{
+    write("null");
+}
+
+void
+StringJsonPrintingContext::
+writeNull()
+{
+    write("null");
+}
+
+void
+StringJsonPrintingContext::
+writeInt(int i)
+{
+    char buffer[128];
+    int chars = sprintf(buffer, "%i", i);
+    write(buffer, chars);
+}
+
+void
+StringJsonPrintingContext::
+writeUnsignedInt(unsigned int i)
+{
+    char buffer[128];
+    int chars = sprintf(buffer, "%ui", i);
+    write(buffer, chars);
+}
+
+void
+StringJsonPrintingContext::
+writeLong(long int i)
+{
+    char buffer[128];
+    int chars = sprintf(buffer, "%li", i);
+    write(buffer, chars);
+}
+
+void
+StringJsonPrintingContext::
+writeUnsignedLong(unsigned long int i)
+{
+    char buffer[128];
+    int chars = sprintf(buffer, "%lui", i);
+    write(buffer, chars);
+}
+
+void
+StringJsonPrintingContext::
+writeLongLong(long long int i)
+{
+    char buffer[128];
+    int chars = sprintf(buffer, "%lli", i);
+    write(buffer, chars);
+}
+
+void
+StringJsonPrintingContext::
+writeUnsignedLongLong(unsigned long long int i)
+{
+    char buffer[128];
+    int chars = sprintf(buffer, "%llui", i);
+    write(buffer, chars);
+}
+
+void
+StringJsonPrintingContext::
+writeFloat(float f)
+{
+    if (std::isfinite(f))
+        str += Datacratic::dtoa(f);
+    else {
+        write('"');
+        write(std::to_string(f));
+        write('"');
+    }
+}
+
+void
+StringJsonPrintingContext::
+writeDouble(double d)
+{
+    if (std::isfinite(d))
+        str += Datacratic::dtoa(d);
+    else {
+        write('"');
+        write(std::to_string(d));
+        write('"');
+    }
+}
+
+void
+StringJsonPrintingContext::
+writeString(const std::string & s)
+{
+    write('"');
+    ML::jsonEscape(s, str);
+    write('"');
+}
+
+void
+StringJsonPrintingContext::
+writeJson(const Json::Value & val)
+{
+    write(val.toStringNoNewLine());
+}
+
+void
+StringJsonPrintingContext::
+writeBool(bool b)
+{
+    write(b ? "true": "false");
+}
+
+
 /*****************************************************************************/
 /* STRUCTURED JSON PRINTING CONTEXT                                          */
 /*****************************************************************************/

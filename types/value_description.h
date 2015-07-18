@@ -1852,10 +1852,11 @@ std::string jsonEncodeStr(const T & obj,
                           typename std::enable_if<!hasToJson<T>::value>::type * = 0)
 {
     static auto desc = getDefaultDescriptionShared<T>();
-    std::ostringstream stream;
-    StreamJsonPrintingContext context(stream);
+    std::string result;
+    result.reserve(116);  /// try to force a 128 byte allocation
+    StringJsonPrintingContext context(result);
     desc->printJson(&obj, context);
-    return std::move(stream.str());
+    return std::move(result);
 }
 
 // jsonEncode implementation for any type which:
@@ -1867,11 +1868,12 @@ Utf8String jsonEncodeUtf8(const T & obj,
                           decltype(getDefaultDescription((T *)0)) * = 0)
 {
     static auto desc = getDefaultDescriptionShared<T>();
-    std::ostringstream stream;
-    StreamJsonPrintingContext context(stream);
+    std::string result;
+    result.reserve(116);  /// try to force a 128 byte allocation
+    StringJsonPrintingContext context(result);
     context.writeUtf8 = true;
     desc->printJson(&obj, context);
-    return Utf8String(std::move(stream.str()), false /* check */);
+    return Utf8String(std::move(result), false /* check */);
 }
 
 // jsonEncode implementation for any type which:
