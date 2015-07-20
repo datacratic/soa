@@ -435,11 +435,14 @@ handleEpollEvent(epoll_event & event)
              << (mask & EPOLLRDHUP ? "R" : "")
              << endl;
     }
-
+    
+  
+    
     EpollData * epollDataPtr = reinterpret_cast<EpollData *>(event.data.ptr);
     switch (epollDataPtr->fdType) {
     case EpollData::EpollDataType::TRANSPORT: {
         shared_ptr<TransportBase> transport = epollDataPtr->transport;
+        pollStart_ = Date::now();
         handleTransportEvent(transport);
         if (!transport->isZombie()) {
             this->restartPolling(epollDataPtr);

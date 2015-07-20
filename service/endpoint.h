@@ -159,6 +159,12 @@ struct EndpointBase : public Epoller {
         std::shared_ptr<TransportBase> transport; /* TRANSPORT */
         OnTimer onTimer;                          /* TIMER */
     };
+   
+    // Get the polling start time for auction handler
+    Date getStartTime() const
+    { 
+        return pollStart_;
+    };
 
 protected:
 
@@ -266,13 +272,16 @@ private:
     bool shutdown_;
     bool disallowTimers_;
 
+   //Poll start time
+    Date pollStart_;
+
     // Turns the polling loop into a busy loop with no sleeps.
     enum PollingMode pollingMode_;
 
     std::map<std::string, int> numTransportsByHost;
 
     std::vector<double> totalSleepTime;
-
+    
     /** Run a thread to handle events. */
     void runEventThread(int threadNum, int numThreads);
 
