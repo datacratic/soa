@@ -435,9 +435,7 @@ handleEpollEvent(epoll_event & event)
              << (mask & EPOLLRDHUP ? "R" : "")
              << endl;
     }
-    
-  
-    
+
     EpollData * epollDataPtr = reinterpret_cast<EpollData *>(event.data.ptr);
     switch (epollDataPtr->fdType) {
     case EpollData::EpollDataType::TRANSPORT: {
