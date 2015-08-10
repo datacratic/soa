@@ -5,9 +5,6 @@
     Code to talk to s3.
 */
 
-/* last known compatible commit in master branch:
- * dda48cb65cf6a1689efa9d6c7949fd0d43c964d7 */
-
 #include <atomic>
 #include <mutex>
 
