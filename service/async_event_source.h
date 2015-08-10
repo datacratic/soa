@@ -5,18 +5,16 @@
    Source of asynchronous events; a bit like a reactor.
 */
 
-#ifndef __service__async_event_source_h__
-#define __service__async_event_source_h__
+#pragma once
 
-
-#include <boost/thread/thread.hpp>
 #include <functional>
 #include "jml/arch/exception.h"
-#include <thread>
+
 
 namespace Datacratic {
 
 struct MessageLoop;
+
 
 /*****************************************************************************/
 /* ASYNC EVENT SOURCE                                                        */
@@ -168,37 +166,11 @@ struct PeriodicEventSource : public AsyncEventSource {
         return singleThreaded_;
     }
 
-private:    
+private:
     int timerFd;
     double timePeriodSeconds;
     std::function<void (uint64_t)> onTimeout;
     bool singleThreaded_;
 };
 
-
-#if 0
-/*****************************************************************************/
-/* WAKEUP EVENT SOURCE                                                       */
-/*****************************************************************************/
-
-struct WakeupEventSource : public AsyncEventSource {
-    WakeupEventSource();
-
-    virtual int selectFd() const;
-
-    /** Process a single message and return true if there are more to be
-        processed.
-
-        This may be called from more than one thread.
-    */
-    virtual bool processOne();
-
-private:    
-    ML::Wakeup_Fd wakeup;
-};
-#endif
-
 } // namespace Datacratic
-
-
-#endif /* __service__async_event_source_h__ */
