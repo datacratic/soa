@@ -2,12 +2,12 @@
    Jeremy Barnes, 9 November 2012
 */
 
-#include "async_event_source.h"
+#include <iostream>
 #include <sys/timerfd.h>
 #include "jml/arch/exception.h"
 #include "jml/arch/futex.h"
-#include <iostream>
 #include "message_loop.h"
+#include "async_event_source.h"
 
 
 using namespace std;
@@ -38,6 +38,7 @@ waitConnectionState(int state)
         ML::futex_wait(connectionState_, oldVal);
     }
 }
+
 
 /*****************************************************************************/
 /* PERIODIC EVENT SOURCE                                                     */
