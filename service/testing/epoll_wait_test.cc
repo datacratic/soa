@@ -10,6 +10,7 @@
 
 #include <time.h>
 #include <atomic>
+#include <thread>
 #include <boost/test/unit_test.hpp>
 #include "soa/service/http_endpoint.h"
 //#include <sys/socket.h>
