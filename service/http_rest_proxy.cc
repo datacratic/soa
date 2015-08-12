@@ -14,12 +14,26 @@
 #include "jml/arch/threads.h"
 #include "jml/arch/timers.h"
 #include "soa/types/basic_value_descriptions.h"
+#include "openssl_threading.h"
 
 #include "http_rest_proxy.h"
 
 
 using namespace std;
 using namespace ML;
+using namespace Datacratic;
+
+
+namespace {
+
+struct AtInit {
+    AtInit()
+    {
+        initOpenSSLThreading();
+    }
+} atInit;
+
+}
 
 
 namespace Datacratic {
