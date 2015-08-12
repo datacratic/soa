@@ -37,28 +37,14 @@ bool threadingInit(false);
 
 /* basic lock callbacks */
 
-std::mutex locksLock;
 std::vector<pthread_mutex_t> cryptoLocks; /* vector<std::mutex> is not
                                            * available */
-
-pthread_mutex_t * getOrCreateLock(int n)
-{
-    std::unique_lock<std::mutex> guard(locksLock);
-
-    auto numLocks = cryptoLocks.size();
-    while (numLocks <= n) {
-        cryptoLocks.emplace_back();
-        ::pthread_mutex_init(&cryptoLocks.back(), NULL);
-        numLocks++;
-    }
-
-    return &cryptoLocks[n];
-}
 
 void
 lockingFunc(int mode, int n, const char *, int line)
 {
-    auto * lock = getOrCreateLock(n);
+    pthread_mutex_t * lock = &cryptoLocks[n];
+
     if (mode & CRYPTO_LOCK) {
         ::pthread_mutex_lock(lock);
     }
@@ -125,7 +111,11 @@ initOpenSSLThreading()
         return;
     }
 
+    cryptoLocks.resize(CRYPTO_num_locks());
+    for (size_t i = 0; i < CRYPTO_num_locks(); i++) {
+        ::pthread_mutex_init(&cryptoLocks[i], NULL);
+    }
+
     setupCallbacks();
     threadingInit = true;
 }
-
