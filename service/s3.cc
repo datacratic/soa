@@ -266,6 +266,7 @@ struct S3Downloader {
           offset(startOffset),
           baseChunkSize(1024*1024), // start with 1MB and ramp up
           closed(false),
+          etagChangedException(false),
           readOffset(0),
           readPartOffset(-1),
           currentChunk(0),
@@ -371,6 +372,9 @@ struct S3Downloader {
         while (activeRqs > 0) {
             ML::futex_wait(activeRqs, activeRqs);
         }
+        if (etagChangedException) {
+            handleEtagChange();
+        }
         excPtrHandler.rethrowIfSet();
     }
 
@@ -451,6 +455,9 @@ private:
         unsigned int chunkNr(currentChunk % maxRqs);
         Chunk & chunk = chunks[chunkNr];
         while (!excPtrHandler.hasException() && !chunk.waitResponse(1.0));
+        if (etagChangedException) {
+            handleEtagChange();
+        }
         excPtrHandler.rethrowIfSet();
         readPart = chunk.retrieve();
         readPartOffset = 0;
@@ -525,24 +532,11 @@ private:
                and throw an appropriate exception. */
             string chunkEtag = response.getHeader("etag");
             if (chunkEtag != info.etag) {
-                auto newInfo = api->getObjectInfo(bucket, resource.substr(1));
-                string msg;
-                if (newInfo.lastModified > info.lastModified) {
-                    msg = ML::format("file '%s' has changed during download"
-                                     " (chunk etag differs from file etag)",
-                                     resource.c_str());
-                }
-                else {
-                    string oldLm = info.lastModified.print();
-                    string newLm = newInfo.lastModified.print();
-                    msg = ML::format("anomalous difference between chunk etag"
-                                     " '%s' and initial etag '%s' for file"
-                                     " '%s' (old lm = %s; new lm = %s)",
-                                     chunkEtag.c_str(), info.etag.c_str(),
-                                     resource.c_str(),
-                                     oldLm.c_str(), newLm.c_str());
-                }
-                throw ML::Exception(msg);
+                etagChangedException = true;
+                throw ML::Exception("chunk etag '%s' differs from original"
+                                    " etag '%s' of file '%s'",
+                                    chunkEtag.c_str(), info.etag.c_str(),
+                                    resource.c_str());
             }
             ExcAssertEqual(response.body().size(), chunkSize);
             Chunk & chunk = chunks[chunkNr];
@@ -553,6 +547,18 @@ private:
         }
         activeRqs--;
         ML::futex_wake(activeRqs);
+    }
+
+    void handleEtagChange()
+    {
+        auto newInfo = api->getObjectInfo(bucket, resource.substr(1));
+        ExcAssert(newInfo.lastModified >= info.lastModified);
+        if (newInfo.lastModified == info.lastModified) {
+            cerr << ML::format("etag change: anomalous difference between chunk"
+                               " etag and file etag for file '%s', since last"
+                               " modification date stayed the same\n",
+                               resource.c_str());
+        }
     }
 
     size_t getChunkSize(unsigned int chunkNbr)
@@ -576,6 +582,10 @@ private:
 
     bool closed; /* whether close() was invoked */
     ML::ExceptionPtrHandler excPtrHandler;
+    std::atomic<bool> etagChangedException; /* whether the exception above is
+                                             * due to a difference between the
+                                             * etag of a chunk and the
+                                             * original etag of the object */
 
     /* read thread */
     uint64_t readOffset; /* number of bytes from the entire stream that
