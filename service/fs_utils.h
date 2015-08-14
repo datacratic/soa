@@ -37,7 +37,7 @@ struct FsObjectInfo {
     std::string storageClass;   ///< Storage class of object (S3 only)
     std::string ownerId;        ///< ID of the owner (uid or identifier)
     std::string ownerName;      ///< Name of owner
-
+    std::map<std::string, std::string> metadata; ///< user-defined metadata
     JML_IMPLEMENT_OPERATOR_BOOL(exists);
 };
 

@@ -473,7 +473,7 @@ performSync() const
         // curlpp::InfoGetter::get(myRequest, CURLINFO_SIZE_UPLOAD,
         //                         bytesUploaded);
 
-        //cerr << "uploaded " << bytesUploaded << " bytes" << endl;
+//        cerr << "uploaded " << bytesUploaded << " bytes" << endl;
 
         Response response;
         response.code_ = responseCode;
@@ -928,7 +928,7 @@ upload(const char * data,
     // Contains the resource without the leading slash
     string outputPrefix(resource, 1);
 
-    //cerr << "need to upload " << dataSize << " bytes" << endl;
+    cerr << "!!!!need to upload " << dataSize << " bytes" << endl;
 
     // Check if it's already there
 
@@ -1176,6 +1176,21 @@ ObjectInfo(const S3Api::Response & response)
     storageClass = ""; // Not available in headers
     ownerId = "";      // Not available in headers
     ownerName = "";    // Not available in headers
+    const string metaprefix = "x-amz-meta-";
+    unsigned int metalen = metaprefix.length();
+    for ( const auto & kv : response.header_.headers)
+    {
+        std::size_t found = kv.first.find(metaprefix) ;
+        if(found != std::string::npos)
+        {
+            // before storing we strip out the meta prefix so that the results
+            // match what was inserted by the client
+            string trimmed = kv.second;
+            boost::trim_if(trimmed, boost::algorithm::is_any_of("\""));
+            metadata[kv.first.substr(metalen)] = trimmed;
+//            cerr << kv.first.substr(metalen) << ":" << trimmed << endl;
+        }
+    }
 }
 
 
@@ -1425,7 +1440,6 @@ tryGetObjectInfoShort(const std::string & bucket, const std::string & object)
     if (res.code_ != 200) {
         throw ML::Exception("error getting object");
     }
-
     return ObjectInfo(res);
 }
 
@@ -2254,6 +2268,10 @@ makeStreamingUpload(const std::string & uri,
                     const S3Api::ObjectMetadata & metadata)
 {
     std::unique_ptr<std::streambuf> result;
+
+    auto reqHeaders = metadata.getRequestHeaders();
+    for ( const auto & val : reqHeaders)
+        cerr << val.first << ":" << val.second;
     result.reset(new boost::iostreams::stream_buffer<StreamingUploadSource>
                  (StreamingUploadSource(uri, onException, metadata),
                   131072));
@@ -2552,6 +2570,15 @@ struct RegisterS3Handler {
                 else if(name == "num-threads")
                 {
                     md.numThreads = std::stoi(value);
+                }
+                else if(name == "metadata")
+                {
+                    Json::Value kv = Json::parse(value);
+                    for (auto it = kv.begin(); it != kv.end(); ++it)
+                    {
+                        cerr << it.memberName() << ":" << "<" << (*it).toStringNoNewLine() << ">" << endl;
+                        md.metadata[it.memberName()] = (*it).toStringNoNewLine() ;
+                    }
                 }
                 else {
                     cerr << "warning: skipping unknown S3 option "
