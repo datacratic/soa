@@ -1204,6 +1204,18 @@ fromTm(const tm & t)
     return fromTimeT(t3);
 }
 
+struct timespec
+Date::
+toTimeSpec()
+    const
+{
+    struct timespec ts;
+
+    ts.tv_sec = time_t(secondsSinceEpoch_);
+    ts.tv_nsec = (secondsSinceEpoch_ - ts.tv_sec) * 1000000000;
+
+    return ts;
+}
 
 void Date::addFromString(string str){
     {

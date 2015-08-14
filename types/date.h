@@ -400,6 +400,9 @@ struct Date {
     /** Construct from a tm structure. */
     static Date fromTm(const tm & t);
 
+    /** Convert to a timesspec structure. */
+    struct timespec toTimeSpec() const;
+
     /** expects a ^[1-9][0-9]*[SMHd]$ string */
     void addFromString(std::string);
 
