@@ -540,6 +540,7 @@ EndpointBase::
 doMinCtxSwitchPolling(int threadNum, int numThreads)
 {
     bool debug = false;
+    int epoch = 0;
     //debug = name() == "Backchannel";
     //debug = threadNum == 7;
 
@@ -600,6 +601,23 @@ doMinCtxSwitchPolling(int threadNum, int numThreads)
                  << " fracms = " << fracms << " myStartUs = "
                  << myStartUs << " myEndUs = " << myEndUs
                  << endl;
+        }
+
+        // sync with the loop monitor request
+        int i = resourceEpoch;
+        if(i != epoch) {
+            // query the kernel for performance metrics
+            rusage now;
+            getrusage(RUSAGE_THREAD, &now);
+
+            // if we're just started, assume we know nothing and don't update the usage
+            long s = now.ru_utime.tv_sec+now.ru_stime.tv_sec;
+            if(s > 1) {
+                std::lock_guard<std::mutex> guard(usageLock);
+                resourceUsage[threadNum] = now;
+            }
+
+            epoch = i;
         }
 
         // Are we in our timeslice?
