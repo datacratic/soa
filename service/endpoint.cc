@@ -117,7 +117,6 @@ spinup(int num_threads, bool synchronous)
 
     threadsActive_ = 0;
 
-    totalSleepTime.resize(num_threads, 1.0);
     resourceUsage.resize(num_threads);
 
     for (unsigned i = 0;  i < num_threads;  ++i) {
@@ -628,7 +627,6 @@ doMinCtxSwitchPolling(int threadNum, int numThreads)
             if (usToWait < 0 || usToWait > timesliceUs)
                 usToWait = timesliceUs;
 
-            totalSleepTime[threadNum] += double(usToWait) / 1000000.0;
             int numHandled = handleEvents(usToWait, 4, handleEvent,
                                           beforeSleep, afterSleep);
             if (debug && false)
@@ -659,7 +657,6 @@ doMinCtxSwitchPolling(int threadNum, int numThreads)
                     cerr << "sleeping for " << usToSleep << " micros" << endl;
 
                 double secToSleep = double(usToSleep) / 1000000.0;
-                totalSleepTime[threadNum] += secToSleep;
 
                 ML::sleep(secToSleep);
                 duty.notifyAfterSleep();
