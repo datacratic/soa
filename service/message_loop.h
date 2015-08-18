@@ -7,16 +7,19 @@
 
 #pragma once
 
-#include <thread>
 #include <functional>
+#include <memory>
+#include <thread>
+#include <vector>
 
 #include "jml/arch/wakeup_fd.h"
 #include "jml/arch/spinlock.h"
 
 #include "epoller.h"
 #include "async_event_source.h"
-#include "typed_message_channel.h"
 #include "logs.h"
+#include "timer_event_source.h"
+#include "typed_message_channel.h"
 
 namespace Datacratic {
 
@@ -32,9 +35,10 @@ struct MessageLoopLogs
     static Logging::Category trace;
 };
 
-/*****************************************************************************/
-/* MESSAGE LOOP                                                              */
-/*****************************************************************************/
+
+/****************************************************************************/
+/* MESSAGE LOOP                                                             */
+/****************************************************************************/
 
 struct MessageLoop : public Epoller {
     typedef std::function<void ()> OnStop;
@@ -90,7 +94,13 @@ struct MessageLoop : public Epoller {
                      double timePeriodSeconds,
                      std::function<void (uint64_t)> toRun,
                      int priority = 0);
-    
+
+    /* Adds a timer */
+    void addTimer(double delay, const TimerEventSource::OnTick & onTick)
+    {
+        timerSource_->addTimer(delay, onTick);
+    }
+
     typedef std::function<void (volatile int & shutdown_,
                                 int64_t threadId)> SubordinateThreadFn;
 
@@ -214,6 +224,8 @@ private:
     void processAddSource(const SourceEntry & entry);
     void processRemoveSource(const SourceEntry & entry);
     void processRunAction(const SourceEntry & entry);
+
+    std::shared_ptr<TimerEventSource> timerSource_;
 };
 
 } // namespace Datacratic

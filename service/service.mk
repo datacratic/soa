@@ -53,6 +53,7 @@ LIBSERVICES_SOURCES := \
 	async_event_source.cc \
 	async_writer_source.cc \
 	tcp_client.cc \
+	timer_event_source.cc \
 	rest_service_endpoint.cc \
 	http_named_endpoint.cc \
 	rest_proxy.cc \
