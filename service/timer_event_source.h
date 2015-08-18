@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include "soa/types/date.h"
 #include "async_event_source.h"
@@ -33,7 +34,10 @@ struct TimerEventSource : public AsyncEventSource {
     virtual bool processOne();
 
     /* Adds a timer */
-    void addTimer(double delay, const OnTick & onTick);
+    uint64_t addTimer(double delay, const OnTick & onTick);
+
+    /* Cancel the given timer, returning true when the timer is found */
+    bool cancelTimer(uint64_t timerId);
 
 private:
     typedef std::mutex TimersLock;
@@ -45,19 +49,20 @@ private:
         OnTick onTick;
         Date nextTick;
         Date lastTick;
+        uint64_t timerId;
     };
 
     void onTimerTick();
-    void insertTimer(std::shared_ptr<Timer> && timer);
-    std::vector<std::shared_ptr<Timer> > collectTriggeredTimers(Date refDate);
+    void insertTimer(Timer && timer);
+    std::vector<Timer> collectTriggeredTimers(Date refDate);
     void adjustNextTick(Date now);
 
     int timerFd_;
+    std::atomic<uint64_t> counter_;
 
     TimersLock timersLock_;
-    std::vector<std::shared_ptr<Timer> > timerQueue_;
+    std::vector<Timer> timerQueue_;
     Date nextTick_;
 };
 
 } // namespace Datacratic
-

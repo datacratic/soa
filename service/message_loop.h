@@ -95,10 +95,18 @@ struct MessageLoop : public Epoller {
                      std::function<void (uint64_t)> toRun,
                      int priority = 0);
 
-    /* Adds a timer */
-    void addTimer(double delay, const TimerEventSource::OnTick & onTick)
+    /* Add a timer. Returns an id that is guaranteed to be > 0, which enables
+     * "0" to be used as a test value. */
+    uint64_t addTimer(double delay, const TimerEventSource::OnTick & onTick)
     {
-        timerSource_->addTimer(delay, onTick);
+        return timerSource_->addTimer(delay, onTick);
+    }
+
+    /* Cancel a timer. Return "true" when the corresponding timer could be
+       found and deleted and "false" otherwise. */
+    bool cancelTimer(uint64_t timerId)
+    {
+        return timerSource_->cancelTimer(timerId);
     }
 
     typedef std::function<void (volatile int & shutdown_,

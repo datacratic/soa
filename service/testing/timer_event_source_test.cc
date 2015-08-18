@@ -16,7 +16,7 @@ using namespace std;
 using namespace Datacratic;
 
 
-BOOST_AUTO_TEST_CASE( test_addSource_with_needsPoll )
+BOOST_AUTO_TEST_CASE( test_addTimer )
 {
     ML::Watchdog wd(10);
     std::atomic<int> ticks(0);
@@ -40,6 +40,36 @@ BOOST_AUTO_TEST_CASE( test_addSource_with_needsPoll )
         }
         ML::sleep(1);
     }
+
+    loop.shutdown();
+}
+
+
+BOOST_AUTO_TEST_CASE( test_cancelTimer )
+{
+    ML::Watchdog wd(10);
+    std::atomic<int> ticks(0);
+    MessageLoop loop(1, 0, -1);
+    loop.start();
+    auto timer = make_shared<TimerEventSource>();
+    loop.addSource("timer", timer);
+    timer->waitConnectionState(AsyncEventSource::CONNECTED);
+
+    auto onTick = [&] (uint64_t) {
+        Date now = Date::now();
+        ticks++;
+        return true;
+    };
+    auto timerId = timer->addTimer(0.2, onTick);
+    BOOST_CHECK(timerId > 0);
+
+    ML::sleep(1);
+    BOOST_CHECK_EQUAL(timer->cancelTimer(timerId), true);
+    BOOST_CHECK_NE(ticks, 0);
+    int oldTicks = ticks;
+    ML::sleep(1);
+    BOOST_CHECK_EQUAL(ticks, oldTicks);
+    BOOST_CHECK_EQUAL(timer->cancelTimer(timerId), false);
 
     loop.shutdown();
 }

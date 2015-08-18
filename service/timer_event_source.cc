@@ -20,6 +20,7 @@ using namespace Datacratic;
 TimerEventSource::
 TimerEventSource()
     : timerFd_(::timerfd_create(CLOCK_REALTIME, TFD_NONBLOCK | TFD_CLOEXEC)),
+      counter_(1),
       nextTick_(Date::negativeInfinity())
 {
     if (timerFd_ == -1) {
@@ -73,14 +74,14 @@ TimerEventSource::
 onTimerTick()
 {
     Date now = Date::now();
-    vector<shared_ptr<Timer> > triggered = collectTriggeredTimers(now);
+    vector<Timer> triggered = collectTriggeredTimers(now);
 
     for (auto & timer: triggered) {
-        double interval = timer->lastTick.secondsUntil(now);
-        uint64_t numTicks = (uint64_t) ::floor(interval / timer->interval);
-        if (timer->onTick(numTicks)) {
-            timer->lastTick = now;
-            timer->nextTick = now.plusSeconds(timer->interval);
+        double interval = timer.lastTick.secondsUntil(now);
+        uint64_t numTicks = (uint64_t) ::floor(interval / timer.interval);
+        if (timer.onTick(numTicks)) {
+            timer.lastTick = now;
+            timer.nextTick = now.plusSeconds(timer.interval);
             insertTimer(move(timer));
         }
     }
@@ -88,19 +89,27 @@ onTimerTick()
     adjustNextTick(now);
 }
 
-vector<shared_ptr<TimerEventSource::Timer> >
+vector<TimerEventSource::Timer>
 TimerEventSource::
 collectTriggeredTimers(Date refDate)
 {
-    vector<shared_ptr<Timer> > triggered;
-    vector<shared_ptr<Timer> > newQueue;
-
+    vector<Timer> triggered;
     TimersGuard guard(timersLock_);
-    for (auto & timer: timerQueue_) {
-        auto & target = (timer->nextTick < refDate) ? triggered : newQueue;
-        target.emplace_back(move(timer));
+
+    size_t nbrTriggered, nbrTimers(timerQueue_.size());
+    for (nbrTriggered = 0; nbrTriggered < nbrTimers; nbrTriggered++) {
+        if (timerQueue_[nbrTriggered].nextTick > refDate) {
+            break;
+        }
     }
-    timerQueue_ = move(newQueue);
+
+    if (nbrTriggered > 0) {
+        triggered.reserve(nbrTriggered);
+        for (size_t i = 0; i < nbrTriggered; i++) {
+            triggered.emplace_back(move(timerQueue_[i]));
+        }
+        timerQueue_.erase(timerQueue_.begin(), timerQueue_.begin() + nbrTriggered);
+    }
 
     return triggered;
 }
@@ -113,7 +122,7 @@ adjustNextTick(Date now)
 
     Date negInfinity = Date::negativeInfinity();
     Date nextTick = ((timerQueue_.size() > 0)
-                     ? timerQueue_[0]->nextTick
+                     ? timerQueue_[0].nextTick
                      : negInfinity);
 
     if (nextTick != nextTick_) {
@@ -133,30 +142,52 @@ adjustNextTick(Date now)
     }
 }
 
-
-void
+uint64_t
 TimerEventSource::
 addTimer(double delay, const OnTick & onTick)
 {
     Date now = Date::now();
-    auto newTimer = make_shared<Timer>(Timer{delay, onTick});
-    newTimer->nextTick = now.plusSeconds(delay);
-    newTimer->lastTick = Date::negativeInfinity();
+    uint64_t timerId = counter_.fetch_add(1);
+    ExcAssert(timerId != 0); // ensure we never reach the upper limit during a
+                             // program's lifetime
+
+    Timer newTimer{delay, onTick};
+    newTimer.nextTick = now.plusSeconds(delay);
+    newTimer.lastTick = Date::negativeInfinity();
+    newTimer.timerId = timerId;
     insertTimer(move(newTimer));
     adjustNextTick(now);
+
+    return timerId;
 }
 
 void
 TimerEventSource::
-insertTimer(shared_ptr<Timer> && timer)
+insertTimer(Timer && timer)
 {
     TimersGuard guard(timersLock_);
 
-    auto timerCompare = [&] (const shared_ptr<Timer> & left,
-                             const shared_ptr<Timer> & right) {
-        return left->nextTick < right->nextTick;
+    auto timerCompare = [&] (const Timer & left,
+                             const Timer & right) {
+        return left.nextTick < right.nextTick;
     };
     auto loc = lower_bound(timerQueue_.begin(), timerQueue_.end(),
                            timer, timerCompare);
     timerQueue_.insert(loc, move(timer));
+}
+
+bool
+TimerEventSource::
+cancelTimer(uint64_t timerId)
+{
+    TimersGuard guard(timersLock_);
+
+    for (auto it = timerQueue_.begin(); it != timerQueue_.end(); it++) {
+        if (it->timerId == timerId) {
+            timerQueue_.erase(it);
+            return true;
+        }
+    }
+
+    return false;
 }
