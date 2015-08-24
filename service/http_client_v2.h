@@ -102,12 +102,9 @@ private:
 /* HTTP CLIENT V2                                                           */
 /****************************************************************************/
 
-struct HttpClientV2 : public AsyncEventSource,
-                      public HttpClientImpl {
+struct HttpClientV2 : public HttpClientImpl {
     HttpClientV2(const std::string & baseUrl,
                  int numParallel, size_t queueSize);
-    HttpClientV2(HttpClient && other) = delete;
-    HttpClientV2(const HttpClient & other) = delete;
 
     ~HttpClientV2();
 
@@ -150,8 +147,6 @@ private:
     MessageLoop loop_;
 
     std::string baseUrl_;
-
-    bool debug_;
 
     std::vector<HttpConnection *> avlConnections_;
     size_t nextAvail_;

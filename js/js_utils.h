@@ -27,6 +27,7 @@
 #include <boost/type_traits/is_pod.hpp>
 #include <boost/bind.hpp>
 #include <tuple>
+#include <array>
 
 namespace ML {
 
@@ -88,12 +89,12 @@ v8::Handle<v8::Value> injectBacktrace(v8::Handle<v8::Value> value);
     exceptions. */
 #define HANDLE_JS_EXCEPTIONS                                    \
     catch (...) {                                               \
-        return translateCurrentException();                     \
+        return Datacratic::JS::translateCurrentException();     \
     }
 
 #define HANDLE_JS_EXCEPTIONS_SETTER                             \
     catch (...) {                                               \
-        translateCurrentException();                            \
+        Datacratic::JS::translateCurrentException();            \
         return;                                                 \
     }
 
@@ -173,6 +174,16 @@ void to_js(JSValue & val, const std::shared_ptr<T> & p)
 
 template<typename T>
 void to_js(JSValue & val, const std::vector<T> & v)
+{
+    v8::HandleScope scope;
+    v8::Local<v8::Array> arr(v8::Array::New(v.size()));
+    for (unsigned i = 0;  i < v.size();  ++i)
+        arr->Set(v8::Uint32::New(i), toJS(v[i]));
+    val = scope.Close(arr);
+}
+
+template<typename T, std::size_t SIZE>
+void to_js(JSValue & val, const std::array<T, SIZE> & v)
 {
     v8::HandleScope scope;
     v8::Local<v8::Array> arr(v8::Array::New(v.size()));

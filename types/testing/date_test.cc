@@ -185,6 +185,14 @@ BOOST_AUTO_TEST_CASE( test_from_timespec )
     BOOST_CHECK_EQUAL(secs, 1.987123456);
 }
 
+BOOST_AUTO_TEST_CASE( test_to_timespec )
+{
+    Date date = Date::fromSecondsSinceEpoch(1.987123456);
+    struct timespec ts = date.toTimeSpec();
+    BOOST_CHECK_EQUAL(ts.tv_sec, 1);
+    BOOST_CHECK_EQUAL(ts.tv_nsec, 987123456);
+}
+
 BOOST_AUTO_TEST_CASE( test_microsecond_date )
 {
     Date d = Date::now();

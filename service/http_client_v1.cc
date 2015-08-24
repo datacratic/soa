@@ -22,8 +22,9 @@
 #include "jml/utils/guard.h"
 #include "jml/utils/string_functions.h"
 
-#include "singleton_loop.h"
 #include "http_header.h"
+#include "message_loop.h"
+#include "openssl_threading.h"
 
 #include "http_client_v1.h"
 
@@ -34,6 +35,14 @@ using namespace Datacratic;
 namespace curlopt = curlpp::options;
 
 namespace {
+
+struct AtInit {
+    AtInit()
+    {
+        initOpenSSLThreading();
+    }
+} atInit;
+
 
 HttpClientError
 translateError(CURLcode curlError)
@@ -65,16 +74,6 @@ translateError(CURLcode curlError)
     }
 
     return error;
-}
-
-SingletonLoop &
-getHTTPClientLoop()
-{
-    static SingletonLoop loop;
-
-    loop.start();
-
-    return loop;
 }
 
 } // file scope
@@ -137,16 +136,11 @@ HttpClientV1(const string & baseUrl, int numParallel, int queueSize)
     }
 
     success = true;
-
-    SingletonLoop & loop = getHTTPClientLoop();
-    loop.addSource(*this);
 }
 
 HttpClientV1::
 ~HttpClientV1()
 {
-    SingletonLoop & loop = getHTTPClientLoop();
-    loop.removeSource(*this);
     cleanupFds();
 }
 
@@ -154,7 +148,7 @@ void
 HttpClientV1::
 enableDebug(bool value)
 {
-    debug_ = value;
+    debug(value);
 }
 
 void

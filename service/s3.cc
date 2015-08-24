@@ -274,6 +274,7 @@ performSync() const
     bool useRange = (params.verb == "GET" && currentRange != Range::Full);
 
     string body;
+
     for (int i = 0; i < numRetries; ++i) {
         if (i > 0) {
             /* allow a maximum of 384 seconds for retry delays (1 << 7 * 3) */
@@ -293,7 +294,7 @@ performSync() const
 
         string responseHeaders;
         string responseBody;
-        int responseCode(0);
+        long int responseCode(0);
         size_t received(0);
 
         auto connection = owner->proxy.getConnection();
@@ -434,6 +435,7 @@ performSync() const
                 message += (string("body (") + to_string(responseBody.size())
                             + " bytes):\n" + responseBody + "\n");
             }
+
 
             /* log so-called "REST error"
                (http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html)
@@ -1388,7 +1390,7 @@ tryGetObjectInfoFull(const std::string & bucket, const std::string & object)
     auto listingResult = get(bucket, "/", Range::Full, "", {}, queryParams);
     if (listingResult.code_ != 200) {
         cerr << listingResult.bodyXmlStr() << endl;
-        throw ML::Exception("error getting object request: %d",
+        throw ML::Exception("error getting object request: %ld",
                             listingResult.code_);
     }
     auto listingResultXml = listingResult.bodyXml();
@@ -1456,7 +1458,7 @@ eraseObject(const std::string & bucket,
 
     if (response.code_ != 204) {
         cerr << response.bodyXmlStr() << endl;
-        throw ML::Exception("error erasing object request: %d",
+        throw ML::Exception("error erasing object request: %ld",
                             response.code_);
     }
 }

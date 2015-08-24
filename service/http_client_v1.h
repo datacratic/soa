@@ -33,8 +33,7 @@ namespace Datacratic {
 /* HTTP CLIENT V1                                                           */
 /****************************************************************************/
 
-struct HttpClientV1 : public AsyncEventSource,
-                      public HttpClientImpl {
+struct HttpClientV1 : public HttpClientImpl {
     HttpClientV1(const std::string & baseUrl,
                  int numParallel, int queueSize);
 
@@ -122,7 +121,6 @@ private:
     void releaseConnection(HttpConnection * connection);
 
     std::string baseUrl_;
-    bool debug_;
     bool expect100Continue_;
     bool tcpNoDelay_;
     bool noSSLChecks_;

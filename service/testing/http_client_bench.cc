@@ -15,6 +15,7 @@
 #include "soa/service/http_client.h"
 #include "soa/service/http_endpoint.h"
 #include "soa/service/named_endpoint.h"
+#include "soa/service/message_loop.h"
 #include "soa/service/rest_proxy.h"
 #include "soa/service/rest_service_endpoint.h"
 #include "soa/service/runner.h"
@@ -38,8 +39,13 @@ AsyncModelBench(HttpMethod method,
                 int maxReqs, int concurrency)
 {
     int numReqs, numResponses(0), numMissed(0);
+    MessageLoop loop(1, 0, -1);
+    loop.start();
 
     auto client = make_shared<HttpClient>(baseUrl, concurrency);
+    loop.addSource("client", client);
+    client->waitConnectionState(AsyncEventSource::CONNECTED);
+
     auto onResponse = [&] (const HttpRequest & rq, HttpClientError errorCode_,
                            int status, string && headers, string && body) {
         numResponses++;
@@ -91,6 +97,9 @@ AsyncModelBench(HttpMethod method,
     }
     Date end = Date::now();
 
+    loop.removeSource(client.get());
+    client->waitConnectionState(AsyncEventSource::DISCONNECTED);
+
     cerr << "num misses: "  + to_string(numMissed) + "\n";
 
     return end - start;
@@ -138,11 +147,12 @@ int main(int argc, char *argv[])
 {
     using namespace boost::program_options;
 
-    size_t concurrency(0);
+    unsigned int concurrency(0);
+    unsigned int serverConcurrency(0);
     int model(0);
-    size_t maxReqs(0);
+    unsigned int maxReqs(0);
     string method("GET");
-    size_t payloadSize(0);
+    unsigned int payloadSize(0);
 
     string serveriface("127.0.0.1");
     string clientiface(serveriface);
@@ -153,6 +163,8 @@ int main(int argc, char *argv[])
          "address:port to connect to (\"none\" for no client)")
         ("concurrency,c", value(&concurrency),
          "Number of concurrent requests")
+        ("server-concurrency", value(&serverConcurrency),
+         "Number of server worker threads (defaults to \"concurrency\")")
         ("method,M", value(&method),
          "Method to use (\"GET\"*, \"PUT\", \"POST\")")
         ("model,m", value(&model),
@@ -189,6 +201,9 @@ int main(int argc, char *argv[])
     if (concurrency == 0) {
         throw ML::Exception("'concurrency' must be specified");
     }
+    if (serverConcurrency == 0) {
+        serverConcurrency = concurrency;
+    }
 
     if (payloadSize == 0) {
         throw ML::Exception("'payload-size' must be specified");
@@ -206,7 +221,7 @@ int main(int argc, char *argv[])
         service.addResponse("GET", "/", 200, payload);
         service.addResponse("PUT", "/", 200, "");
         service.addResponse("POST", "/", 200, "");
-        service.start(serveriface, concurrency);
+        service.start(serveriface, serverConcurrency);
     }
 
     if (clientiface != "none") {
@@ -256,7 +271,7 @@ int main(int argc, char *argv[])
         }
         double qps = maxReqs / delta;
         double bps = double(maxReqs * payload.size()) / delta;
-        ::printf("%d\t%lu\t%lu\t%lu\t%f\t%f\t%f\n",
+        ::printf("%d\t%u\t%u\t%u\t%f\t%f\t%f\n",
                  model, concurrency, maxReqs, payloadSize, delta, bps, qps);
     }
     else {

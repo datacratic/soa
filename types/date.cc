@@ -1187,7 +1187,7 @@ toTm() const
     errno = 0;
     time_t t = toTimeT();
     if (gmtime_r(&t, &result) == 0)
-        throw ML::Exception("error converting time: t = %lld",
+        throw ML::Exception("error converting time: t = %lld (%s)",
                             (long long)t,
                             strerror(errno));
     return result;
@@ -1204,6 +1204,18 @@ fromTm(const tm & t)
     return fromTimeT(t3);
 }
 
+struct timespec
+Date::
+toTimeSpec()
+    const
+{
+    struct timespec ts;
+
+    ts.tv_sec = time_t(secondsSinceEpoch_);
+    ts.tv_nsec = (secondsSinceEpoch_ - ts.tv_sec) * 1000000000;
+
+    return ts;
+}
 
 void Date::addFromString(string str){
     {

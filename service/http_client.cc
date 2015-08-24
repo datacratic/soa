@@ -6,7 +6,6 @@
 #include "http_client.h"
 #include "http_client_v1.h"
 #include "http_client_v2.h"
-#include "http_client_v3.h"
 
 using namespace std;
 using namespace Datacratic;
@@ -31,9 +30,6 @@ struct AtInit {
         }
         else if (::strcmp(value, "2") == 0) {
             httpClientImplVersion = 2;
-        }
-        else if (::strcmp(value, "3") == 0) {
-            httpClientImplVersion = 3;
         }
         else {
             ::fprintf(stderr, "HttpClient: no handling for HttpClientImpl"
@@ -65,7 +61,7 @@ void
 HttpClient::
 setHttpClientImplVersion(int version)
 {
-    if (version < 1 || version > 3) {
+    if (version < 1 || version > 2) {
         throw ML::Exception("invalid value for 'version': "
                             + to_string(version));
     }
@@ -98,14 +94,6 @@ HttpClient(const string & baseUrl, int numParallel, int queueSize,
         }
         else {
             impl.reset(new HttpClientV2(baseUrl, numParallel, queueSize));
-        }
-    }
-    else if (implVersion == 3) {
-        if (isHttps) {
-            impl.reset(new HttpClientV1(baseUrl, numParallel, queueSize));
-        }
-        else {
-            impl.reset(new HttpClientV3(baseUrl, numParallel, queueSize));
         }
     }
     else {

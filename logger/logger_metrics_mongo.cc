@@ -1,18 +1,30 @@
-#include "logger_metrics_mongo.h"
+/* logger_metrics_interface.cc
+   François-Michel L'Heureux, 21 May 2013
+   Copyright (c) 2013 Datacratic.  All rights reserved.
+*/
+
 #include "mongo/bson/bson.h"
 #include "mongo/util/net/hostandport.h"
 #include "jml/utils/string_functions.h"
+#include "logger_metrics_mongo.h"
 
-namespace Datacratic{
 
 using namespace std;
 using namespace mongo;
+using namespace Datacratic;
 
-LoggerMetricsMongo::LoggerMetricsMongo(Json::Value config,
-    const string& coll, const string& appName) : ILoggerMetrics(coll)
+
+/****************************************************************************/
+/* LOGGER METRICS MONGO                                                     */
+/****************************************************************************/
+
+LoggerMetricsMongo::
+LoggerMetricsMongo(Json::Value config, const string & coll,
+                   const string & appName)
+    : ILoggerMetrics(coll)
 {
-    for(string s: {"hostAndPort", "database", "user", "pwd"}){
-        if(config[s].isNull()){
+    for (const string & s: {"hostAndPort", "database", "user", "pwd"}) {
+        if (config[s].isNull()) {
             throw ML::Exception("Missing LoggerMetricsMongo parameter [%s]",
                                 s.c_str());
         }
@@ -22,23 +34,21 @@ LoggerMetricsMongo::LoggerMetricsMongo(Json::Value config,
     if (hapStrs.size() > 1) {
         vector<HostAndPort> haps;
         for (const string & hapStr: hapStrs) {
-               haps.emplace_back(hapStr);
+            haps.emplace_back(hapStr);
         }
         conn.reset(new mongo::DBClientReplicaSet(hapStrs[0], haps, 100));
     }
     else {
-        std::shared_ptr<DBClientConnection> tmpConn =
-            make_shared<DBClientConnection>();
+        auto tmpConn = make_shared<DBClientConnection>();
         tmpConn->connect(hapStrs[0]);
         conn = tmpConn;
     }
     db = config["database"].asString();
     string err;
-    if(!conn->auth(db, config["user"].asString(),
-                  config["pwd"].asString(), err))
-    {
-        throw ML::Exception(
-            "MongoDB connection failed with msg [%s]", err.c_str());
+    if (!conn->auth(db, config["user"].asString(), config["pwd"].asString(),
+                    err)) {
+        throw ML::Exception("MongoDB connection failed with msg [%s]",
+                            err.c_str());
     }
     BSONObj obj = BSON(GENOID);
     conn->insert(db + "." + coll, obj);
@@ -46,92 +56,140 @@ LoggerMetricsMongo::LoggerMetricsMongo(Json::Value config,
     logToTerm = config["logToTerm"].asBool();
 }
 
-void LoggerMetricsMongo::logInCategory(const string& category,
-    const Json::Value& json)
+void
+LoggerMetricsMongo::
+logInCategory(const string & category, const Json::Value & json)
 {
     BSONObjBuilder bson;
     vector<string> stack;
-    function<void(const Json::Value&)> doit;
+    function<void(const Json::Value &)> doit;
 
-    auto format = [](const Json::Value& v) -> string{
-        string str = v.toString();
-        if(v.isInt() || v.isUInt() || v.isDouble() || v.isNumeric()){
-            return str.substr(0, str.length() - 1);
-        }
-        return str.substr(1, str.length() - 3);
-    };
-
-    doit = [&](const Json::Value& v){
-        for(auto it = v.begin(); it != v.end(); ++it){
-            if(v[it.memberName()].isObject()){
-                stack.push_back(it.memberName());
-                doit(v[it.memberName()]);
+    doit = [&] (const Json::Value & v) {
+        for (auto it = v.begin(); it != v.end(); ++it) {
+            string memberName = it.memberName();
+            if (v[memberName].isObject()) {
+                if (memberName.find(".") != std::string::npos) {
+                    throw ML::Exception("mongo does not support dotted keys,"
+                            " hence \"%s\" is invalid", memberName.c_str());
+                }
+                stack.push_back(memberName);
+                doit(v[memberName]);
                 stack.pop_back();
-            }else{
-                Json::Value current = v[it.memberName()];
+            }
+            else {
+                Json::Value current = v[memberName];
                 stringstream key;
                 key << category;
-                for(string s: stack){
+                for (const string & s: stack) {
                     key << "." << s;
                 }
-                key << "." << it.memberName();
-                if(current.isArray()){
+                key << "." << memberName;
+                if (current.isArray()) {
                     BSONArrayBuilder arr;
-                    for(const Json::Value el: current){
-                        arr.append(format(el));
+                    for (const Json::Value el: current) {
+                        if (el.isInt()) {
+                            arr.append(el.asInt());
+                        }
+                        else if (el.isUInt()) {
+                            arr.append((uint32_t)el.asUInt());
+                        }
+                        else if (el.isDouble()) {
+                            arr.append(el.asDouble());
+                        }
+                        else {
+                            arr.append(el.asString());
+                        }
                     }
                     bson.append(key.str(), arr.arr());
-                }else{
-                    bson.append(key.str(), format(current));
+                }
+                else {
+                    if (current.isInt()) {
+                        bson.append(key.str(), current.asInt());
+                    }
+                    else if (current.isUInt()) {
+                        bson.append(key.str(), (uint32_t)current.asUInt());
+                    }
+                    else if (current.isDouble()) {
+                        bson.append(key.str(), current.asDouble());
+                    }
+                    else {
+                        bson.append(key.str(), current.asString());
+                    }
                 }
             }
         }
     };
     doit(json);
 
-    if(logToTerm){
+    if (logToTerm) {
         cout << objectId << "." << coll << "." << category 
              << ": " << json.toStyledString() << endl;
     }
 
-    conn->update(db + "." + coll,
-                BSON("_id" << objectId),
-                BSON("$set" << bson.obj()),
-                    true);
+    conn->update(db + "." + coll, BSON("_id" << objectId),
+                 BSON("$set" << bson.obj()), true);
 }
 
-void LoggerMetricsMongo
-::logInCategory(const std::string& category,
-              const std::vector<std::string>& path,
-              const NumOrStr& val)
+void
+LoggerMetricsMongo::
+logInCategory(const std::string & category,
+              const std::vector<std::string> & path,
+              const NumOrStr & val)
 {
-    if(path.size() == 0){
-        throw new ML::Exception(
-            "You need to specify a path where to log the value");
+    if (path.empty()) {
+        throw ML::Exception("You need to specify a path where to log"
+                            " the value");
     }
-    stringstream ss;
-    ss << val;
     stringstream newCat;
     newCat << category;
-    for(string part: path){
+    for (const string & part: path) {
+        if (part.find(".") != std::string::npos) {
+            throw ML::Exception("mongo does not support dotted keys,"
+                    " hence \"%s\" is invalid", part.c_str());
+        }
         newCat << "." << part;
     }
     string newCatStr = newCat.str();
-    string str = ss.str();
     
-    if(logToTerm){
-        cout << newCatStr << ": " << str << endl;
+    BSONObj bsonObj;
+    //reference
+    //typedef boost::variant<int, float, double, size_t, uint32_t, String> NumOrStr;
+    int type = val.which();
+    if (type == 0) {
+        bsonObj = BSON(newCatStr << boost::get<int>(val));
     }
-    conn->update(db + "." + coll,
-                BSON("_id" << objectId),
-                BSON("$set" 
-                    << BSON(newCatStr << str)),
-                true);
+    else if (type == 1) {
+        bsonObj = BSON(newCatStr << boost::get<float>(val));
+    }
+    else if (type == 2) {
+        bsonObj = BSON(newCatStr << boost::get<double>(val));
+    }
+    else if (type == 3) {
+        bsonObj = BSON(newCatStr << (int)boost::get<size_t>(val));
+    }
+    else if (type == 4) {
+        bsonObj = BSON(newCatStr << boost::get<uint32_t>(val));
+    }
+    else {
+        stringstream ss;
+        ss << val;
+        string str = ss.str();
+        if (type != 5) {
+            cerr << "Unknown type of NumOrStr for value: " << str << endl;
+        }
+        bsonObj = BSON(newCatStr << str);
+    }
+    if (logToTerm) {
+        cerr << bsonObj.toString() << endl;
+    }
+    conn->update(db + "." + coll, BSON("_id" << objectId),
+                 BSON("$set" << bsonObj), true);
 }
 
-const std::string LoggerMetricsMongo::getProcessId() const{
+std::string
+LoggerMetricsMongo::
+getProcessId()
+    const
+{
     return objectId.toString(); 
 }
-
-
-}//namespace Datacratic

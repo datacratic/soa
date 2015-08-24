@@ -255,3 +255,55 @@ BOOST_AUTO_TEST_CASE( http_parser_chunked_encoding_test )
     BOOST_CHECK_EQUAL(numResponses, 3);
 }
 #endif
+
+#if 1
+/* The HttpResponse and HttpRequestParsers share most of their code, which is
+ * tested above. This test here thus is limited to the parsing of a request
+ * line. */
+BOOST_AUTO_TEST_CASE( http_request_parser_test )
+{
+    string statusLine;
+    vector<string> headers;
+    string body;
+    bool done;
+    bool shouldClose;
+
+    HttpRequestParser parser;
+    parser.onRequestStart = [&] (const char * methodData, size_t methodSize,
+                                 const char * urlData, size_t urlSize,
+                                 const char * versionData, size_t versionSize) {
+        cerr << "request start\n";
+        statusLine = (string(methodData, methodSize)
+                      + "|" + string(urlData, urlSize)
+                      + "|" + string(versionData, versionSize));
+        headers.clear();
+        body.clear();
+        shouldClose = false;
+        done = false;
+    };
+    parser.onHeader = [&] (const char * data, size_t size) {
+        // cerr << "header: " + string(data, size) + "\n";
+        headers.emplace_back(data, size);
+    };
+    parser.onData = [&] (const char * data, size_t size) {
+        // cerr << "data\n";
+        body.append(data, size);
+    };
+    parser.onDone = [&] (bool doClose) {
+        shouldClose = doClose;
+        done = true;
+    };
+
+    /* status line */
+    parser.feed("GE");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("T /poiltruc?bla");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("blabla HTTP/1.1");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("\r");
+    BOOST_CHECK_EQUAL(statusLine, "");
+    parser.feed("\n");
+    BOOST_CHECK_EQUAL(statusLine, "GET|/poiltruc?blablabla|HTTP/1.1");
+}
+#endif
