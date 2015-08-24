@@ -17,11 +17,11 @@ using namespace Datacratic;
 
 
 /****************************************************************************/
-/* HTTP RESPONSE PARSER                                                     */
+/* HTTP PARSER                                                              */
 /****************************************************************************/
 
 void
-HttpResponseParser::
+HttpParser::
 clear()
     noexcept
 {
@@ -34,55 +34,15 @@ clear()
 }
 
 void
-HttpResponseParser::
+HttpParser::
 feed(const char * bufferData)
 {
     // cerr << "feed: /" + ML::hexify_string(string(bufferData)) + "/\n";
     feed(bufferData, strlen(bufferData));
 }
 
-HttpResponseParser::BufferState
-HttpResponseParser::
-prepareParsing(const char * bufferData, size_t bufferSize)
-{
-    BufferState state;
-
-    if (buffer_.size() > 0) {
-        buffer_.append(bufferData, bufferSize);
-        state.data = buffer_.c_str();
-        state.dataSize = buffer_.size();
-        state.fromBuffer = true;
-    }
-    else {
-        state.data = bufferData;
-        state.dataSize = bufferSize;
-        state.fromBuffer = false;
-    }
-
-    return state;
-}
-
-bool
-HttpResponseParser::
-BufferState::
-skipToChar(char c, bool throwOnEol)
-{
-    while (ptr < dataSize) {
-        if (data[ptr] == c) {
-            return true;
-        }
-        else if (throwOnEol
-                 && (data[ptr] == '\r' || data[ptr] == '\n')) {
-            throw ML::Exception("unexpected end of line");
-        }
-        ptr++;
-    }
-
-    return false;
-}
-
 void
-HttpResponseParser::
+HttpParser::
 feed(const char * bufferData, size_t bufferSize)
 {
     // std::cerr << ("data: /"
@@ -98,7 +58,7 @@ feed(const char * bufferData, size_t bufferSize)
     bool stageDone(true);
     while (stageDone && state.remaining() > 0) {
         if (stage_ == 0) {
-            stageDone = parseStatusLine(state);
+            stageDone = parseFirstLine(state);
             if (stageDone) {
                 stage_ = 1;
             }
@@ -136,61 +96,48 @@ feed(const char * bufferData, size_t bufferSize)
     }
 }
 
-bool
-HttpResponseParser::
-parseStatusLine(BufferState & state)
+HttpParser::BufferState
+HttpParser::
+prepareParsing(const char * bufferData, size_t bufferSize)
 {
-    /* status line parsing */
+    BufferState state;
 
-    /* sizeof("HTTP/X.X XXX ") */
-    if (state.remaining() < 16) {
-        return false;
+    if (buffer_.size() > 0) {
+        buffer_.append(bufferData, bufferSize);
+        state.data = buffer_.c_str();
+        state.dataSize = buffer_.size();
+        state.fromBuffer = true;
+    }
+    else {
+        state.data = bufferData;
+        state.dataSize = bufferSize;
+        state.fromBuffer = false;
     }
 
-    if (::memcmp(state.currentDataPtr(), "HTTP/", 5) != 0) {
-        throw ML::Exception("version must start with 'HTTP/'");
-    }
-    state.ptr += 5;
-
-    if (!state.skipToChar(' ', true)) {
-        /* post-version ' ' not found even though size is sufficient */
-        throw ML::Exception("version too long");
-    }
-    size_t versionEnd = state.ptr;
-
-    state.ptr++;
-    size_t codeStart = state.ptr;
-    if (!state.skipToChar(' ', true)) {
-        /* post-code ' ' not found even though size is sufficient */
-        throw ML::Exception("code too long");
-    }
-
-    size_t codeEnd = state.ptr;
-    int code = ML::antoi(state.data + codeStart, state.data + codeEnd);
-
-    /* we skip the whole "reason" string */
-    if (!state.skipToChar('\r', false)) {
-        return false;
-    }
-    state.ptr++;
-    if (state.remaining() == 0) {
-        return false;
-    }
-    if (state.data[state.ptr] != '\n') {
-        throw ML::Exception("expected \\n");
-    }
-    state.ptr++;
-    state.commit();
-
-    if (onResponseStart) {
-        onResponseStart(string(state.data, versionEnd), code);
-    }
-
-    return true;
+    return state;
 }
 
 bool
-HttpResponseParser::
+HttpParser::
+BufferState::
+skipToChar(char c, bool throwOnEol)
+{
+    while (ptr < dataSize) {
+        if (data[ptr] == c) {
+            return true;
+        }
+        else if (throwOnEol
+                 && (data[ptr] == '\r' || data[ptr] == '\n')) {
+            throw ML::Exception("unexpected end of line");
+        }
+        ptr++;
+    }
+
+    return false;
+}
+
+bool
+HttpParser::
 parseHeaders(BufferState & state)
 {
     string multiline;
@@ -255,7 +202,7 @@ parseHeaders(BufferState & state)
 }
 
 void
-HttpResponseParser::
+HttpParser::
 handleHeader(const char * data, size_t dataSize)
 {
     size_t ptr(0);
@@ -317,7 +264,7 @@ handleHeader(const char * data, size_t dataSize)
 }
 
 bool
-HttpResponseParser::
+HttpParser::
 parseBody(BufferState & state)
 {
     return (useChunkedEncoding_
@@ -326,7 +273,7 @@ parseBody(BufferState & state)
 }
 
 bool
-HttpResponseParser::
+HttpParser::
 parseChunkedBody(BufferState & state)
 {
     int chunkSize(-1);
@@ -370,7 +317,7 @@ parseChunkedBody(BufferState & state)
 }
 
 bool
-HttpResponseParser::
+HttpParser::
 parseBlockBody(BufferState & state)
 {
     uint64_t chunkSize = min(state.remaining(), remainingBody_);
@@ -387,11 +334,123 @@ parseBlockBody(BufferState & state)
 }
 
 void
-HttpResponseParser::
+HttpParser::
 finalizeParsing()
 {
     if (onDone) {
         onDone(requireClose_);
     }
     clear();
+}
+
+
+/****************************************************************************/
+/* HTTP RESPONSE PARSER                                                     */
+/****************************************************************************/
+
+bool
+HttpResponseParser::
+parseFirstLine(BufferState & state)
+{
+    /* status line parsing */
+
+    /* sizeof("HTTP/X.X XXX ") */
+    if (state.remaining() < 16) {
+        return false;
+    }
+
+    if (::memcmp(state.currentDataPtr(), "HTTP/", 5) != 0) {
+        throw ML::Exception("version must start with 'HTTP/'");
+    }
+    state.ptr += 5;
+
+    if (!state.skipToChar(' ', true)) {
+        /* post-version ' ' not found even though size is sufficient */
+        throw ML::Exception("version too long");
+    }
+    size_t versionEnd = state.ptr;
+
+    state.ptr++;
+    size_t codeStart = state.ptr;
+    if (!state.skipToChar(' ', true)) {
+        /* post-code ' ' not found even though size is sufficient */
+        throw ML::Exception("code too long");
+    }
+
+    size_t codeEnd = state.ptr;
+    int code = ML::antoi(state.data + codeStart, state.data + codeEnd);
+
+    /* we skip the whole "reason" string */
+    if (!state.skipToChar('\r', false)) {
+        return false;
+    }
+    state.ptr++;
+    if (state.remaining() == 0) {
+        return false;
+    }
+    if (state.data[state.ptr] != '\n') {
+        throw ML::Exception("expected \\n");
+    }
+    state.ptr++;
+    state.commit();
+
+    if (onResponseStart) {
+        onResponseStart(string(state.data, versionEnd), code);
+    }
+
+    return true;
+}
+
+
+/****************************************************************************/
+/* HTTP REQUEST PARSER                                                      */
+/****************************************************************************/
+
+bool
+HttpRequestParser::
+parseFirstLine(BufferState & state)
+{
+    /* request line parsing */
+
+    size_t methodStart = state.ptr;
+    if (!state.skipToChar(' ', true)) {
+        return false;
+    }
+    size_t methodEnd = state.ptr;
+    state.ptr++;
+
+    size_t urlStart = state.ptr;
+    if (!state.skipToChar(' ', true)) {
+        return false;
+    }
+    size_t urlEnd = state.ptr;
+    state.ptr++;
+
+    if (::memcmp(state.currentDataPtr(), "HTTP/", 5) != 0) {
+        throw ML::Exception("version must start with 'HTTP/'");
+    }
+    size_t versionStart = urlEnd + 1;
+    /* we skip the whole "reason" string */
+    if (!state.skipToChar('\r', false)) {
+        return false;
+    }
+    size_t versionEnd = state.ptr;
+    state.ptr++;
+
+    if (state.remaining() == 0) {
+        return false;
+    }
+    if (state.data[state.ptr] != '\n') {
+        throw ML::Exception("expected \\n");
+    }
+    state.ptr++;
+    state.commit();
+
+    if (onRequestStart) {
+        onRequestStart(state.data + methodStart, methodEnd - methodStart,
+                       state.data + urlStart, urlEnd - urlStart,
+                       state.data + versionStart, versionEnd - versionStart);
+    }
+
+    return true;
 }
