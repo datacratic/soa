@@ -26,7 +26,7 @@ namespace Datacratic {
 
 /* HTTP CONNECTION */
 
-struct HttpConnectionV3 {
+struct AsioHttpConnection {
     typedef std::function<void (boost::system::error_code)> OnDone;
 
     enum HttpState {
@@ -34,11 +34,10 @@ struct HttpConnectionV3 {
         PENDING
     };
 
-    HttpConnectionV3(boost::asio::io_service & ioService);
+    AsioHttpConnection(boost::asio::io_service & ioService);
+    AsioHttpConnection(const AsioHttpConnection & other) = delete;
 
-    HttpConnectionV3(const HttpConnectionV3 & other) = delete;
-
-    ~HttpConnectionV3();
+    ~AsioHttpConnection();
 
     void clear();
     void perform(HttpRequest && request);
@@ -123,19 +122,84 @@ struct HttpConnectionV3 {
 
 /* HTTPCLIENT */
 
-struct HttpClientV3 : public HttpClientImpl {
-    HttpClientV3(const std::string & baseUrl,
-                 int numParallel, size_t queueSize);
-    HttpClientV3(HttpClient && other) = delete;
-    HttpClientV3(const HttpClient & other) = delete;
+struct AsioHttpClient {
+    AsioHttpClient(boost::asio::io_service & service,
+                   const std::string & baseUrl,
+                   int numParallel = 1, size_t queueSize = 0);
+    AsioHttpClient(HttpClient && other) = delete;
+    AsioHttpClient(const HttpClient & other) = delete;
 
-    ~HttpClientV3();
+    ~AsioHttpClient();
 
     /* HttpClientImpl */
     virtual void enableDebug(bool value);
     void enableSSLChecks(bool value);
     void enableTcpNoDelay(bool value);
     void enablePipelining(bool value);
+
+    /** Performs a GET request, with "resource" as the location of the
+     *  resource on the server indicated in "baseUrl". Query parameters
+     *  should preferably be passed via "queryParams".
+     *
+     *  Returns "true" when the request could successfully be enqueued.
+     */
+    bool get(const std::string & resource,
+             const std::shared_ptr<HttpClientCallbacks> & callbacks,
+             const RestParams & queryParams = RestParams(),
+             const RestParams & headers = RestParams(),
+             int timeout = -1)
+    {
+        return enqueueRequest("GET", resource, callbacks,
+                              HttpRequest::Content(),
+                              queryParams, headers, timeout);
+    }
+
+    /** Performs a POST request, using similar parameters as get with the
+     * addition of "content" which defines the contents body and type.
+     *
+     *  Returns "true" when the request could successfully be enqueued.
+     */
+    bool post(const std::string & resource,
+              const std::shared_ptr<HttpClientCallbacks> & callbacks,
+              const HttpRequest::Content & content = HttpRequest::Content(),
+              const RestParams & queryParams = RestParams(),
+              const RestParams & headers = RestParams(),
+              int timeout = -1)
+    {
+        return enqueueRequest("POST", resource, callbacks, content,
+                              queryParams, headers, timeout);
+    }
+
+    /** Performs a PUT request in a similar fashion to "post" above.
+     *
+     *  Returns "true" when the request could successfully be enqueued.
+     */
+    bool put(const std::string & resource,
+             const std::shared_ptr<HttpClientCallbacks> & callbacks,
+             const HttpRequest::Content & content = HttpRequest::Content(),
+             const RestParams & queryParams = RestParams(),
+             const RestParams & headers = RestParams(),
+             int timeout = -1)
+    {
+        return enqueueRequest("PUT", resource, callbacks, content,
+                              queryParams, headers, timeout);
+    }
+
+    /** Performs a DELETE request. Note that this method cannot be named
+     * "delete", which is a reserved keyword in C++.
+     *
+     *  Returns "true" when the request could successfully be enqueued.
+     */
+    bool del(const std::string & resource,
+             const std::shared_ptr<HttpClientCallbacks> & callbacks,
+             const RestParams & queryParams = RestParams(),
+             const RestParams & headers = RestParams(),
+             int timeout = -1)
+    {
+        return enqueueRequest("DELETE", resource, callbacks,
+                              HttpRequest::Content(),
+                              queryParams, headers, timeout);
+    }
 
     bool enqueueRequest(const std::string & verb,
                         const std::string & resource,
@@ -159,24 +223,24 @@ private:
 
     void handleQueueEvent();
 
-    void handleHttpConnectionDone(HttpConnectionV3 * connection,
+    void handleHttpConnectionDone(AsioHttpConnection * connection,
                                   const boost::system::error_code & result);
 
-    HttpConnectionV3 * getConnection();
-    void releaseConnection(HttpConnectionV3 * connection);
+    AsioHttpConnection * getConnection();
+    void releaseConnection(AsioHttpConnection * connection);
 
     std::string baseUrl_;
     boost::asio::ip::tcp::endpoint endpoint_;
 
     bool debug_;
 
-    std::vector<std::shared_ptr<HttpConnectionV3>> allConnections_;
-    std::vector<HttpConnectionV3 *> avlConnections_;
+    std::vector<std::shared_ptr<AsioHttpConnection>> allConnections_;
+    std::vector<AsioHttpConnection *> avlConnections_;
     size_t nextAvail_;
 
     std::unique_ptr<HttpRequestQueue> queue_;
 
-    HttpConnectionV3::OnDone onHttpConnectionDone_;
+    AsioHttpConnection::OnDone onHttpConnectionDone_;
 };
 
 } // namespace Datacratic

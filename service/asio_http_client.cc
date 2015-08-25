@@ -23,12 +23,12 @@
 #include "googleurl/src/gurl.h"
 #include "googleurl/src/url_util.h"
 
-#include "asio_threaded_loop.h"
 #include "asio_utils.h"
+#include "http_client.h"
 #include "http_header.h"
 #include "http_parsers.h"
 
-#include "http_client_v3.h"
+#include "asio_http_client.h"
 
 using namespace std;
 using namespace boost;
@@ -71,15 +71,6 @@ translateError(const system::error_code & code)
     }
 
     return error;
-}
-
-asio::io_service &
-getHTTPClientLoop()
-{
-    static AsioThreadedLoop loop;
-    loop.startSync();
-
-    return loop.getIoService();
 }
 
 bool getExpectResponseBody(const HttpRequest & request)
@@ -125,14 +116,14 @@ makeRequestStr(const HttpRequest & request)
 
 /* HTTP CONNECTION */
 
-HttpConnectionV3::
-HttpConnectionV3(asio::io_service & ioService)
+AsioHttpConnection::
+AsioHttpConnection(asio::io_service & ioService)
     : socket_(ioService), connected_(false),
       responseState_(IDLE), requestEnded_(false), parsingEnded_(false),
       recvBuffer_(nullptr), recvBufferSize_(262144),
       resolver_(ioService), timeoutTimer_(ioService)
 {
-    // cerr << "HttpConnectionV3(): " << this << "\n";
+    // cerr << "AsioHttpConnection(): " << this << "\n";
 
     /* Apart with pipelining, there is no real interest in using the Nagle
        algorithm with HTTP, since we will want to send everything in one shot
@@ -165,15 +156,15 @@ HttpConnectionV3(asio::io_service & ioService)
     recvBuffer_ = new char[recvBufferSize_];
 }
 
-HttpConnectionV3::
-~HttpConnectionV3()
+AsioHttpConnection::
+~AsioHttpConnection()
 {
     if (recvBuffer_) {
         delete[] recvBuffer_;
         recvBuffer_ = nullptr;
     }
 
-    // cerr << "~HttpConnectionV3: " << this << "\n";
+    // cerr << "~AsioHttpConnection: " << this << "\n";
     cancelRequestTimer();
     if (responseState_ != IDLE) {
         ::fprintf(stderr,
@@ -184,7 +175,7 @@ HttpConnectionV3::
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 clear()
 {
     responseState_ = IDLE;
@@ -195,7 +186,7 @@ clear()
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 perform(HttpRequest && request)
 {
     // cerr << "perform: " << this << endl;
@@ -216,7 +207,7 @@ perform(HttpRequest && request)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 resolveAndConnect()
 {
     endpoints_.clear();
@@ -251,7 +242,7 @@ resolveAndConnect()
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 connect()
 {
     if (currentEndpoint_ < endpoints_.size()) {
@@ -280,7 +271,7 @@ connect()
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 startSendingRequest()
 {
     /* This controls the maximum body size from which the body will be written
@@ -343,7 +334,7 @@ startSendingRequest()
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onWrittenData(size_t written)
 {
     ExcAssertEqual(responseState_, PENDING);
@@ -355,7 +346,7 @@ onWrittenData(size_t written)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onReceivedData(size_t size)
 {
     parser_.feed(recvBuffer_, size);
@@ -366,7 +357,7 @@ onReceivedData(size_t size)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onWriteError(const system::error_code & ec, size_t bufferSize)
 {
     if (ec != cancelledCode) {
@@ -375,7 +366,7 @@ onWriteError(const system::error_code & ec, size_t bufferSize)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onReceiveError(const system::error_code & ec, size_t bufferSize)
 {
     if (ec == eofCode) {
@@ -387,7 +378,7 @@ onReceiveError(const system::error_code & ec, size_t bufferSize)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onException(const exception_ptr & excPtr)
 {
     cerr << "http client received exception\n";
@@ -395,7 +386,7 @@ onException(const exception_ptr & excPtr)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onParserResponseStart(const string & httpVersion, int code)
 {
     // ::fprintf(stderr, "%p: onParserResponseStart\n", this);
@@ -403,7 +394,7 @@ onParserResponseStart(const string & httpVersion, int code)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onParserHeader(const char * data, size_t size)
 {
     // cerr << "onParserHeader: " << this << endl;
@@ -411,7 +402,7 @@ onParserHeader(const char * data, size_t size)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onParserData(const char * data, size_t size)
 {
     // cerr << "onParserData: " << this << endl;
@@ -419,7 +410,7 @@ onParserData(const char * data, size_t size)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onParserDone(bool doClose)
 {
     parsingEnded_ = true;
@@ -429,10 +420,10 @@ onParserDone(bool doClose)
 
 /* This method handles end of requests: callback invocation, timer
  * cancellation etc. It may request the closing of the connection, in which
- * case the HttpConnectionV3 will be ready for a new request only after
+ * case the AsioHttpConnection will be ready for a new request only after
  * finalizeEndOfRq is invoked. */
 void
-HttpConnectionV3::
+AsioHttpConnection::
 handleEndOfRq(const system::error_code & code, bool requireClose)
 {
     if (requestEnded_) {
@@ -453,7 +444,7 @@ handleEndOfRq(const system::error_code & code, bool requireClose)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 finalizeEndOfRq(const system::error_code & code)
 {
     request_.callbacks_->onDone(request_, translateError(code));
@@ -462,7 +453,7 @@ finalizeEndOfRq(const system::error_code & code)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 requestClose()
 {
     auto doCloseFn = [&] {
@@ -472,7 +463,7 @@ requestClose()
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 doClose()
 {
     socket_.close();
@@ -481,7 +472,7 @@ doClose()
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 onClosed(bool fromPeer, const std::vector<std::string> & msgs)
 {
     if (fromPeer) {
@@ -494,7 +485,7 @@ onClosed(bool fromPeer, const std::vector<std::string> & msgs)
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 armRequestTimer()
 {
     if (request_.timeout_ > 0) {
@@ -508,14 +499,14 @@ armRequestTimer()
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 cancelRequestTimer()
 {
     timeoutTimer_.cancel();
 }
 
 void
-HttpConnectionV3::
+AsioHttpConnection::
 handleTimeoutEvent(const system::error_code & ec)
 {
     if (!ec) {
@@ -526,22 +517,20 @@ handleTimeoutEvent(const system::error_code & ec)
 
 /* HTTPCLIENT */
 
-HttpClientV3::
-HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
-    : HttpClientImpl(baseUrl, numParallel, queueSize),
-      baseUrl_(baseUrl), nextAvail_(0)
+AsioHttpClient::
+AsioHttpClient(asio::io_service & ioService,
+               const string & baseUrl, int numParallel, size_t queueSize)
+    : baseUrl_(baseUrl), nextAvail_(0)
 {
     ExcAssert(baseUrl.compare(0, 8, "https://") != 0);
-
-    asio::io_service & ioService = getHTTPClientLoop();
 
     queue_.reset(new HttpRequestQueue(ioService, queueSize));
     queue_->setOnNotify([&]() { this->handleQueueEvent(); });
 
     /* available connections */
     for (size_t i = 0; i < numParallel; i++) {
-        auto connection = make_shared<HttpConnectionV3>(ioService);
-        HttpConnectionV3 * connectionPtr = connection.get();
+        auto connection = make_shared<AsioHttpConnection>(ioService);
+        AsioHttpConnection * connectionPtr = connection.get();
         connection->onDone
             = [&, connectionPtr] (const system::error_code & result) {
             handleHttpConnectionDone(connectionPtr, result);
@@ -551,33 +540,33 @@ HttpClientV3(const string & baseUrl, int numParallel, size_t queueSize)
     }
 }
 
-HttpClientV3::
-~HttpClientV3()
+AsioHttpClient::
+~AsioHttpClient()
 {
     // cerr << "~HttpClient: " << this << "\n";
 }
 
 void
-HttpClientV3::
+AsioHttpClient::
 enableDebug(bool value)
 {
     debug_ = value;
 }
 
 void
-HttpClientV3::
+AsioHttpClient::
 enableSSLChecks(bool value)
 {
 }
 
 void
-HttpClientV3::
+AsioHttpClient::
 enableTcpNoDelay(bool value)
 {
 }
 
 void
-HttpClientV3::
+AsioHttpClient::
 enablePipelining(bool value)
 {
     if (value) {
@@ -586,7 +575,7 @@ enablePipelining(bool value)
 }
 
 bool
-HttpClientV3::
+AsioHttpClient::
 enqueueRequest(const string & verb, const string & resource,
                const std::shared_ptr<HttpClientCallbacks> & callbacks,
                const HttpRequest::Content & content,
@@ -602,7 +591,7 @@ enqueueRequest(const string & verb, const string & resource,
 }
 
 void
-HttpClientV3::
+AsioHttpClient::
 handleQueueEvent()
 {
     // cerr << " handleQueueEvent\n";
@@ -613,7 +602,7 @@ handleQueueEvent()
         /* "0" has a special meaning for pop_front and must be avoided here */
         auto requests = queue_->pop_front(numConnections);
         for (auto request: requests) {
-            HttpConnectionV3 * conn = getConnection();
+            AsioHttpConnection * conn = getConnection();
             if (!conn) {
                 cerr << ("nextAvail_: "  + to_string(nextAvail_)
                          + "; num conn: "  + to_string(numConnections)
@@ -628,8 +617,8 @@ handleQueueEvent()
 }
 
 void
-HttpClientV3::
-handleHttpConnectionDone(HttpConnectionV3 * connection,
+AsioHttpClient::
+handleHttpConnectionDone(AsioHttpConnection * connection,
                          const system::error_code & rc)
 {
     auto requests = queue_->pop_front(1);
@@ -642,11 +631,11 @@ handleHttpConnectionDone(HttpConnectionV3 * connection,
     }
 }
 
-HttpConnectionV3 *
-HttpClientV3::
+AsioHttpConnection *
+AsioHttpClient::
 getConnection()
 {
-    HttpConnectionV3 * conn;
+    AsioHttpConnection * conn;
 
     if (nextAvail_ < avlConnections_.size()) {
         conn = avlConnections_[nextAvail_];
@@ -662,8 +651,8 @@ getConnection()
 }
 
 void
-HttpClientV3::
-releaseConnection(HttpConnectionV3 * oldConnection)
+AsioHttpClient::
+releaseConnection(AsioHttpConnection * oldConnection)
 {
     if (nextAvail_ > 0) {
         nextAvail_--;

@@ -34,9 +34,10 @@ $(eval $(call program,runner_helper,runner_common arch))
 # ASIO SERVICES
 
 LIBASIOSERVICES_SOURCES := \
-	asio_threaded_loop.cc
+	asio_http_client.cc
 
 LIBASIOSERVICES_LINK := \
+	services \
 	arch \
 	boost_system
 
@@ -81,14 +82,13 @@ LIBSERVICES_SOURCES := \
 	http_client.cc \
 	http_client_v1.cc \
 	http_client_v2.cc \
-	http_client_v3.cc \
 	http_parsers.cc \
 	http_rest_proxy.cc \
 	xml_helpers.cc \
 	nprobe.cc \
 	logs.cc \
 	nsq_event_handler.cc \
-    event_publisher.cc \
+	event_publisher.cc \
 	event_subscriber.cc \
 	nsq_client.cc
 
