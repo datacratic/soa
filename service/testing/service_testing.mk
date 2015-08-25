@@ -36,6 +36,7 @@ $(eval $(call test,service_proxies_test,endpoint,boost manual))
 
 $(eval $(call test,message_loop_test,services,boost))
 $(eval $(call test,timer_event_source_test,services,boost))
+$(eval $(call test,timer_bench,services,boost manual))
 
 $(eval $(call program,runner_test_helper,utils))
 $(eval $(call test,runner_test,services,boost))
