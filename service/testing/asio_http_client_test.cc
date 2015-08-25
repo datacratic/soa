@@ -52,15 +52,16 @@ doRequest(boost::asio::io_service & ioService,
         HttpClientError & errorCode = get<0>(response);
         errorCode = error;
         done = true;
+        ioService.stop();
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
 
     CALL_MEMBER_FN(client, func)(resource, cbs, queryParams, headers,
                                  timeout);
 
-    while (!done) {
-        ioService.run();
-    }
+    ioService.reset();
+    ioService.run();
+    BOOST_CHECK_EQUAL(done, true);
 
     return response;
 }
@@ -123,9 +124,8 @@ doUploadRequest(boost::asio::io_service & ioService,
     }
 
     ioService.reset();
-    while (!done) {
-        ioService.run();
-    }
+    ioService.run();
+    BOOST_CHECK_EQUAL(done, true);
 
     return response;
 }
@@ -375,10 +375,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_put_multi )
         }
     };
 
-    ioService.reset();
-    while (done < maxRequests) {
-        ioService.run();
-    }
+    ioService.run();
+    BOOST_CHECK_EQUAL(done, maxRequests);
 
     service.shutdown();
 }
@@ -444,6 +442,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
             }
         };
 
+        ioService.reset();
         while (numReqs < maxReqs) {
             const char * url = "/counter";
             auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
@@ -460,9 +459,9 @@ BOOST_AUTO_TEST_CASE( test_http_client_stress_test )
 
         ::fprintf(stderr, "all requests performed, awaiting responses...\n");
         ioService.reset();
-        while (numResponses < maxReqs) {
-            ioService.run();
-        }
+        ioService.run();
+        BOOST_CHECK_EQUAL(numResponses, numReqs);
+
         ::fprintf(stderr, "performed %d requests; missed: %d\n",
                   maxReqs, missedReqs);
 
@@ -508,9 +507,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_move_constructor )
         getClient.get("/", cbs);
 
         ioService.reset();
-        while (!done) {
-            ioService.run();
-        }
+        ioService.run();
+        BOOST_CHECK_EQUAL(done, true);
     };
 
     #if 0
@@ -570,6 +568,9 @@ BOOST_AUTO_TEST_CASE( test_http_client_unlimited_queue )
             }
             pending--;
             done++;
+            if (pending == 0) {
+                ioService.stop();
+            }
         };
         auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
         client.get("/", cbs);
@@ -577,10 +578,9 @@ BOOST_AUTO_TEST_CASE( test_http_client_unlimited_queue )
 
     doGet(0);
 
-    while (pending > 0) {
-        ML::sleep(1);
-        cerr << "requests done: " + to_string(done) + "\n";
-    }
+    ioService.reset();
+    ioService.run();
+    BOOST_CHECK_EQUAL(pending, 0);
 
     service.shutdown();
 }
@@ -610,16 +610,16 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_timeout )
                        HttpClientError errorCode, int status,
                        string && headers, string && body) {
         done++;
-        ioService.stop();
+        if (done == 2) {
+            ioService.stop();
+        }
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
     client.get("/timeout", cbs, {}, {}, 1);
     client.get("/", cbs, {}, {}, 1);
 
-    ioService.reset();
-    while (done < 2) {
-        ioService.run();
-    }
+    ioService.run();
+    BOOST_CHECK_EQUAL(done, 2);
 
     service.shutdown();
 }
@@ -652,16 +652,17 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
                            HttpClientError errorCode, int status,
                            string && headers, string && body) {
             done++;
-            ioService.stop();
+            if (done == 2) {
+                ioService.stop();
+            }
         };
         auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
         client.get("/connection-close", cbs);
         client.get("/", cbs);
 
         ioService.reset();
-        while (done < 2) {
-            ioService.run();
-        }
+        ioService.run();
+        BOOST_CHECK_EQUAL(done, 2);
     }
 
     /* response sent, no "Connection: close" header */
@@ -674,15 +675,17 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
                            HttpClientError errorCode, int status,
                            string && headers, string && body) {
             done++;
-            ML::futex_wake(done);
+            if (done == 2) {
+                ioService.stop();
+            }
         };
         auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
         client.get("/quiet-connection-close", cbs);
         client.get("/", cbs);
 
-        while (done < 2) {
-            ML::futex_wait(done, done);
-        }
+        ioService.reset();
+        ioService.run();
+        BOOST_CHECK_EQUAL(done, 2);
     }
 
     /* response not sent */
@@ -695,15 +698,17 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
                            HttpClientError errorCode, int status,
                            string && headers, string && body) {
             done++;
-            ML::futex_wake(done);
+            if (done == 2) {
+                ioService.stop();
+            }
         };
         auto cbs = make_shared<HttpClientSimpleCallbacks>(onDone);
         client.get("/abrupt-connection-close", cbs);
         client.get("/", cbs);
 
-        while (done < 2) {
-            ML::futex_wait(done, done);
-        }
+        ioService.reset();
+        ioService.run();
+        BOOST_CHECK_EQUAL(done, 2);
     }
 
     service.shutdown();
