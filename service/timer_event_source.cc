@@ -19,7 +19,7 @@ using namespace Datacratic;
 
 TimerEventSource::
 TimerEventSource()
-    : timerFd_(::timerfd_create(CLOCK_REALTIME, TFD_NONBLOCK | TFD_CLOEXEC)),
+    : timerFd_(::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
       counter_(1),
       nextTick_(Date::negativeInfinity())
 {
