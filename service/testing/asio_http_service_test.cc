@@ -36,9 +36,9 @@ handleHttpPayload(const HttpHeader & header,
 {
     static string responseStr("HTTP/1.1 200 OK\r\n"
                               "Content-Type: text/plain\r\n"
-                              "Content-Length: 2\r\n"
+                              "Content-Length: 4\r\n"
                               "\r\n"
-                              "OK");
+                              "pong");
     send(responseStr);
 }
 
