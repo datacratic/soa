@@ -31,23 +31,6 @@ $(eval $(call library,runner_common,$(LIBRECOSET_RUNNERCOMMON_SOURCES),$(LIBRECO
 $(eval $(call program,runner_helper,runner_common arch))
 
 
-# ASIO SERVICES
-
-LIBASIOSERVICES_SOURCES := \
-	asio_http_client.cc \
-	asio_http_service.cc \
-	asio_tcp_service.cc
-
-LIBASIOSERVICES_LINK := \
-	services \
-	arch \
-	boost_system
-
-$(eval $(call library,asio_services, \
-	$(LIBASIOSERVICES_SOURCES), \
-	$(LIBASIOSERVICES_LINK)))
-
-
 # SERVICES
 
 LIBSERVICES_SOURCES := \
@@ -94,12 +77,29 @@ LIBSERVICES_SOURCES := \
 	event_subscriber.cc \
 	nsq_client.cc
 
-LIBSERVICES_LINK := asio_services opstats curl curlpp boost_regex runner_common zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description crypto
+LIBSERVICES_LINK := opstats curl curlpp boost_regex runner_common zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description crypto
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
 
 $(LIB)/libservices.so: $(BIN)/runner_helper
+
+# ASIO SERVICES
+
+LIBASIOSERVICES_SOURCES := \
+	asio_http_client.cc \
+	asio_http_service.cc \
+	asio_tcp_service.cc
+
+LIBASIOSERVICES_LINK := \
+	services \
+	arch \
+	boost_system
+
+$(eval $(call library,asio_services, \
+	$(LIBASIOSERVICES_SOURCES), \
+	$(LIBASIOSERVICES_LINK)))
+
 
 
 LIBENDPOINT_SOURCES := \
