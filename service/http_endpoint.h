@@ -35,9 +35,9 @@ struct HttpResponse {
                      = std::vector<std::pair<std::string, std::string> >())
         : responseCode(responseCode),
           responseStatus(getResponseReasonPhrase(responseCode)),
-          contentType(contentType),
-          body(body),
-          extraHeaders(extraHeaders),
+          contentType(move(contentType)),
+          body(move(body)),
+          extraHeaders(move(extraHeaders)),
           sendBody(true)
     {
     }
@@ -51,8 +51,8 @@ struct HttpResponse {
                      = std::vector<std::pair<std::string, std::string> >())
         : responseCode(responseCode),
           responseStatus(getResponseReasonPhrase(responseCode)),
-          contentType(contentType),
-          extraHeaders(extraHeaders),
+          contentType(move(contentType)),
+          extraHeaders(move(extraHeaders)),
           sendBody(false)
     {
     }
@@ -65,7 +65,7 @@ struct HttpResponse {
           responseStatus(getResponseReasonPhrase(responseCode)),
           contentType("application/json"),
           body(boost::trim_copy(body.toString())),
-          extraHeaders(extraHeaders),
+          extraHeaders(move(extraHeaders)),
           sendBody(true)
     {
     }

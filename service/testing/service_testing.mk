@@ -59,6 +59,7 @@ $(eval $(call test,http_client_online_test,services test_services,boost manual))
 $(eval $(call test,http_client_bench,boost_program_options services test_services,boost manual))
 $(eval $(call test,asio_http_client_bench,boost_program_options asio_services services test_services,boost manual))
 $(eval $(call test,http_parsers_test,services test_services,boost valgrind))
+$(eval $(call program,asio_http_service_test,boost_program_options asio_services services))
 
 $(eval $(call test,logs_test,services,boost))
 

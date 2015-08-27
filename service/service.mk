@@ -34,7 +34,9 @@ $(eval $(call program,runner_helper,runner_common arch))
 # ASIO SERVICES
 
 LIBASIOSERVICES_SOURCES := \
-	asio_http_client.cc
+	asio_http_client.cc \
+	asio_http_service.cc \
+	asio_tcp_service.cc
 
 LIBASIOSERVICES_LINK := \
 	services \

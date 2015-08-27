@@ -251,7 +251,7 @@ struct PassiveConnectionHandler: public ConnectionHandler {
         NEXT_CONTINUE
     };
 
-    typedef boost::function<void ()> OnWriteFinished;
+    typedef std::function<void ()> OnWriteFinished;
 
     struct WriteEntry {
         Date date;
