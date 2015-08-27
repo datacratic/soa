@@ -103,6 +103,9 @@ struct AsioTcpHandler {
     virtual ~AsioTcpHandler();
 
     virtual void bootstrap();
+
+    void disableNagle();
+
     void close();
     void requestClose(OnClose onClose = nullptr);
 

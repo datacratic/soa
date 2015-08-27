@@ -229,3 +229,11 @@ requestWrite(string data, OnWritten onWritten)
                                       writeData_.size());
     async_write(socket_, writeBuffer, writeCompleteCond, onWritten);
 }
+
+void
+AsioTcpHandler::
+disableNagle()
+{
+    asio::ip::tcp::no_delay option(true);
+    socket_.set_option(option);
+}

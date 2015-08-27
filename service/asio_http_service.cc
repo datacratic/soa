@@ -52,6 +52,7 @@ void
 AsioHttpHandler::
 bootstrap()
 {
+    disableNagle();
     requestReceive();
 }
 
