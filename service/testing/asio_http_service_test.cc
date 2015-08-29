@@ -34,12 +34,15 @@ MyHandler::
 handleHttpPayload(const HttpHeader & header,
                   const std::string & payload)
 {
-    static string responseStr("HTTP/1.1 200 OK\r\n"
-                              "Content-Type: text/plain\r\n"
-                              "Content-Length: 4\r\n"
-                              "\r\n"
-                              "pong");
-    send(responseStr);
+    HttpResponse response(200, "text/plain", "pong");
+
+    // static string responseStr("HTTP/1.1 200 OK\r\n"
+    //                           "Content-Type: text/plain\r\n"
+    //                           "Content-Length: 4\r\n"
+    //                           "\r\n"
+    //                           "pong");
+    putResponseOnWire(response);
+    // send(responseStr);
 }
 
 int
@@ -69,7 +72,7 @@ main(int argc, char * argv[])
         return 1;
     }
 
-    ExcAssert(port > 0);
+    ExcAssert(port >= 0);
     ExcAssert(concurrency > 0);
 
     asio::io_service ioService;
@@ -79,11 +82,10 @@ main(int argc, char * argv[])
     };
 
     AsioTcpAcceptor acceptor(ioService, "", port, onNewConnection, concurrency);
-    cerr << "bootstrap...\n";
-    acceptor.bootstrap();
-
+    cerr << ("service accepting connections on port "
+             + to_string(acceptor.effectivePort())
+             + "\n");
     while (true) {
-        cerr << "loop\n";
         ioService.run();
     }
 }
