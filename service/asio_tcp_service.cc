@@ -52,7 +52,10 @@ dissociate(AsioTcpHandler * handler)
 {
     for (auto & handlerPtr: associatedHandlers_) {
         if (handlerPtr.get() == handler) {
-            associatedHandlers_.erase(handlerPtr);
+            auto doDissociate = [=] {
+                associatedHandlers_.erase(handlerPtr);
+            };
+            ioService_.post(doDissociate);
             cerr << "dissociated handler\n";
             break;
         }
@@ -102,18 +105,14 @@ AsioTcpAcceptor(asio::io_service & ioService,
     acceptor_.set_option(asio::socket_base::reuse_address(true));
     acceptor_.bind(endpoint);
     acceptor_.listen(100);
+    auto ep = acceptor_.local_endpoint();
+    effectivePort_ = ep.port();
+    accept();
 }
 
 AsioTcpAcceptor::
 ~AsioTcpAcceptor()
 {
-}
-
-void
-AsioTcpAcceptor::
-bootstrap()
-{
-    accept();
 }
 
 std::shared_ptr<AsioTcpHandler>
@@ -179,6 +178,10 @@ void
 AsioTcpHandler::
 close()
 {
+    AsioTcpLoop * oldLoop = loop_;
+    socket_.close();
+    loop_ = nullptr;
+    oldLoop->dissociate(this);
 }
 
 void
@@ -190,20 +193,8 @@ requestClose(OnClose onClose)
         if (onClose) {
             onClose();
         }
-        detach();
     };
     socket_.get_io_service().post(doCloseFn);
-}
-
-void
-AsioTcpHandler::
-detach()
-{
-    if (loop_) {
-        AsioTcpLoop * oldLoop = loop_;
-        loop_ = nullptr;
-        oldLoop->dissociate(this);
-    }
 }
 
 void

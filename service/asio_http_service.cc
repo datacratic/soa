@@ -74,7 +74,7 @@ AsioHttpHandler::
 onReceiveError(const system::error_code & ec, size_t bufferSize)
 {
     if (ec == system::errc::connection_reset || ec == asio::error::eof) {
-        detach();
+        requestClose();
     }
     else {
         throw ML::Exception("unhandled error: " + ec.message());

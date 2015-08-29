@@ -63,8 +63,6 @@ struct AsioTcpAcceptor {
                     const OnNewConnection & onNewHandler, int nbrWorkers);
     virtual ~AsioTcpAcceptor();
 
-    void bootstrap();
-
     int effectivePort()
         const
     {
@@ -123,7 +121,6 @@ struct AsioTcpHandler {
     {
         loop_ = loop;
     }
-    void detach();
 
 private:
     AsioTcpLoop * loop_;
