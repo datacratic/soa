@@ -151,8 +151,10 @@ struct Runner : public EpollLoop {
     */
     bool signal(int signum, bool mustSucceed = true);
 
-    /** Synchronous wait for the subprocess to be marked as started from the
-        MessageLoop thread.
+    /** Synchronous wait for the run request to be processed by the
+        MessageLoop thread. In multithreaded context, it will wait for the
+        "current" request, which may differ from the one that the caller thread
+        actually performed.
 
         Will wait for a maximum of secondsToWait seconds. Returns "true" when
         the condition was met or "false" in case of a timeout.
