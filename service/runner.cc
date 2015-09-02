@@ -607,24 +607,6 @@ signal(int signum, bool mustSucceed)
 
 bool
 Runner::
-waitStart(double secondsToWait) const
-{
-    Date deadline = Date::now().plusSeconds(secondsToWait);
-
-    while (childPid_ == -1) {
-        double timeToWait = Date::now().secondsUntil(deadline);
-        if (timeToWait < 0)
-            break;
-        if (isfinite(timeToWait))
-            ML::futex_wait(childPid_, -1, timeToWait);
-        else ML::futex_wait(childPid_, -1);
-    }
-
-    return childPid_ > 0;
-}
-
-bool
-Runner::
 waitRunning(double secondsToWait) const
 {
     bool timeout(false);
@@ -649,6 +631,24 @@ waitRunning(double secondsToWait) const
     }
 
     return !timeout;
+}
+
+bool
+Runner::
+waitStart(double secondsToWait) const
+{
+    Date deadline = Date::now().plusSeconds(secondsToWait);
+
+    while (childPid_ == -1) {
+        double timeToWait = Date::now().secondsUntil(deadline);
+        if (timeToWait < 0)
+            break;
+        if (isfinite(timeToWait))
+            ML::futex_wait(childPid_, -1, timeToWait);
+        else ML::futex_wait(childPid_, -1);
+    }
+
+    return childPid_ > 0;
 }
 
 void
