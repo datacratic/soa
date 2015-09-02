@@ -29,9 +29,7 @@ using namespace std;
 using namespace ML;
 using namespace Datacratic;
 using namespace mongo;
-using namespace bson;
 
-#if 1
 BOOST_AUTO_TEST_CASE( test_logger_metrics )
 {
     Mongo::MongoTemporaryServer mongo;
@@ -105,28 +103,23 @@ BOOST_AUTO_TEST_CASE( test_logger_metrics )
     mongo::OID objectId(objectIdStr);
     mongo::BSONObj where = BSON("_id" << objectId);
     cursor = conn->query(database + ".metrics_test", where);
+
     BOOST_CHECK(cursor->more());
     {
         mongo::BSONObj p = cursor->next();
         cerr << p.toString() << endl;
         // conn->remove(database + ".metrics_test", p, 1);
-        BOOST_CHECK_EQUAL(p["process"]["appName"].toString(),
-                          "appName: \"test_app\"");
-        BOOST_CHECK_EQUAL(p["metrics"]["coco"].toString(), "coco: 123");
-        BOOST_CHECK_EQUAL(p["meta"]["octo"].toString(), "octo: \"sanchez\"");
-        BOOST_CHECK_EQUAL(p["process"]["expos"]["city"].toString(),
-                          "city: \"baseball\"");
-        BOOST_CHECK_EQUAL(p["process"]["expos"]["sport"].toString(),
-                          "sport: \"montreal\"");
-        vector<string> players;
-        BSONObj bsonPlayers = p.getObjectField("process")
-            .getObjectField("expos")
-            .getObjectField("players");
-        bsonPlayers.Vals(players);
+        BOOST_CHECK_EQUAL(p["process"]["appName"].String(), "test_app");
+        BOOST_CHECK_EQUAL(p["metrics"]["coco"].Long(), 123);
+        BOOST_CHECK_EQUAL(p["meta"]["octo"].String(), "sanchez");
+        BOOST_CHECK_EQUAL(p["process"]["expos"]["city"].String(), "baseball");
+        BOOST_CHECK_EQUAL(p["process"]["expos"]["sport"].String(), "montreal");
+        //BSONObj bsonPlayers = BSON("process.expos.players" << players);
+        auto players = p.getFieldDotted("process.expos.players").Array();
         BOOST_CHECK_EQUAL(players.size(), 3);
-        BOOST_CHECK_EQUAL(players[0], "pedro");
-        BOOST_CHECK_EQUAL(players[1], "mario");
-        BOOST_CHECK_EQUAL(players[2], "octo");
+        BOOST_CHECK_EQUAL(players[0].String(), "pedro");
+        BOOST_CHECK_EQUAL(players[1].String(), "mario");
+        BOOST_CHECK_EQUAL(players[2].String(), "octo");
         BOOST_CHECK(p["process"]["endDate"].toString() != "EOO");
         BOOST_CHECK(p["process"]["duration"].toString() != "EOO");
     }
@@ -143,4 +136,3 @@ BOOST_AUTO_TEST_CASE( test_logger_metrics )
 
     BOOST_CHECK_EQUAL(objectIdStr, result);
 }
-#endif

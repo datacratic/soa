@@ -13,6 +13,21 @@ using namespace std;
 using namespace mongo;
 using namespace Datacratic;
 
+namespace {
+
+struct AtInit {
+    AtInit() {
+        using mongo::client::initialize;
+        using mongo::client::Options;
+        Status status = initialize();
+        if (!status.isOK()) {
+            throw("deal with errors");
+        }
+    }
+} atInit;
+
+}
+
 
 /****************************************************************************/
 /* LOGGER METRICS MONGO                                                     */
@@ -44,12 +59,30 @@ LoggerMetricsMongo(Json::Value config, const string & coll,
         conn = tmpConn;
     }
     db = config["database"].asString();
-    string err;
-    if (!conn->auth(db, config["user"].asString(), config["pwd"].asString(),
-                    err)) {
-        throw ML::Exception("MongoDB connection failed with msg [%s]",
-                            err.c_str());
+
+    auto impl = [&] (string mechanism) {
+        BSONObj b = BSON("user" << config["user"].asString()
+                  << "pwd" << config["pwd"].asString()
+                  << "mechanism" << mechanism
+                  << "db" << db);
+        try {
+            conn->auth(b);
+        }
+        catch (const UserException & _) {
+            return false;
+        }
+        return true;
+    };
+
+    if (!impl("SCRAM-SHA-1")) {
+        cerr << "Failed to authenticate with SCRAM-SHA-1, "
+                "trying with MONGODB-CR" << endl;
+        if (!impl("MONGODB-CR")) {
+            cerr << "Failed with MONGODB-CR as well" << endl;
+            throw ("Failed to auth");
+        }
     }
+
     BSONObj obj = BSON(GENOID);
     conn->insert(db + "." + coll, obj);
     objectId = obj["_id"].OID();
@@ -191,5 +224,5 @@ LoggerMetricsMongo::
 getProcessId()
     const
 {
-    return objectId.toString(); 
+    return objectId.toString();
 }
