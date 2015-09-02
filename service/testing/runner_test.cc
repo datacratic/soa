@@ -712,3 +712,45 @@ BOOST_AUTO_TEST_CASE( test_runner_reuse )
     BOOST_CHECK_EQUAL(stdouts[1], "second");
 }
 #endif
+
+#if 1
+/* This test ensures that waitRunning properly follows the sequence of launches
+ * whenever an exception occurs in the launch phase. */
+BOOST_AUTO_TEST_CASE( test_runner_waitRunning_exceptions )
+{
+    const unsigned int maxRuns(3);
+    BlockedSignals blockedSigs(SIGCHLD);
+    MessageLoop loop;
+    loop.start();
+
+    auto runner = make_shared<Runner>();
+    loop.addSource("runner", runner);
+    runner->waitConnectionState(AsyncEventSource::CONNECTED);
+
+    vector<string> command{"/bin/sleep", "2"};
+
+    std::atomic<int> terminateCount(0);
+    auto doTerminate = [&] (int runCount) {
+        cerr << ("runCount: " + to_string(runCount)
+                 + "; terminateCount: " + to_string(terminateCount)
+                 + "\n");
+        terminateCount++;
+        ML::futex_wake(terminateCount);
+    };
+    for (int i = 0; i < maxRuns; i++) {
+        auto onTerminate = [=] (const RunResult & result) {
+            doTerminate(i);
+        };
+
+        runner->run(command, onTerminate);
+        runner->waitRunning();
+    }
+
+    while (terminateCount < maxRuns) {
+        int current(terminateCount);
+        ML::futex_wait(terminateCount, current);
+    }
+
+    loop.shutdown();
+}
+#endif

@@ -424,9 +424,7 @@ run(const vector<string> & command,
        the subprocess to exit to due to PR_SET_DEATHSIG being set .*/
     auto toRun = [=] () {
         try {
-            if (running_) {
-                throw ML::Exception("already running");
-            }
+            JML_TRACE_EXCEPTIONS(false);
             this->doRunImpl(command, onTerminate, stdOutSink, stdErrSink);
         }
         catch (const std::exception & exc) {
@@ -457,9 +455,6 @@ runSync(const vector<string> & command,
         const shared_ptr<InputSink> & stdErrSink,
         const string & stdInData)
 {
-    if (running_) {
-        throw ML::Exception("already running");
-    }
     ExcAssert(runRequests_ < std::numeric_limits<int>::max());
     runRequests_++;
 
@@ -498,9 +493,12 @@ doRunImpl(const vector<string> & command,
           const shared_ptr<InputSink> & stdOutSink,
           const shared_ptr<InputSink> & stdErrSink)
 {
-    running_ = true;
     activeRequest_++;
     ML::futex_wake(activeRequest_);
+    if (running_) {
+        throw ML::Exception("already running");
+    }
+    running_ = true;
     startDate_ = Date::now();
     endDate_ = Date::negativeInfinity();
 
