@@ -493,12 +493,17 @@ doRunImpl(const vector<string> & command,
           const shared_ptr<InputSink> & stdOutSink,
           const shared_ptr<InputSink> & stdErrSink)
 {
+    /* "activeRequest" must be increased after "running_" is set, in order to
+       guarantee the continuity between "waitRunning" and "waitTermination".
+    */
+    bool oldRunning(running_);
+    running_ = true;
+    ML::futex_wake(running_);
     activeRequest_++;
     ML::futex_wake(activeRequest_);
-    if (running_) {
+    if (oldRunning) {
         throw ML::Exception("already running");
     }
-    running_ = true;
     startDate_ = Date::now();
     endDate_ = Date::negativeInfinity();
 
