@@ -7,26 +7,12 @@
 #include "mongo/util/net/hostandport.h"
 #include "jml/utils/string_functions.h"
 #include "logger_metrics_mongo.h"
+#include "soa/utils/mongo_init.h"
 
 
 using namespace std;
 using namespace mongo;
 using namespace Datacratic;
-
-namespace {
-
-struct AtInit {
-    AtInit() {
-        using mongo::client::initialize;
-        using mongo::client::Options;
-        Status status = initialize();
-        if (!status.isOK()) {
-            throw("deal with errors");
-        }
-    }
-} atInit;
-
-}
 
 
 /****************************************************************************/
