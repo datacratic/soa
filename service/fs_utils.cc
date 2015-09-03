@@ -101,7 +101,11 @@ struct LocalUrlFsHandler : public UrlFsHandler {
         boost::system::error_code ec;
         string path = url.path();
         if (!fs::exists(path) && !fs::create_directories(path, ec)) {
-            throw ML::Exception(ec.message());
+            if (!fs::exists(path)) {
+                throw ML::Exception("could not create directory ("
+                                    + ec.message() + "): "
+                                    + url.toString());
+            }
         }
     }
 
