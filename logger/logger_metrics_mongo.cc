@@ -2,14 +2,23 @@
 #include "mongo/bson/bson.h"
 #include "mongo/util/net/hostandport.h"
 #include "jml/utils/string_functions.h"
+#include "soa/utils/mongo_init.h"
 
 namespace Datacratic{
 
 using namespace std;
 using namespace mongo;
+using namespace Datacratic;
 
-LoggerMetricsMongo::LoggerMetricsMongo(Json::Value config,
-    const string& coll, const string& appName) : ILoggerMetrics(coll)
+
+/****************************************************************************/
+/* LOGGER METRICS MONGO                                                     */
+/****************************************************************************/
+
+LoggerMetricsMongo::
+LoggerMetricsMongo(Json::Value config, const string & coll,
+                   const string & appName)
+    : ILoggerMetrics(coll)
 {
     for(string s: {"hostAndPort", "database", "user", "pwd"}){
         if(config[s].isNull()){
