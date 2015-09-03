@@ -5,6 +5,7 @@
  **/
 #pragma once
 
+#include <vector>
 #include "mongo/bson/bson.h"
 #include "mongo/util/net/hostandport.h"
 
@@ -12,7 +13,7 @@
 using namespace mongo;
 
 namespace Datacratic {
-    bool _mongoInitialized;
+    bool _mongoInitialized(false);
 
 struct MongoAtInit {
 
