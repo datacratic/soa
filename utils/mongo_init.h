@@ -20,7 +20,6 @@ struct MongoAtInit {
     MongoAtInit() {
         if (!_mongoInitialized) {
             _mongoInitialized = true;
-            std::cerr << __FILE__ << ":" << __LINE__ << std::endl;
             using mongo::client::initialize;
             using mongo::client::Options;
             auto status = initialize();
