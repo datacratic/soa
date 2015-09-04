@@ -424,9 +424,7 @@ run(const vector<string> & command,
        the subprocess to exit to due to PR_SET_DEATHSIG being set .*/
     auto toRun = [=] () {
         try {
-            if (running_) {
-                throw ML::Exception("already running");
-            }
+            JML_TRACE_EXCEPTIONS(false);
             this->doRunImpl(command, onTerminate, stdOutSink, stdErrSink);
         }
         catch (const std::exception & exc) {
@@ -457,9 +455,6 @@ runSync(const vector<string> & command,
         const shared_ptr<InputSink> & stdErrSink,
         const string & stdInData)
 {
-    if (running_) {
-        throw ML::Exception("already running");
-    }
     ExcAssert(runRequests_ < std::numeric_limits<int>::max());
     runRequests_++;
 
@@ -498,9 +493,17 @@ doRunImpl(const vector<string> & command,
           const shared_ptr<InputSink> & stdOutSink,
           const shared_ptr<InputSink> & stdErrSink)
 {
+    /* "activeRequest" must be increased after "running_" is set, in order to
+       guarantee the continuity between "waitRunning" and "waitTermination".
+    */
+    bool oldRunning(running_);
     running_ = true;
+    ML::futex_wake(running_);
     activeRequest_++;
     ML::futex_wake(activeRequest_);
+    if (oldRunning) {
+        throw ML::Exception("already running");
+    }
     startDate_ = Date::now();
     endDate_ = Date::negativeInfinity();
 
@@ -607,24 +610,6 @@ signal(int signum, bool mustSucceed)
 
 bool
 Runner::
-waitStart(double secondsToWait) const
-{
-    Date deadline = Date::now().plusSeconds(secondsToWait);
-
-    while (childPid_ == -1) {
-        double timeToWait = Date::now().secondsUntil(deadline);
-        if (timeToWait < 0)
-            break;
-        if (isfinite(timeToWait))
-            ML::futex_wait(childPid_, -1, timeToWait);
-        else ML::futex_wait(childPid_, -1);
-    }
-
-    return childPid_ > 0;
-}
-
-bool
-Runner::
 waitRunning(double secondsToWait) const
 {
     bool timeout(false);
@@ -649,6 +634,24 @@ waitRunning(double secondsToWait) const
     }
 
     return !timeout;
+}
+
+bool
+Runner::
+waitStart(double secondsToWait) const
+{
+    Date deadline = Date::now().plusSeconds(secondsToWait);
+
+    while (childPid_ == -1) {
+        double timeToWait = Date::now().secondsUntil(deadline);
+        if (timeToWait < 0)
+            break;
+        if (isfinite(timeToWait))
+            ML::futex_wait(childPid_, -1, timeToWait);
+        else ML::futex_wait(childPid_, -1);
+    }
+
+    return childPid_ > 0;
 }
 
 void
