@@ -53,8 +53,7 @@ struct RedisTemporaryServer : boost::noncopyable {
         using namespace std;
 
         // Check the unique path
-        if (uniquePath == "" || uniquePath[0] == '/' || uniquePath == "."
-            || uniquePath == "..")
+        if (uniquePath.empty() || uniquePath == "."  || uniquePath == "..")
             throw ML::Exception("unacceptable unique path");
 
         // 1.  Create the directory
