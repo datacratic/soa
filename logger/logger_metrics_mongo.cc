@@ -51,7 +51,9 @@ LoggerMetricsMongo(Json::Value config, const string & coll,
                   << "pwd" << config["pwd"].asString()
                   << "mechanism" << mechanism
                   << "db" << db);
+
         try {
+            JML_TRACE_EXCEPTIONS(false);
             conn->auth(b);
         }
         catch (const UserException & _) {
