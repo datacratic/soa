@@ -6,6 +6,7 @@
 
 #include "jml/arch/futex.h"
 #include "jml/utils/testing/watchdog.h"
+#include "soa/service/message_loop.h"
 #include "soa/service/http_client.h"
 
 using namespace std;
@@ -16,7 +17,12 @@ using namespace Datacratic;
 /* Use of chunked test from jigsaw.w3.org */
 BOOST_AUTO_TEST_CASE( test_http_client_chunked_encoding )
 {
-    HttpClient client("http://jigsaw.w3.org");
+    MessageLoop loop;
+    loop.start();
+
+    auto client = make_shared<HttpClient>("http://jigsaw.w3.org");
+    loop.addSource("client", client);
+    client->waitConnectionState(AsyncEventSource::CONNECTED);
 
     int done(false);
     HttpClientError error;
@@ -33,7 +39,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_chunked_encoding )
     };
     auto cbs = make_shared<HttpClientSimpleCallbacks>(onResponse);
 
-    client.get("/HTTP/ChunkedScript", cbs);
+    client->get("/HTTP/ChunkedScript", cbs);
 
     while (!done) {
         int oldDone = done;
@@ -56,5 +62,7 @@ BOOST_AUTO_TEST_CASE( test_http_client_chunked_encoding )
     }
     BOOST_CHECK_EQUAL(expected.size(), 72200);
     BOOST_CHECK_EQUAL(body, expected);
+
+    loop.shutdown();
 }
 #endif
