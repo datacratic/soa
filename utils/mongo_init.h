@@ -7,6 +7,7 @@
 
 #include <vector>
 #include "mongo/bson/bson.h"
+#include "mongo/client/dbclient.h"
 #include "mongo/util/net/hostandport.h"
 
 
