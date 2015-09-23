@@ -40,14 +40,24 @@ struct MongoTemporaryServer : boost::noncopyable {
     void suspend();
     void resume();
     void shutdown();
-    int getPortNum() {
+
+    int getPortNum()
+        const
+    {
         return portNum;
+    }
+
+    const std::string & unixSocketPath()
+        const
+    {
+        return socketPath_;
     }
 
 private:
     enum State { Inactive, Stopped, Suspended, Running };
     State state;
     std::string uniquePath_;
+    std::string socketPrefix_;
     std::string socketPath_;
     std::string logfile_;
     int serverPid;
@@ -57,3 +67,13 @@ private:
 };
 
 } // namespace Mongo
+
+
+/* Make MongoTemporaryServer available in Datacratic ns */
+namespace Datacratic {
+
+using Mongo::MongoTemporaryServer;
+
+} // namespace Datacratic
+
+

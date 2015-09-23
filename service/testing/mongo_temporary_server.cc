@@ -79,7 +79,7 @@ testConnection()
 
     // Wait for it to start up
     fs::directory_iterator endItr;
-    fs::path socketdir(socketPath_);
+    fs::path socketdir(socketPrefix_);
     bool connected(false);
     for (unsigned i = 0; i < 100 && !connected;  ++i) {
         // read the directory to wait for the socket file to appear
@@ -89,6 +89,7 @@ testConnection()
                                 (const sockaddr *) &addr, SUN_LEN(&addr));
             if (res == 0) {
                 connected = true;
+                socketPath_ = itr->path().string();
             }
             else if (res == -1) {
                 if (errno != ECONNREFUSED && errno != ENOENT) {
@@ -132,16 +133,16 @@ start()
         throw ML::Exception("could not create unique path " + uniquePath_);
     }
 
-    socketPath_ = uniquePath_ + "/mongo-socket";
+    socketPrefix_ = uniquePath_ + "/mongo-socket";
     logfile_ = uniquePath_ + "/output.log";
     int UNIX_PATH_MAX=108;
 
-    if (socketPath_.size() >= UNIX_PATH_MAX) {
+    if (socketPrefix_.size() >= UNIX_PATH_MAX) {
         throw ML::Exception("unix socket path is too long");
     }
 
     // Create unix socket directory
-    fs::path unixdir(socketPath_);
+    fs::path unixdir(socketPrefix_);
     if (!fs::create_directory(unixdir)) {
         throw ML::Exception(errno,
                             "couldn't create unix socket directory for Mongo");
@@ -160,7 +161,7 @@ start()
     runner_.run({"/usr/bin/mongod",
                  "--bind_ip", "localhost", "--port", to_string(portNum),
                  "--logpath", logfile_, "--dbpath", uniquePath_,
-                 "--unixSocketPrefix", socketPath_, "--nojournal"},
+                 "--unixSocketPrefix", socketPrefix_, "--nojournal"},
                 onTerminate, nullptr, stdOutSink);
     // connect to the socket to make sure everything is working fine
     testConnection();
