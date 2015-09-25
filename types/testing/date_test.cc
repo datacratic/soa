@@ -517,6 +517,15 @@ BOOST_AUTO_TEST_CASE( test_printIso8601 )
     expected = "1969-12-31T23:59:00.000000Z";
     result = testDate.printIso8601(6);
     BOOST_CHECK_EQUAL(result, expected);
+
+    testDate = Date::negativeInfinity();
+    expected = "-Inf";
+    result = testDate.printIso8601(6);
+    BOOST_CHECK_EQUAL(result, expected);
+    testDate = Date::positiveInfinity();
+    expected = "Inf";
+    result = testDate.printIso8601(6);
+    BOOST_CHECK_EQUAL(result, expected);
 }
 
 BOOST_AUTO_TEST_CASE( test_weekStart )
