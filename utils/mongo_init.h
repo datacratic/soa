@@ -11,14 +11,13 @@
 #include "mongo/util/net/hostandport.h"
 
 
-using namespace mongo;
-
 namespace Datacratic {
-    bool _mongoInitialized(false);
+
+bool _mongoInitialized(false);
 
 struct MongoAtInit {
-
-    MongoAtInit() {
+    MongoAtInit()
+    {
         if (!_mongoInitialized) {
             _mongoInitialized = true;
             using mongo::client::initialize;
