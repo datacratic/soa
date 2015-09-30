@@ -103,7 +103,6 @@ addMessageLoop(const string& name, const MessageLoop* loop)
         }
 
         lastSample = sample;
-        //std::cerr << "THREAD LOAD :" << load << std::endl;
         return load;
     };
 
