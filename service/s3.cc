@@ -294,11 +294,11 @@ struct S3Downloader {
            the total size of the stream. */
         maxRqs = 1;
         if (info.size > 1024 * 1024)
-            maxRqs = 2;
-        if (info.size > 16 * 1024 * 1024)
-            maxRqs = 3;
-        if (info.size > 256 * 1024 * 1024)
             maxRqs = 5;
+        if (info.size > 16 * 1024 * 1024)
+            maxRqs = 15;
+        if (info.size > 256 * 1024 * 1024)
+            maxRqs = 30;
         chunks.resize(maxRqs);
 
         /* Hack to ensure that the file's last modified time is earlier than 1
