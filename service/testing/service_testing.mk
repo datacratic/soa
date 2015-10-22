@@ -1,5 +1,16 @@
 #$(eval $(call library,mongo_tmp_server,mongo_temporary_server.cc, services))
 
+$(eval $(call library,custom_preload_1,custom_preload_1.cc,))
+$(eval $(call library,custom_preload_2,custom_preload_2.cc,))
+$(eval $(call library,custom_preload_3,custom_preload_3.cc,))
+$(eval $(call library,custom_preload_4,custom_preload_4.cc,))
+$(eval $(call test,service_utils_test,services,boost))
+
+service_utils_test: $(LIB)/libcustom_preload_1.so \
+					$(LIB)/libcustom_preload_2.so \
+					$(LIB)/libcustom_preload_3.so \
+					$(LIB)/libcustom_preload_4.so
+
 $(eval $(call test,epoll_test,services,boost))
 $(eval $(call test,epoll_wait_test,services,boost manual))
 
