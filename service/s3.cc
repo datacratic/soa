@@ -520,7 +520,7 @@ private:
                 rethrow_exception(response.excPtr_);
             }
 
-            if (response.code_ != 206) {
+            if (response.code_ != 200 && response.code_ != 206) {
                 throw ML::Exception("http error "
                                     + to_string(response.code_)
                                     + " while getting chunk "
