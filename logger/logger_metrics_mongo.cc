@@ -67,7 +67,7 @@ LoggerMetricsMongo(Json::Value config, const string & coll,
                 "trying with MONGODB-CR" << endl;
         if (!impl("MONGODB-CR")) {
             cerr << "Failed with MONGODB-CR as well" << endl;
-            throw ("Failed to auth");
+            throw ML::Exception("Failed to authenticate");
         }
     }
 
