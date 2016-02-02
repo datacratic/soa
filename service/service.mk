@@ -102,6 +102,7 @@ LIBCLOUD_LINK := crypto++ curlpp utils arch types tinyxml2 services ssh2 boost_f
 
 
 $(eval $(call library,cloud,$(LIBCLOUD_SOURCES),$(LIBCLOUD_LINK)))
+$(eval $(call python_addon,py_cloud,cloud_py.cc,cloud))
 
 
 LIBREDIS_SOURCES := \
