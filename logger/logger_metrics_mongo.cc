@@ -81,74 +81,84 @@ void
 LoggerMetricsMongo::
 logInCategory(const string & category, const Json::Value & json)
 {
-    BSONObjBuilder bson;
-    vector<string> stack;
-    function<void(const Json::Value &)> doit;
+    if (category.find(".") != std::string::npos) {
+        throw ML::Exception("mongo does not support dotted keys:"
+                            " \"%s\"", category.c_str());
+    }
 
-    doit = [&] (const Json::Value & v) {
-        for (auto it = v.begin(); it != v.end(); ++it) {
-            string memberName = it.memberName();
-            if (v[memberName].isObject()) {
-                if (memberName.find(".") != std::string::npos) {
-                    throw ML::Exception("mongo does not support dotted keys,"
-                            " hence \"%s\" is invalid", memberName.c_str());
-                }
-                stack.push_back(memberName);
-                doit(v[memberName]);
-                stack.pop_back();
+    vector<string> stack;
+    function<BSONObj (const Json::Value &, const string & prefix)> buildObject;
+    function<BSONArray (const Json::Value &)> buildArray;
+
+    buildArray = [&] (const Json::Value & v) {
+        BSONArrayBuilder arrBuilder;
+
+        for (const auto & current: v) {
+            if (current.isInt()) {
+                arrBuilder.append(current.asInt());
+            }
+            else if (current.isUInt()) {
+                arrBuilder.append((uint32_t)current.asUInt());
+            }
+            else if (current.isDouble()) {
+                arrBuilder.append(current.asDouble());
+            }
+            else if (current.isObject()) {
+                auto obj = buildObject(current, "");
+                arrBuilder.append(obj);
             }
             else {
-                Json::Value current = v[memberName];
-                stringstream key;
-                key << category;
-                for (const string & s: stack) {
-                    key << "." << s;
-                }
-                key << "." << memberName;
-                if (current.isArray()) {
-                    BSONArrayBuilder arr;
-                    for (const Json::Value el: current) {
-                        if (el.isInt()) {
-                            arr.append(el.asInt());
-                        }
-                        else if (el.isUInt()) {
-                            arr.append((uint32_t)el.asUInt());
-                        }
-                        else if (el.isDouble()) {
-                            arr.append(el.asDouble());
-                        }
-                        else {
-                            arr.append(el.asString());
-                        }
-                    }
-                    bson.append(key.str(), arr.arr());
-                }
-                else {
-                    if (current.isInt()) {
-                        bson.append(key.str(), current.asInt());
-                    }
-                    else if (current.isUInt()) {
-                        bson.append(key.str(), (uint32_t)current.asUInt());
-                    }
-                    else if (current.isDouble()) {
-                        bson.append(key.str(), current.asDouble());
-                    }
-                    else {
-                        bson.append(key.str(), current.asString());
-                    }
-                }
+                arrBuilder.append(current.asString());
             }
         }
+
+        return arrBuilder.arr();
     };
-    doit(json);
+
+    buildObject = [&] (const Json::Value & v, const string & prefix) {
+        BSONObjBuilder objBuilder;
+        
+        for (auto it = v.begin(); it != v.end(); ++it) {
+            string memberName = it.memberName();
+            if (memberName.find(".") != std::string::npos) {
+                throw ML::Exception("mongo does not support dotted keys:"
+                                    " \"%s\"", memberName.c_str());
+            }
+
+            const auto & current = *it;
+            if (current.isObject()) {
+                auto subObj = buildObject(current, "");
+                objBuilder.append(prefix + memberName, subObj);
+            }
+            else if (current.isArray()) {
+                auto arr = buildArray(current);
+                objBuilder.append(prefix + memberName, arr);
+            }
+            else if (current.isInt()) {
+                objBuilder.append(prefix + memberName, current.asInt());
+            }
+            else if (current.isUInt()) {
+                objBuilder.append(prefix + memberName, (uint32_t)current.asUInt());
+            }
+            else if (current.isDouble()) {
+                objBuilder.append(prefix + memberName, current.asDouble());
+            }
+            else {
+                objBuilder.append(prefix + memberName, current.asString());
+            }
+        }
+
+        return objBuilder.obj();
+    };
 
     if (logToTerm) {
         cout << objectId << "." << coll << "." << category 
              << ": " << json.toStyledString() << endl;
     }
 
+    auto obj = buildObject(json, category + ".");
     conn->update(db + "." + coll, BSON("_id" << objectId),
-                 BSON("$set" << bson.obj()), true);
+                 BSON("$set" << obj), true);
 }
 
 void
