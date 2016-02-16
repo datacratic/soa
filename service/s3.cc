@@ -6,6 +6,8 @@
 */
 
 #include <atomic>
+#include <unordered_map>
+#include <memory>
 #include <mutex>
 
 #include "soa/service/s3.h"
@@ -49,6 +51,15 @@ using namespace ML;
 using namespace Datacratic;
 
 namespace {
+
+std::mutex s3ApiLock;
+
+/* global key infos */
+std::shared_ptr<S3Api> globalS3Api;
+
+/* per bucket key infos */
+std::unordered_map<string, std::shared_ptr<S3Api>> specificS3Apis;
+
 
 /****************************************************************************/
 /* S3 GLOBALS                                                               */
@@ -2394,61 +2405,9 @@ getDefaultRedundancy()
     return defaultRedundancy;
 }
 
-namespace {
-
-struct S3BucketInfo {
-    std::string s3Bucket;
-    std::shared_ptr<S3Api> api;  //< Used to access this uri
-};
-
-std::recursive_mutex s3BucketsLock;
-std::unordered_map<std::string, S3BucketInfo> s3Buckets;
-
-} // file scope
-
 /** S3 support for filter_ostream opens.  Register the bucket name here, and
     you can open it directly from s3.
 */
-
-void registerS3Bucket(const std::string & bucketName,
-                      const std::string & accessKeyId,
-                      const std::string & accessKey,
-                      double bandwidthToServiceMbps,
-                      const std::string & protocol,
-                      const std::string & serviceUri)
-{
-    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
-
-    auto it = s3Buckets.find(bucketName);
-    if(it != s3Buckets.end()){
-        shared_ptr<S3Api> api = it->second.api;
-        //if the info is different, raise an exception, otherwise return
-        if (api->accessKeyId != accessKeyId
-            || api->accessKey != accessKey
-            || api->bandwidthToServiceMbps != bandwidthToServiceMbps
-            || api->defaultProtocol != protocol
-            || api->serviceUri != serviceUri)
-        {
-            return;
-            throw ML::Exception("Trying to re-register a bucket with different "
-                "parameters");
-        }
-        return;
-    }
-
-    S3BucketInfo info;
-    info.s3Bucket = bucketName;
-    info.api = std::make_shared<S3Api>(accessKeyId, accessKey,
-                                       bandwidthToServiceMbps,
-                                       protocol, serviceUri);
-    info.api->getEscaped("", "/" + bucketName + "/",
-                         S3Api::Range::Full); //throws if !accessible
-    s3Buckets[bucketName] = info;
-
-    if (accessKeyId.size() > 0 && accessKey.size() > 0) {
-        registerAwsCredentials(accessKeyId, accessKey);
-    }
-}
 
 /** Register S3 with the filter streams API so that a filter_stream can be used to
     treat an S3 object as a simple stream.
@@ -2705,45 +2664,48 @@ void registerS3Buckets(const std::string & accessKeyId,
                        const std::string & protocol,
                        const std::string & serviceUri)
 {
-    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
-    int bucketCount(0);
-    auto api = std::make_shared<S3Api>(accessKeyId, accessKey,
-                                       bandwidthToServiceMbps,
-                                       protocol, serviceUri);
+    std::unique_lock<std::mutex> guard(s3ApiLock);
+    globalS3Api.reset(new S3Api(accessKeyId, accessKey,
+                                bandwidthToServiceMbps,
+                                protocol, serviceUri));
+}
 
-    auto onBucket = [&] (const std::string & bucketName)
-        {
-            //cerr << "got bucket " << bucketName << endl;
+void registerS3Bucket(const std::string & bucketName,
+                      const std::string & accessKeyId,
+                      const std::string & accessKey,
+                      double bandwidthToServiceMbps,
+                      const std::string & protocol,
+                      const std::string & serviceUri)
+{
+    std::unique_lock<std::mutex> guard(s3ApiLock);
 
-            S3BucketInfo info;
-            info.s3Bucket = bucketName;
-            info.api = api;
-            s3Buckets[bucketName] = info;
-            bucketCount++;
-
-            return true;
-        };
-
-    api->forEachBucket(onBucket);
-
-    if (bucketCount == 0) {
-        cerr << "registerS3Buckets: no bucket registered\n";
+    auto it = specificS3Apis.find(bucketName);
+    if (it == specificS3Apis.end()) {
+        auto newApi = make_shared<S3Api>(accessKeyId, accessKey,
+                                         bandwidthToServiceMbps,
+                                         protocol, serviceUri);
+        specificS3Apis.insert({bucketName, newApi});
+        if (accessKeyId.size() > 0 && accessKey.size() > 0) {
+            registerAwsCredentials(accessKeyId, accessKey);
+        }
     }
 }
 
 std::shared_ptr<S3Api> getS3ApiForBucket(const std::string & bucketName)
 {
-    std::unique_lock<std::recursive_mutex> guard(s3BucketsLock);
-    auto it = s3Buckets.find(bucketName);
-    if (it == s3Buckets.end()) {
-        // On demand, load up the configuration file before we fail
-        registerDefaultBuckets();
-        it = s3Buckets.find(bucketName);
+    std::unique_lock<std::mutex> guard(s3ApiLock);
+
+    auto s3Api = globalS3Api;
+    auto it = specificS3Apis.find(bucketName);
+    if (it != specificS3Apis.end()) {
+        s3Api = it->second;
     }
-    if (it == s3Buckets.end()) {
-        throw ML::Exception("unregistered s3 bucket " + bucketName);
+
+    if (!s3Api) {
+        throw ML::Exception("no s3 credentials registered for bucket " + bucketName);
     }
-    return it->second.api;
+
+    return s3Api;
 }
 
 std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri)
@@ -2761,11 +2723,7 @@ std::shared_ptr<S3Api> getS3ApiForUri(const std::string & uri)
         accessKey = getAwsAccessKey(accessKeyId);
     }
 
-    auto api = make_shared<S3Api>(accessKeyId, accessKey);
-    api->getEscaped("", "/" + bucketName + "/",
-                    S3Api::Range::Full); //throws if !accessible
-
-    return api;
+    return make_shared<S3Api>(accessKeyId, accessKey);
 }
 
 
