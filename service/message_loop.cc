@@ -445,7 +445,7 @@ processRemoveSource(const SourceEntry & rmEntry)
     auto it = find_if(sources.begin(), sources.end(), pred);
 
     if (it == sources.end()) {
-        cerr << "MessageLoop: source " + rmEntry.name + " no registered (already removed>)\n";
+        cerr << "MessageLoop: source " + rmEntry.name + " not registered (already removed?)\n";
         return;
     }
 
