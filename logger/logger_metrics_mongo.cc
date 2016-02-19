@@ -64,13 +64,17 @@ LoggerMetricsMongo(Json::Value config, const string & coll,
         return true;
     };
 
-    if (!impl("SCRAM-SHA-1")) {
-        cerr << "Failed to authenticate with SCRAM-SHA-1, "
-                "trying with MONGODB-CR" << endl;
-        if (!impl("MONGODB-CR")) {
-            cerr << "Failed with MONGODB-CR as well" << endl;
-            throw ML::Exception("Failed to authenticate");
+    bool authenticated(false);
+    vector<string> authMethods{"SCRAM-SHA-1", "MONGODB-CR"};
+    for (const string & method: authMethods) {
+        if (impl(method)) {
+            cerr << "Mongo client authenticated with " + method + "\n";
+            authenticated = true;
+            break;
         }
+    }
+    if (!authenticated) {
+        throw ML::Exception("Failed to authenticate");
     }
 
     BSONObj obj = BSON(GENOID);
