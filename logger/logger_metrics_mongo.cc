@@ -33,9 +33,11 @@ LoggerMetricsMongo(Json::Value config, const string & coll,
 
     vector<string> hapStrs = ML::split(config["hostAndPort"].asString(), ',');
     if (hapStrs.size() > 1) {
+        /* The 1st entry is the replica set id, followed by the member
+           servers. */
         vector<HostAndPort> haps;
-        for (const string & hapStr: hapStrs) {
-            haps.emplace_back(hapStr);
+        for (int i = 1; i < hapStrs.size(); i++) {
+            haps.emplace_back(hapStrs[i]);
         }
         conn.reset(new mongo::DBClientReplicaSet(hapStrs[0], haps, 100));
     }
