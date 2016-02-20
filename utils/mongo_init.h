@@ -22,7 +22,9 @@ struct MongoAtInit {
             _mongoInitialized = true;
             using mongo::client::initialize;
             using mongo::client::Options;
-            auto status = initialize();
+            Options opts;
+            opts.setCallShutdownAtExit(true);
+            auto status = initialize(opts);
             if (!status.isOK()) {
                 throw ML::Exception("Mongo initialize failed");
             }
