@@ -829,10 +829,9 @@ struct AtInit {
 HttpRequest::Content
 makeXmlContent(const tinyxml2::XMLDocument & xmlDocument)
 {
-    tinyxml2::XMLPrinter printer;
-    const_cast<tinyxml2::XMLDocument &>(xmlDocument).Print(&printer);
+    string docStr = xmlDocumentAsString(xmlDocument);
 
-    return HttpRequest::Content(string(printer.CStr()), "application/xml");
+    return HttpRequest::Content(std::move(docStr), "application/xml");
 }
 
 
@@ -1566,9 +1565,6 @@ obtainMultiPartUpload(const std::string & bucket,
                 throw ML::Exception("invalid http code returned");
 
             auto inProgressInfo = inProgressReq.bodyXml();
-
-            inProgressInfo->Print();
-
             XMLHandle handle(*inProgressInfo);
 
             auto foundPart
@@ -1613,9 +1609,6 @@ obtainMultiPartUpload(const std::string & bucket,
             throw ML::Exception("invalid http code returned");
 
         auto xmlResult = result.bodyXml();
-        //result->Print();
-        //cerr << "result = " << result << endl;
-
         uploadId
             = extract<string>(xmlResult, "InitiateMultipartUploadResult/UploadId");
 
@@ -1650,8 +1643,6 @@ finishMultiPartUpload(const std::string & bucket,
             ->InsertEndChild(joinRequest.NewText(etags[i].c_str()));
     }
 
-    //joinRequest.Print();
-
     string escapedResource = s3EscapeResource(resource);
 
     auto joinResponse
@@ -1670,9 +1661,9 @@ finishMultiPartUpload(const std::string & bucket,
                                       "CompleteMultipartUploadResult/ETag");
         return etag;
     } catch (const std::exception & exc) {
-        cerr << "--- request is " << endl;
-        joinRequest.Print();
-        cerr << "error completing multipart upload: " << exc.what() << endl;
+        cerr << ("--- request is\n" + xmlDocumentAsString(joinRequest) + "\n"
+                 "--- response is\n" + joinResponse.body_ + "\n(end)\n"
+                 + "error completing multipart upload: " + exc.what() + "\n");
         throw;
     }
 }
@@ -1803,9 +1794,6 @@ forEachObject(const std::string & bucket,
         if (listingResult.code_ != 200)
             throw ML::Exception("invalid http code returned");
         auto listingResultXml = listingResult.bodyXml();
-
-        //listingResultXml->Print();
-
         string foundPrefix
             = extractDef<string>(listingResult, "ListBucketResult/Prefix", "");
         string truncated
@@ -2327,9 +2315,6 @@ forEachBucket(const OnBucket & onBucket) const
     if (listingResult.code_ != 200)
         throw ML::Exception("invalid http code returned");
     auto listingResultXml = listingResult.bodyXml();
-
-    //listingResultXml->Print();
-
     auto foundBucket
         = XMLHandle(*listingResultXml)
         .FirstChildElement("ListAllMyBucketsResult")
