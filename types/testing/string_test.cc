@@ -136,3 +136,27 @@ BOOST_AUTO_TEST_CASE( test_basic_dtoa )
     value = -1089000000000;
     BOOST_CHECK_EQUAL(dtoa(value) , "-1.089e12");
 }
+
+BOOST_AUTO_TEST_CASE( is_valid_and_readable_utf8 )
+{
+    BOOST_CHECK_EQUAL(
+        Utf8String::isValidAndReadable("-+jamon123.\"\\'"), true);
+    BOOST_CHECK_EQUAL(Utf8String::isValidAndReadable("éàê𐍈"), true);
+    BOOST_CHECK_EQUAL(Utf8String::isValidAndReadable("\n"), false);
+    BOOST_CHECK_EQUAL(Utf8String::isValidAndReadable("\t"), false);
+
+    {
+        char cstr[] = {56, 0};
+        BOOST_CHECK_EQUAL(Utf8String::isValidAndReadable(cstr), true);
+    }
+
+    {
+        char cstr[] = {-120, 0};
+        BOOST_CHECK_EQUAL(Utf8String::isValidAndReadable(cstr), false);
+    }
+
+    {
+        char cstr[] = {-120, 56, 0};
+        BOOST_CHECK_EQUAL(Utf8String::isValidAndReadable(cstr), false);
+    }
+}
