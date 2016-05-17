@@ -9,6 +9,7 @@
 #include "jml/utils/exc_assert.h"
 #include "jml/compiler/compiler.h"
 #include "soa/service/http_header.h"
+#include "soa/service/openssl_threading.h"
 
 #include <numeric>
 
@@ -129,6 +130,7 @@ namespace {
 static struct AtInit {
     AtInit()
     {
+        initOpenSSLThreading();
         curl_global_init(CURL_GLOBAL_DEFAULT);
     }
     
@@ -136,7 +138,6 @@ static struct AtInit {
     {
         curl_global_cleanup();
     }
-    
 } atInit;
 
 } // file scope

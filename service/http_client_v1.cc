@@ -28,14 +28,6 @@ using namespace Datacratic;
 
 namespace {
 
-struct AtInit {
-    AtInit()
-    {
-        initOpenSSLThreading();
-    }
-} atInit;
-
-
 HttpClientError
 translateError(CURLcode curlError)
 {

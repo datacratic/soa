@@ -19,20 +19,7 @@ using namespace ML;
 using namespace Datacratic;
 
 
-namespace {
-
-struct AtInit {
-    AtInit()
-    {
-        initOpenSSLThreading();
-    }
-} atInit;
-
-}
-
-
 namespace Datacratic {
-
 
 /*****************************************************************************/
 /* HTTP REST PROXY                                                           */
