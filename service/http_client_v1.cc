@@ -99,9 +99,11 @@ HttpClientV1(const string & baseUrl, int numParallel, int queueSize)
     addFd(timerFd_, false, EPOLLIN);
 
     /* multi */
-    ::curl_multi_setopt(multi_.get(), CURLMOPT_SOCKETFUNCTION, socketCallback);
+    ::curl_multi_setopt(multi_.get(), CURLMOPT_SOCKETFUNCTION,
+                        socketCallback);
     ::curl_multi_setopt(multi_.get(), CURLMOPT_SOCKETDATA, this);
-    ::curl_multi_setopt(multi_.get(), CURLMOPT_TIMERFUNCTION, timerCallback);
+    ::curl_multi_setopt(multi_.get(), CURLMOPT_TIMERFUNCTION,
+                        timerCallback);
     ::curl_multi_setopt(multi_.get(), CURLMOPT_TIMERDATA, this);
 
     /* available connections */
@@ -111,9 +113,9 @@ HttpClientV1(const string & baseUrl, int numParallel, int queueSize)
 
     /* kick start multi */
     int runningHandles;
-    ::CURLMcode rc = ::curl_multi_socket_action(multi_.get(),
-                                                CURL_SOCKET_TIMEOUT, 0, 
-                                                &runningHandles);
+    CURLMcode rc = ::curl_multi_socket_action(multi_.get(),
+                                              CURL_SOCKET_TIMEOUT, 0,
+                                              &runningHandles);
     if (rc != ::CURLM_OK) {
         throw ML::Exception("curl error " + to_string(rc));
     }
@@ -168,13 +170,6 @@ HttpClientV1::
 addFd(int fd, bool isMod, int flags)
     const
 {
-    // if (isMod) {
-    //     cerr << "addFd: modding fd " + to_string(fd) + "\n";
-    // }
-    // else {
-    //     cerr << "addFd: adding fd " + to_string(fd) + "\n";
-    // }
-
     ::epoll_event event;
 
     ::memset(&event, 0, sizeof(event));
@@ -199,7 +194,6 @@ HttpClientV1::
 removeFd(int fd)
     const
 {
-    // cerr << "removeFd: removing fd " + to_string(fd) + "\n";
     ::epoll_ctl(fd_, EPOLL_CTL_DEL, fd, nullptr);
 }
 
@@ -318,8 +312,6 @@ void
 HttpClientV1::
 handleWakeupEvent()
 {
-    // cerr << "  wakeup event\n";
-
     /* Deduplication of wakeup events */
     while (wakeup_.tryRead());
 
@@ -330,11 +322,11 @@ handleWakeupEvent()
             HttpConnection *conn = getConnection();
             conn->request_ = move(request);
             conn->perform(noSSLChecks_, tcpNoDelay_, debug_);
-            CURLMcode code = ::curl_multi_add_handle(multi_.get(), conn->easy_);
-            if (code != CURLM_CALL_MULTI_PERFORM) {
-                if (code != CURLM_OK) {
-                    throw ML::Exception("failing to add handle to multi");
-                }
+
+            CURLMcode code = ::curl_multi_add_handle(multi_.get(),
+                                                     conn->easy_);
+            if (code != CURLM_CALL_MULTI_PERFORM && code != CURLM_OK) {
+                throw ML::Exception("failing to add handle to multi");
             }
         }
     }
@@ -344,7 +336,6 @@ void
 HttpClientV1::
 handleTimerEvent()
 {
-    // cerr << "  timer event\n";
     uint64_t misses;
     ssize_t len = ::read(timerFd_, &misses, sizeof(misses));
     if (len == -1) {
@@ -353,9 +344,9 @@ handleTimerEvent()
         }
     }
     int runningHandles;
-    ::CURLMcode rc = ::curl_multi_socket_action(multi_.get(),
-                                                CURL_SOCKET_TIMEOUT, 0, 
-                                                &runningHandles);
+    CURLMcode rc = ::curl_multi_socket_action(multi_.get(),
+                                              CURL_SOCKET_TIMEOUT, 0,
+                                              &runningHandles);
     if (rc != ::CURLM_OK) {
         throw ML::Exception("curl error " + to_string(rc));
     }
@@ -366,7 +357,6 @@ void
 HttpClientV1::
 handleMultiEvent(const ::epoll_event & event)
 {
-    // cerr << "  curl event\n";
     int actionFlags(0);
     if ((event.events & EPOLLIN) != 0) {
         actionFlags |= CURL_CSELECT_IN;
@@ -376,9 +366,9 @@ handleMultiEvent(const ::epoll_event & event)
     }
     
     int runningHandles;
-    ::CURLMcode rc = ::curl_multi_socket_action(multi_.get(), event.data.fd,
-                                                actionFlags,
-                                                &runningHandles);
+    CURLMcode rc = ::curl_multi_socket_action(multi_.get(), event.data.fd,
+                                              actionFlags,
+                                              &runningHandles);
     if (rc != ::CURLM_OK) {
         throw ML::Exception("curl error " + to_string(rc));
     }
@@ -392,11 +382,7 @@ checkMultiInfos()
 {
     int remainingMsgs(0);
     CURLMsg * msg;
-    // int count(0);
-    while ((msg = curl_multi_info_read(multi_.get(), &remainingMsgs))) {
-        // count++;
-        // cerr << to_string(count) << " msg\n";
-        // cerr << "  remaining: " + to_string(remainingMsgs) << " msg\n";
+    while ((msg = ::curl_multi_info_read(multi_.get(), &remainingMsgs))) {
         if (msg->msg == CURLMSG_DONE) {
             HttpConnection * conn(nullptr);
             ::curl_easy_getinfo(msg->easy_handle,
@@ -406,18 +392,13 @@ checkMultiInfos()
             cbs->onDone(*conn->request_, translateError(msg->data.result));
             conn->clear();
 
-            CURLMcode code = ::curl_multi_remove_handle(multi_.get(), conn->easy_);
-            if (code != CURLM_CALL_MULTI_PERFORM) {
-                if (code != CURLM_OK) {
-                    throw ML::Exception("failed to remove handle to multi");
-                }
+            CURLMcode code = ::curl_multi_remove_handle(multi_.get(),
+                                                        conn->easy_);
+            if (code != CURLM_CALL_MULTI_PERFORM && code != CURLM_OK) {
+                throw ML::Exception("failed to remove handle to multi");
             }
             releaseConnection(conn);
             wakeup_.signal();
-            // cerr << "* request done\n";
-        }
-        else {
-            cerr << "? not done\n";
         }
     }
 }
@@ -438,7 +419,6 @@ onCurlSocketEvent(CURL *e, curl_socket_t fd, int what, void *sockp)
     // cerr << "onCurlSocketEvent: " + to_string(fd) + " what: " + to_string(what) + "\n";
 
     if (what == CURL_POLL_REMOVE) {
-        // cerr << "remove fd\n";
         removeFd(fd);
     }
     else if (what != CURL_POLL_NONE) {
@@ -451,7 +431,7 @@ onCurlSocketEvent(CURL *e, curl_socket_t fd, int what, void *sockp)
         }
         addFd(fd, (sockp != nullptr), flags);
         if (sockp == nullptr) {
-            ::CURLMcode rc = ::curl_multi_assign(multi_.get(), fd, this);
+            CURLMcode rc = ::curl_multi_assign(multi_.get(), fd, this);
             if (rc != ::CURLM_OK) {
                 throw ML::Exception("curl error " + to_string(rc));
             }
@@ -492,11 +472,10 @@ onCurlTimerEvent(long timeoutMs)
     }
 
     if (timeoutMs == 0) {
-        // cerr << "* doing timeout\n";
         int runningHandles;
-        ::CURLMcode rc = ::curl_multi_socket_action(multi_.get(),
-                                                    CURL_SOCKET_TIMEOUT, 0, 
-                                                    &runningHandles);
+        CURLMcode rc = ::curl_multi_socket_action(multi_.get(),
+                                                  CURL_SOCKET_TIMEOUT, 0,
+                                                  &runningHandles);
         if (rc != ::CURLM_OK) {
             throw ML::Exception("curl error " + to_string(rc));
         }
@@ -560,11 +539,8 @@ perform(bool noSSLChecks, bool tcpNoDelay, bool debug)
 {
     // cerr << "* performRequest\n";
 
-    // cerr << "nbrRequests: " + to_string(nbrRequests_) + "\n";
-
     afterContinue_ = false;
 
-    easy_.reset();
     easy_.add_option(CURLOPT_URL, request_->url_);
 
     RestParams headers = request_->headers_;
@@ -627,7 +603,6 @@ HttpConnection::
 onCurlHeader(const char * data, size_t size)
     noexcept
 {
-    // cerr << "onCurlHeader\n";
     string headerLine(data, size);
     if (headerLine.find("HTTP/1.1 100") == 0) {
         afterContinue_ = true;
@@ -654,7 +629,7 @@ onCurlHeader(const char * data, size_t size)
             int code = stoi(headerLine.substr(oldTokenIdx, tokenIdx));
 
             request_->callbacks_->onResponseStart(*request_,
-                                                 move(version), code);
+                                                  move(version), code);
         }
         else {
             request_->callbacks_->onHeader(*request_, data, size);
@@ -670,7 +645,6 @@ HttpConnection::
 onCurlWrite(const char * data, size_t size)
     noexcept
 {
-    // cerr << "onCurlWrite\n";
     request_->callbacks_->onData(*request_, data, size);
     return size;
 }
