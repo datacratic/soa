@@ -56,9 +56,15 @@ void thread1Fn(atomic<int> & stage, int epollFd, int pipeFds[2])
     stage = 1; ML::futex_wake(stage);
 
     ::fprintf(stderr, "thread 1: waiting 1\n");
-    rc = ::epoll_wait(epollFd, &event, 1, -1);
-    if (rc == -1) {
-        throw ML::Exception(errno, "epoll_wait");
+    while (true) {
+        rc = ::epoll_wait(epollFd, &event, 1, -1);
+        if (rc == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            throw ML::Exception(errno, "epoll_wait");
+        }
+        break;
     }
 
     ::fprintf(stderr, "thread 1: reading 1\n");
@@ -104,14 +110,21 @@ void thread1Fn(atomic<int> & stage, int epollFd, int pipeFds[2])
     }
 
     ::fprintf(stderr, "thread 1: epoll_wait for final payload\n");
-    rc = ::epoll_wait(epollFd, &event, 1, 2000);
-    if (rc == -1) {
-        throw ML::Exception(errno, "epoll_wait");
+    while (true) {
+        rc = ::epoll_wait(epollFd, &event, 1, 2000);
+        if (rc == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            throw ML::Exception(errno, "epoll_wait");
+        }
+        else if (rc == 0)
+            ::fprintf(stderr, "thread 1: second epoll wait has no event\n");
+        else if (rc > 0)
+            ::fprintf(stderr, "thread 1: second epoll wait has %d events\n",
+                      rc);
+        break;
     }
-    else if (rc == 0)
-        ::fprintf(stderr, "thread 1: second epoll wait has no event\n");
-    else if (rc > 0)
-        ::fprintf(stderr, "thread 1: second epoll wait has %d events\n", rc);
 
     /* This proves that the data written in thread 2 was properly received
        despite being sent before the rearming of our end of the pipe. */
