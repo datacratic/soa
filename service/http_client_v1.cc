@@ -359,6 +359,7 @@ handleTimerEvent()
     if (rc != ::CURLM_OK) {
         throw ML::Exception("curl error " + to_string(rc));
     }
+    checkMultiInfos();
 }
 
 void
@@ -438,10 +439,9 @@ onCurlSocketEvent(CURL *e, curl_socket_t fd, int what, void *sockp)
 
     if (what == CURL_POLL_REMOVE) {
         // cerr << "remove fd\n";
-        ::curl_multi_assign(multi_.get(), fd, nullptr);
         removeFd(fd);
     }
-    else {
+    else if (what != CURL_POLL_NONE) {
         int flags(0);
         if ((what & CURL_POLL_IN)) {
             flags |= EPOLLIN;
@@ -451,7 +451,10 @@ onCurlSocketEvent(CURL *e, curl_socket_t fd, int what, void *sockp)
         }
         addFd(fd, (sockp != nullptr), flags);
         if (sockp == nullptr) {
-            ::curl_multi_assign(multi_.get(), fd, this);
+            ::CURLMcode rc = ::curl_multi_assign(multi_.get(), fd, this);
+            if (rc != ::CURLM_OK) {
+                throw ML::Exception("curl error " + to_string(rc));
+            }
         }
     }
 
@@ -473,6 +476,10 @@ onCurlTimerEvent(long timeoutMs)
 {
     // cerr << "onCurlTimerEvent: timeout = " + to_string(timeoutMs) + "\n";
 
+    if (timeoutMs < -1) {
+        throw ML::Exception("unhandled timeout value: %ld", timeoutMs);
+    }
+
     struct itimerspec timespec;
     memset(&timespec, 0, sizeof(timespec));
     if (timeoutMs > 0) {
@@ -484,7 +491,7 @@ onCurlTimerEvent(long timeoutMs)
         throw ML::Exception(errno, "timerfd_settime");
     }
 
-    if (timeoutMs < 1) {
+    if (timeoutMs == 0) {
         // cerr << "* doing timeout\n";
         int runningHandles;
         ::CURLMcode rc = ::curl_multi_socket_action(multi_.get(),
