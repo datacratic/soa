@@ -37,13 +37,12 @@ bool threadingInit(false);
 
 /* basic lock callbacks */
 
-std::vector<pthread_mutex_t> cryptoLocks; /* vector<std::mutex> is not
-                                           * available */
+pthread_mutex_t * cryptoLocks; /* vector<std::mutex> is not available */
 
 void
 lockingFunc(int mode, int n, const char *, int line)
 {
-    pthread_mutex_t * lock = &cryptoLocks[n];
+    pthread_mutex_t * lock = cryptoLocks + n;
 
     if (mode & CRYPTO_LOCK) {
         ::pthread_mutex_lock(lock);
@@ -111,7 +110,8 @@ initOpenSSLThreading()
         return;
     }
 
-    cryptoLocks.resize(CRYPTO_num_locks());
+    size_t maxLocks = CRYPTO_num_locks();
+    cryptoLocks = new pthread_mutex_t[maxLocks];
     for (size_t i = 0; i < CRYPTO_num_locks(); i++) {
         ::pthread_mutex_init(&cryptoLocks[i], NULL);
     }
