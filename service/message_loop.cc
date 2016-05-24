@@ -444,7 +444,10 @@ processRemoveSource(const SourceEntry & rmEntry)
     };
     auto it = find_if(sources.begin(), sources.end(), pred);
 
-    ExcCheck(it != sources.end(), "couldn't remove source");
+    if (it == sources.end()) {
+        cerr << "MessageLoop: source " + rmEntry.name + " not registered (already removed?)\n";
+        return;
+    }
 
     SourceEntry entry = *it;
     sources.erase(it);

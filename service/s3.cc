@@ -6,9 +6,10 @@
 */
 
 #include <atomic>
-#include <unordered_map>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <unordered_map>
 
 #include "soa/service/s3.h"
 #include "jml/utils/string_functions.h"
@@ -840,10 +841,9 @@ struct AtInit {
 HttpRequest::Content
 makeXmlContent(const tinyxml2::XMLDocument & xmlDocument)
 {
-    tinyxml2::XMLPrinter printer;
-    const_cast<tinyxml2::XMLDocument &>(xmlDocument).Print(&printer);
+    string docStr = xmlDocumentAsString(xmlDocument);
 
-    return HttpRequest::Content(string(printer.CStr()), "application/xml");
+    return HttpRequest::Content(std::move(docStr), "application/xml");
 }
 
 
@@ -910,7 +910,8 @@ struct S3RequestCallbacks : public HttpClientCallbacks {
     virtual void onDone(const HttpRequest & rq,
                         HttpClientError errorCode);
 
-    void appendErrorContext(string & message) const;
+    pair<string, string> detectXMLError() const;
+    string httpErrorContext() const;
     void scheduleRestart() const;
 
     shared_ptr<S3RequestState> state_;
@@ -968,109 +969,152 @@ void
 S3RequestCallbacks::
 onDone(const HttpRequest & rq, HttpClientError errorCode)
 {
-    bool restart(false);
     bool errorCondition(false);
-    string message;
+    bool recoverable(false);
+    string errorCause;
+    string errorDetails;
 
     if (errorCode == HttpClientError::None) {
-        if (response_.code_ >= 300 && response_.code_ != 404) {
+        auto xmlError = detectXMLError();
+        if (!xmlError.first.empty()) {
             errorCondition = true;
-            message = ("S3 operation failed with HTTP code "
-                       + to_string(response_.code_) + "\n");
+            errorCause = "REST error code \"" + xmlError.first + "\"";
+            errorDetails = ("http status: "
+                            + to_string(response_.code_) + "\n"
+                            + "message: " + xmlError.second);
 
-            /* retry on 50X range errors (recoverable) */
-            if (response_.code_ >= 500 and response_.code_ < 505) {
-                restart = true;
-                message += "Error is recoverable.\n";
+            /* retry on "InternalError" */
+            if (xmlError.first == "InternalError") {
+                recoverable = true;
             }
-            else {
-                message += "Error is unrecoverable.\n";
+        }
+        else if (response_.code_ >= 300 && response_.code_ != 404) {
+            errorCondition = true;
+            errorCause = "HTTP status code " + to_string(response_.code_);
+            errorDetails = httpErrorContext();
+
+            /* retry on 50X range errors */
+            if (response_.code_ >= 500 and response_.code_ < 505) {
+                recoverable = true;
             }
         }
     }
     else {
-        restart = true;
+        errorCondition = true;
+        errorCause = "internal error \"" + errorMessage(errorCode) + "\"";
+        recoverable = true;
         if (state_->rq->params.useRange()) {
             state_->range.adjust(state_->requestBody.size());
         }
         state_->body.append(state_->requestBody);
-        message = ("S3 operation failed with internal error: "
-                   + errorMessage(errorCode) + "\n");
     }
 
-    if (restart) {
-        if (state_->retries < getS3Globals().numRetries) {
-            message += "Will retry operation.\n";
+    if (errorCondition) {
+        string recoverability;
+        if (recoverable) {
+            if (state_->retries < getS3Globals().numRetries) {
+                recoverability = "The operation will be retried.";
+                state_->retries++;
+            }
+            else {
+                recoverability = "The operation was retried too many times.";
+                recoverable = false;
+            }
         }
         else {
-            errorCondition = true;
-            message += "Too many retries.\n";
-            restart = false;
+            recoverability = "The error is non recoverable.";
         }
-    }
 
-    if (message.size() > 0) {
-        appendErrorContext(message);
-        ::fprintf(stderr, "%s\n", message.c_str());
-    }
+        string message("S3 operation failed with " + errorCause);
 
-    if (restart) {
-        state_->retries++;
+        const S3Api::RequestParams & params = state_->rq->params;
+        string diagnostic(message + "\n"
+                          + "operation: " + params.verb
+                          + " " + state_->rq->resource + "\n");
+        if (!errorDetails.empty()) {
+            diagnostic += errorDetails + "\n";
+        }
+        diagnostic += recoverability + "\n";
+                             
+        ::fprintf(stderr, "%s", diagnostic.c_str());
+
         header_.clear();
         state_->requestBody.clear();
-        scheduleRestart();
+        if (recoverable) {
+            scheduleRestart();
+        }
+        else {
+            response_.excPtr_ = make_exception_ptr(ML::Exception(message));
+            state_->onResponse(std::move(response_));
+        }
     }
     else {
-        if (errorCondition) {
-            response_.excPtr_ = make_exception_ptr(ML::Exception(message));
-        }
-        else {
-            response_.header_.parse(header_, false);
-            state_->body.append(state_->requestBody);
-            response_.body_ = std::move(state_->body);
-        }
+        response_.header_.parse(header_, false);
         header_.clear();
+        state_->body.append(state_->requestBody);
         state_->requestBody.clear();
+        response_.body_ = std::move(state_->body);
         state_->onResponse(std::move(response_));
     }
 }
 
-void
+pair<string, string>
 S3RequestCallbacks::
-appendErrorContext(string & message)
+detectXMLError()
     const
 {
+    /* Detect so-called "REST error"
+       (http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html)
+
+       Some S3 methods may return an XML error AND still have a 200 HTTP
+       status code:
+       http://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadComplete.html
+       Explanation of the why:
+       https://github.com/aws/aws-sdk-go/issues/501.
+    */
+
+    pair<string, string> xmlError; /* {code, message} */
+
     const S3Api::RequestParams & params = state_->rq->params;
-
-    message += params.verb + " " + state_->rq->resource + "\n";
-    if (header_.size() > 0) {
-        message += "Response headers:\n" + header_;
-    }
-    if (response_.body_.size() > 0) {
-        message += (string("Response body (") + to_string(response_.body_.size())
-                    + " bytes):\n" + response_.body_ + "\n");
-
-        /* log so-called "REST error"
-           (http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html)
-        */
-        if (header_.find("Content-Type: application/xml")
-            != string::npos) {
-            unique_ptr<tinyxml2::XMLDocument> localXml(
-                new tinyxml2::XMLDocument()
-                );
-            localXml->Parse(response_.body_.c_str());
+    if (!(response_.code_ == 200
+          && (params.verb == "GET" || params.verb == "HEAD"))
+        && ((header_.find("Content-Type: application/xml")
+             != string::npos)
+            || (header_.find("content-type: application/xml")
+                != string::npos))) {
+        if (!state_->requestBody.empty()) {
+            std::unique_ptr<tinyxml2::XMLDocument> localXml;
+            localXml.reset(new tinyxml2::XMLDocument());
+            localXml->Parse(state_->requestBody.c_str());
             auto element = tinyxml2::XMLHandle(*localXml)
                 .FirstChildElement("Error")
                 .ToElement();
             if (element) {
-                message += ("S3 REST error: ["
-                            + extract<string>(element, "Code")
-                            + "] message ["
-                            + extract<string>(element, "Message")
-                            +"]\n");
+                xmlError.first = extract<string>(element, "Code");
+                xmlError.second = extract<string>(element, "Message");
             }
         }
     }
+
+    return xmlError;
+}
+
+string
+S3RequestCallbacks::
+httpErrorContext()
+    const
+{
+    string context = "http status: " + to_string(response_.code_) + "\n";
+    if (header_.size() > 0) {
+        context += "response headers:\n" + header_;
+    }
+    if (!state_->requestBody.empty()) {
+        context += (string("response body (")
+                    + to_string(state_->requestBody.size())
+                    + " bytes):\n" + state_->requestBody + "\n");
+    }
+
+    return context;
 }
 
 void
@@ -1577,9 +1621,6 @@ obtainMultiPartUpload(const std::string & bucket,
                 throw ML::Exception("invalid http code returned");
 
             auto inProgressInfo = inProgressReq.bodyXml();
-
-            inProgressInfo->Print();
-
             XMLHandle handle(*inProgressInfo);
 
             auto foundPart
@@ -1624,9 +1665,6 @@ obtainMultiPartUpload(const std::string & bucket,
             throw ML::Exception("invalid http code returned");
 
         auto xmlResult = result.bodyXml();
-        //result->Print();
-        //cerr << "result = " << result << endl;
-
         uploadId
             = extract<string>(xmlResult, "InitiateMultipartUploadResult/UploadId");
 
@@ -1661,8 +1699,6 @@ finishMultiPartUpload(const std::string & bucket,
             ->InsertEndChild(joinRequest.NewText(etags[i].c_str()));
     }
 
-    //joinRequest.Print();
-
     string escapedResource = s3EscapeResource(resource);
 
     auto joinResponse
@@ -1681,9 +1717,9 @@ finishMultiPartUpload(const std::string & bucket,
                                       "CompleteMultipartUploadResult/ETag");
         return etag;
     } catch (const std::exception & exc) {
-        cerr << "--- request is " << endl;
-        joinRequest.Print();
-        cerr << "error completing multipart upload: " << exc.what() << endl;
+        cerr << ("--- request is\n" + xmlDocumentAsString(joinRequest) + "\n"
+                 "--- response is\n" + joinResponse.body_ + "\n(end)\n"
+                 + "error completing multipart upload: " + exc.what() + "\n");
         throw;
     }
 }
@@ -1814,9 +1850,6 @@ forEachObject(const std::string & bucket,
         if (listingResult.code_ != 200)
             throw ML::Exception("invalid http code returned");
         auto listingResultXml = listingResult.bodyXml();
-
-        //listingResultXml->Print();
-
         string foundPrefix
             = extractDef<string>(listingResult, "ListBucketResult/Prefix", "");
         string truncated
@@ -2338,9 +2371,6 @@ forEachBucket(const OnBucket & onBucket) const
     if (listingResult.code_ != 200)
         throw ML::Exception("invalid http code returned");
     auto listingResultXml = listingResult.bodyXml();
-
-    //listingResultXml->Print();
-
     auto foundBucket
         = XMLHandle(*listingResultXml)
         .FirstChildElement("ListAllMyBucketsResult")

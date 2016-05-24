@@ -31,6 +31,7 @@ int main(int argc, char* argv[])
     string s3Key;
     
     string compression = "none";
+    string acl;
     
     po::options_description desc("Main options");
     desc.add_options()
@@ -40,7 +41,8 @@ int main(int argc, char* argv[])
         ("key,k", po::value<string>(&s3Key), "S3 access id key")
         ("s3-key-id,I", po::value<string>(&s3KeyId), "S3 access id")
         ("s3-key,K", po::value<string>(&s3Key), "S3 access id key")
-        ("compression,c", po::value<string>(&compression), "Compression to apply (default: none, valid: auto,gz,bz2,xz")
+        ("compression,c", po::value<string>(&compression), "Compression to apply (default: none, valid: auto,gz,bz2,xz)")
+        ("acl,a", po::value<string>(&acl), "Acl to apply (default: none)")
         ("help,h", "Produce help message");
     
     po::positional_options_description pos;
@@ -81,8 +83,16 @@ int main(int argc, char* argv[])
     std::vector<filter_ostream> streams;
     streams.reserve(outputFiles.size() + 1);
 
-    for (auto f: outputFiles)
-        streams.emplace_back(f, ios::out, compression);
+    map<string, string> options;
+    if (!compression.empty()) {
+        options["compression"] = compression;
+    }
+    if (!acl.empty()) {
+        options["acl"] = acl;
+    }
+    for (auto f: outputFiles) {
+        streams.emplace_back(f, options);
+    }
 
     Date start = Date::now();
     size_t bytesDone = 0;

@@ -132,6 +132,10 @@ public:
         return data_ < other.data_;
     }
 
+    // Rejects invalid strings and strings containing ascii below 32 and 127.
+    // Unicode control characters are not checked in the current implementation
+    static bool isValidAndReadable(const char* cstr, int len = -1);
+
 private:
     std::string data_; // original utf8-encoded string
 };

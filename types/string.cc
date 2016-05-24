@@ -119,6 +119,52 @@ string Utf8String::extractAscii() const
     return s;
 }
 
+bool
+Utf8String::
+isValidAndReadable(const char * cstr, int len) {
+    if (len == -1) {
+        len = strlen(cstr);
+    }
+    for (int i = 0; i < len; ++i) {
+        const unsigned char & c = cstr[i];
+        if (c < 32) {
+            return false;
+        }
+        if (c < 127) {
+            continue;
+        }
+        if (c == 127) {
+            return false;
+        }
+
+        int utf8Ahead = 0;
+        // UTF-8 leading char
+        if (c < 224) {
+            utf8Ahead = 1;
+        }
+        else if (c < 240) {
+            utf8Ahead = 2;
+        }
+        else if (c < 248) {
+            utf8Ahead = 3;
+        }
+        else {
+            return false;
+        }
+
+        if (i + utf8Ahead >= len) {
+            return false;
+        }
+        for (int j = 1; j <= utf8Ahead; ++j) {
+            if ((unsigned)cstr[i + j] < 128) {
+                return false;
+            }
+        }
+        i += utf8Ahead;
+    }
+    return true;
+}
+
 /*****************************************************************************/
 /* UTF32STRING                                                                */
 /****************************************************************************/

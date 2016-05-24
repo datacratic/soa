@@ -132,23 +132,6 @@ setupLogger(const Json::Value & config,
         fct();
     }
 
-    auto getCmdResult = [&] (const char* cmd) {
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) {
-            return string("ERROR");
-        }
-        char buffer[128];
-        stringstream result;
-        while (!feof(pipe)) {
-            if (fgets(buffer, 128, pipe) != NULL) {
-                result << buffer;
-            }
-        }
-        pclose(pipe);
-        string res = result.str();
-        return res.substr(0, res.length() - 1);//chop \n
-    };
-
     string now = Date::now().printClassic();
     Json::Value v;
     v["startTime"] = now;
@@ -159,8 +142,6 @@ setupLogger(const Json::Value & config,
     int hostnameOk = !gethostname(hostname, 128);
     v["hostname"] = string(hostnameOk ? hostname : "");
     v["workingDirectory"] = string(getEnv("PWD"));
-    v["gitBranch"] = getCmdResult("git rev-parse --abbrev-ref HEAD");
-    v["gitHash"] = getCmdResult("git rev-parse HEAD");
     // Log environment variable RUNID. Useful to give a name to an
     // experiment.
     v["runid"] = getEnv("RUNID");

@@ -77,3 +77,16 @@
    fun:_ULx86_64_step
    ...
 }
+
+{
+   tcmalloc trips valgrind on 14.04 too
+   Memcheck:Param
+   msync(start)
+   fun:__msync_nocancel
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   ...
+}
