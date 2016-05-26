@@ -117,7 +117,6 @@ void
 StructureDescriptionBase::
 operator = (const StructureDescriptionBase & other)
 {
-    ::fprintf(stderr, "StructureDescriptionBase copy %p from %p\n", this, &other);
     type = other.type;
     structName = other.structName;
     nullAccepted = other.nullAccepted;
@@ -143,7 +142,6 @@ void
 StructureDescriptionBase::
 operator = (StructureDescriptionBase && other)
 {
-    ::fprintf(stderr, "StructureDescriptionBase move %p from %p\n", this, &other);
     type = std::move(other.type);
     structName = std::move(other.structName);
     nullAccepted = std::move(other.nullAccepted);

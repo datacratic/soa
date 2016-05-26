@@ -793,14 +793,13 @@ struct StructureDescriptionBase {
     typedef std::map<const char *, FieldDescription, StrCompare> Fields;
     Fields fields;
 
+    /* A deleter that works with buffers allocated with malloc */
     struct FreeDeleter {
-        FreeDeleter(){};
-
         void operator () (void * p)
             const
         {
             ::free(p);
-        };
+        }
     };
 
     std::vector<std::unique_ptr<char, FreeDeleter> > fieldNames;
