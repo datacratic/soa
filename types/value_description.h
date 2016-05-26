@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <string.h>
 #include <string>
 #include <memory>
 #include <unordered_map>
@@ -754,6 +755,11 @@ struct StructureDescriptionBase {
     {
     }
 
+    StructureDescriptionBase(const StructureDescriptionBase & other) = delete;
+    StructureDescriptionBase(StructureDescriptionBase && other) = delete;
+    void operator = (const StructureDescriptionBase & other);
+    void operator = (StructureDescriptionBase && other);
+
     const std::type_info * type;
     std::string structName;
     bool nullAccepted;
@@ -787,7 +793,17 @@ struct StructureDescriptionBase {
     typedef std::map<const char *, FieldDescription, StrCompare> Fields;
     Fields fields;
 
-    std::vector<std::string> fieldNames;
+    struct FreeDeleter {
+        FreeDeleter(){};
+
+        void operator () (void * p)
+            const
+        {
+            ::free(p);
+        };
+    };
+
+    std::vector<std::unique_ptr<char, FreeDeleter> > fieldNames;
 
     std::vector<Fields::const_iterator> orderedFields;
 
@@ -962,15 +978,15 @@ struct StructureDescription
         if (fields.count(name.c_str()))
             throw ML::Exception("field '" + name + "' added twice");
 
-        fieldNames.push_back(name);
-        const char * fieldName = fieldNames.back().c_str();
-        
+        std::unique_ptr<char, FreeDeleter> fieldName(::strdup(name.c_str()));
+        char * fieldNamePtr = fieldName.get();
+        fieldNames.emplace_back(std::move(fieldName));
+
         auto it = fields.insert
-            (Fields::value_type(fieldName, std::move(FieldDescription())))
+            (Fields::value_type(fieldNamePtr, std::move(FieldDescription())))
             .first;
-        
         FieldDescription & fd = it->second;
-        fd.fieldName = fieldName;
+        fd.fieldName = fieldNamePtr;
         fd.comment = comment;
         fd.description = description;
         Struct * p = nullptr;
@@ -1106,12 +1122,13 @@ addParent(ValueDescriptionT<V> * description_)
         FieldDescription & ofd = const_cast<FieldDescription &>(oit->second);
         const std::string & name = ofd.fieldName;
 
-        fieldNames.push_back(name);
-        const char * fieldName = fieldNames.back().c_str();
+        std::unique_ptr<char, FreeDeleter> fieldName(::strdup(name.c_str()));
+        char * fieldNamePtr = fieldName.get();
+        fieldNames.emplace_back(std::move(fieldName));
 
-        auto it = fields.insert(Fields::value_type(fieldName, std::move(FieldDescription()))).first;
+        auto it = fields.insert(Fields::value_type(fieldNamePtr, std::move(FieldDescription()))).first;
         FieldDescription & fd = it->second;
-        fd.fieldName = fieldName;
+        fd.fieldName = fieldNamePtr;
         fd.comment = ofd.comment;
         fd.description = std::move(ofd.description);
         
