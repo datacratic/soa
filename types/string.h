@@ -19,11 +19,6 @@ namespace Datacratic {
 /* Utf8String                                                               */
 /*****************************************************************************/
 
-namespace JS {
-struct JSValue;
-} // namespace JS
-
-
 class Utf8String
 {
 public:
@@ -149,14 +144,6 @@ std::ostream & operator << (std::ostream & stream, const Utf8String & str);
 
 IMPL_SERIALIZE_RECONSTITUTE(Utf8String);
 
-#if 0
-namespace JS {
-
-void to_js(JSValue & jsval, const Utf8String & value);
-Utf8String from_js(const JSValue & val, Utf8String *);
-
-} // namespace JS
-#endif
 
 class Utf32String {
 public:
