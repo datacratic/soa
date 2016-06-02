@@ -133,7 +133,6 @@ HttpConnection::
         ::fprintf(stderr,
                   "destroying non-idle connection: %d",
                   responseState_);
-        abort();
     }
 }
 
@@ -142,7 +141,6 @@ HttpConnection::
 clear()
 {
     responseState_ = IDLE;
-    requestEnded_ = false;
     request_.clear();
     lastCode_ = Success;
 }
@@ -294,6 +292,9 @@ handleEndOfRq(TcpConnectionCode code, bool requireClose)
         ;
     }
     else {
+        /* "requestEnded_" is meant to ignore this part of the code, since
+           "handleEndOfRq" is called again from "onClosed", in the callback chain started in
+           "requestClose". */
         requestEnded_ = true;
         cancelRequestTimer();
         if (requireClose) {
@@ -310,9 +311,12 @@ void
 HttpConnection::
 finalizeEndOfRq(TcpConnectionCode code)
 {
-    request_.callbacks_->onDone(request_, translateError(code));
-    clear();
-    onDone(code);
+    if (request_) {
+        request_.callbacks_->onDone(request_, translateError(code));
+        clear();
+        onDone(code);
+    }
+    requestEnded_ = false;
 }
 
 void
@@ -416,7 +420,7 @@ HttpClientV2(const string & baseUrl, int numParallel, size_t queueSize)
       baseUrl_(baseUrl),
       avlConnections_(numParallel),
       nextAvail_(0),
-      queue_([&]() { this->handleQueueEvent(); return false; }, queueSize)
+      queue_([&]() { this->handleQueueEvent(); }, queueSize)
 {
     ExcAssert(baseUrl.compare(0, 8, "https://") != 0);
 
@@ -505,7 +509,7 @@ handleQueueEvent()
     if (numConnections > 0) {
         /* "0" has a special meaning for pop_front and must be avoided here */
         auto requests = queue_.pop_front(numConnections);
-        for (auto request: requests) {
+        for (auto & request: requests) {
             HttpConnection * conn = getConnection();
             if (!conn) {
                 cerr << ("nextAvail_: "  + to_string(nextAvail_)
