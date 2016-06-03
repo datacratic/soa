@@ -426,7 +426,7 @@ HttpClientV2(const string & baseUrl, int numParallel, size_t queueSize)
         shared_ptr<HttpConnection> connection(connPtr);
         connection->init(baseUrl);
         connection->onDone = [&, connPtr] (TcpConnectionCode result) {
-            handleHttpConnectionDone(connPtr, result);
+            releaseConnection(connPtr);
         };
         loop_.addSource("connection" + to_string(i), connection);
         avlConnections_[i] = connPtr;
@@ -517,21 +517,6 @@ handleQueueEvent()
             }
             conn->perform(move(request));
         }
-    }
-}
-
-void
-HttpClientV2::
-handleHttpConnectionDone(HttpConnection * connection,
-                         TcpConnectionCode result)
-{
-    auto requests = queue_.pop_front(1);
-    if (requests.size() > 0) {
-        // cerr << "emptying queue...\n";
-        connection->perform(move(requests[0]));
-    }
-    else {
-        releaseConnection(connection);
     }
 }
 
