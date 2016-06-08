@@ -715,8 +715,8 @@ BOOST_AUTO_TEST_CASE( test_http_client_connection_closed )
             }
         }
 
-        loop.removeSourceSync(client.get());
         ML::sleep(0.5);
+        loop.removeSourceSync(client.get());
     }
 
     /* response not sent */
