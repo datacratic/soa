@@ -1,15 +1,17 @@
+namespace Datacratic {
+
 struct PingConnectionHandler : public ConnectionHandler {
     PingConnectionHandler(std::string & errorWhere,
                           ACE_Semaphore & finished)
         : errorWhere(errorWhere), finished(finished), messages(0)
     {
         constructed = Date::now();
-        //cerr << "creating ping handler" << endl;
+        //cerr << "creating ping handler"\n";
     }
 
     ~PingConnectionHandler()
     {
-        //cerr << "destructing ping handler" << endl;
+        //cerr << "destructing ping handler"\n";
     }
 
     std::string & errorWhere;
@@ -30,10 +32,10 @@ struct PingConnectionHandler : public ConnectionHandler {
 
     void handleInput()
     {
-        //cerr << "ping got input" << endl;
+        //cerr << "ping got input"\n";
         //cerr << Date::now().print(5)
         //     << " ping handle_input on " << fd << " messages = "
-        //     << messages << endl;
+        //     << messages << "\n";
 
         char buf[100] = "error";
         int res = recv(buf, 100, MSG_DONTWAIT);
@@ -42,13 +44,13 @@ struct PingConnectionHandler : public ConnectionHandler {
         BOOST_CHECK_EQUAL(res, 4);
         if (res == -1)
             BOOST_CHECK_EQUAL(strerror(errno), "success");
-        BOOST_CHECK_EQUAL(string(buf), string("Hi!!"));
+        BOOST_CHECK_EQUAL(std::string(buf), std::string("Hi!!"));
 
         if (messages == 1000) {
-            cerr << "did 1000 messages in "
-                 << Date::now().secondsSince(constructed)
-                 << " seconds" << endl;
-
+            std::cerr << "did 1000 messages in "
+                      << Date::now().secondsSince(constructed)
+                      << " seconds\n";
+ 
             stopReading();
             stopWriting();
             finished.release();
@@ -58,16 +60,16 @@ struct PingConnectionHandler : public ConnectionHandler {
 
         ++messages;
         if (messages % 100 == 0)
-            cerr << messages << endl;
+            std::cerr << messages << "\n";
 
         startWriting();
     }
 
     void handleOutput()
     {
-        //cerr << "ping got output" << endl;
+        //cerr << "ping got output\n";
         //cerr << Date::now().print(5)
-        //     << " ping handle_output on " << fd << endl;
+        //     << " ping handle_output on " << fd << "\n";
 
         int res = send("hello", 5, MSG_DONTWAIT | MSG_NOSIGNAL);
         BOOST_CHECK_EQUAL(res, 5);
@@ -81,12 +83,12 @@ struct PongConnectionHandler : public ConnectionHandler {
     PongConnectionHandler(std::string & errorWhere)
         : errorWhere(errorWhere)
     {
-        //cerr << "creating pong handler" << endl;
+        //cerr << "creating pong handler\n";
     }
 
     ~PongConnectionHandler()
     {
-        //cerr << "destructing pong handler" << endl;
+        //cerr << "destructing pong handler\n";
     }
 
     std::string & errorWhere;
@@ -99,16 +101,16 @@ struct PongConnectionHandler : public ConnectionHandler {
     void onGotTransport()
     {
         //cerr << "pong handler on GotTransport: handle " << getHandle()
-        //     << endl;
+        //     << "\n";
         startReading();
     }
 
     void handleInput()
     {
         //cerr << "pong handler on handleInput: handle " << getHandle()
-        //     << endl;
+        //     << "\n";
         //cerr << Date::now().print(5)
-        //     << " pong handle_input on " << fd << endl;
+        //     << " pong handle_input on " << fd << "\n";
 
         char buf[] = "error";
         int res = recv(buf, sizeof(buf), MSG_DONTWAIT);
@@ -122,16 +124,16 @@ struct PongConnectionHandler : public ConnectionHandler {
         BOOST_CHECK_EQUAL(res, 5);
         if (res == -1)
             BOOST_CHECK_EQUAL(strerror(errno), "success");
-        BOOST_CHECK_EQUAL(buf, string("hello"));
+        BOOST_CHECK_EQUAL(buf, std::string("hello"));
         startWriting();
     }
 
     void handleOutput()
     {
         //cerr << "pong handler on handleOutput: handle " << getHandle()
-        //     << endl;
+        //     << "\n";
         //cerr << Date::now().print(5)
-        //     << " pong handle_output on " << fd << endl;
+        //     << " pong handle_output on " << fd << "\n";
         
         int res = send("Hi!!", 4, MSG_DONTWAIT | MSG_NOSIGNAL);
         BOOST_CHECK_EQUAL(res, 4);
@@ -141,3 +143,4 @@ struct PongConnectionHandler : public ConnectionHandler {
     }
 };
 
+} // namespace Datacratic

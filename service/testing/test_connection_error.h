@@ -5,16 +5,16 @@
    Testing include for endpoint connection error tests.
 */
 
-using namespace std;
-using namespace ML;
-using namespace Datacratic;
-
 
 template<typename Endpoint>
 void doTestConnectionError(Endpoint & connector,
                            const std::string & errorRequired,
                            const std::string & errorRequired2 = "")
 {
+    using namespace std;
+    using namespace ML;
+    using namespace Datacratic;
+
     BOOST_CHECK_EQUAL(connector.numActiveConnections(), 0);
     BOOST_CHECK_EQUAL(connector.numInactiveConnections(), 0);
     BOOST_CHECK_EQUAL(connector.threadsActive(), 1);
