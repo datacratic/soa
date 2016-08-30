@@ -41,7 +41,7 @@ struct ZookeeperConfigurationService
     void init(std::string host,
               std::string prefix,
               std::string location,
-              int timeout = 5);
+              int timeout);
 
     virtual Json::Value getJson(const std::string & value,
                                 Watch watch = Watch());

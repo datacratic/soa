@@ -128,7 +128,7 @@ ZookeeperConfigurationService(std::string host,
                               std::string location,
                               int timeout)
 {
-    init(std::move(host), std::move(prefix), std::move(location));
+    init(std::move(host), std::move(prefix), std::move(location), timeout);
 }
 
 ZookeeperConfigurationService::

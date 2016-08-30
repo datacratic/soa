@@ -4,6 +4,11 @@
 
 */
 
+#include <signal.h>
+
+#include <mutex>
+#include <unordered_set>
+
 #include "soa/service/zookeeper.h"
 #include "jml/arch/timers.h"
 #include "jml/arch/backtrace.h"
@@ -13,14 +18,9 @@ using namespace std;
 
 namespace Datacratic {
 
-namespace {
+class ZookeeperConnection;
 
-struct Init {
-    Init()
-    {
-        zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
-    }
-} init;
+namespace {
 
 void zk_callback(zhandle_t * ah, int type, int state, const char * path, void * user) {
     uintptr_t cbid = reinterpret_cast<uintptr_t>(user);
@@ -34,6 +34,37 @@ void zk_callback(zhandle_t * ah, int type, int state, const char * path, void * 
 #endif
         cb->call(type, state);
     }
+}
+
+__attribute__((init_priority(101)))
+mutex closeMutex;
+
+__attribute__((init_priority(101)))
+unordered_set<ZookeeperConnection *> zookeeperConnections;
+
+struct sigaction oldAction;
+
+__attribute__((constructor))
+void
+initHandlers() {
+    zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
+
+    sigset_t mask;
+    sigemptyset(&mask);
+    struct sigaction action = {
+         [] (int signal) {
+               unique_lock<mutex> lock{closeMutex};
+               for (auto zookeeperConnection : zookeeperConnections) {
+                  zookeeperConnection->close();
+               }
+               sigaction(SIGTERM, &oldAction, nullptr);
+               raise(SIGTERM);
+         },
+         mask,
+         0,
+         nullptr
+    };
+    sigaction(SIGTERM, &action, &oldAction);
 }
 
 } // file scope
@@ -120,8 +151,19 @@ ZookeeperConnection()
       handle(0),
       callbackMgr_(ZookeeperCallbackManager::instance())
 {
+   unique_lock<mutex> lock{closeMutex};
+   zookeeperConnections.insert(this);
 }
-    
+
+ZookeeperConnection::
+~ZookeeperConnection() {
+    close();
+    {
+        unique_lock<mutex> lock{closeMutex};
+        zookeeperConnections.erase(this);
+    }
+}
+
 std::string
 ZookeeperConnection::
 printEvent(int eventType)
