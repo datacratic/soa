@@ -422,10 +422,6 @@ struct ServiceProxies {
                      const std::string & prefix = "",
                      double dumpInterval = 1.0);
 
-    void useZookeeper(std::string url = "localhost:2181",
-                      std::string prefix = "CWD",
-                      std::string location = "global");
-
     void usePortRanges(const std::string& path);
     void usePortRanges(const Json::Value& config);
 

@@ -63,7 +63,6 @@ struct ServiceProxiesJS :
 
         NODE_SET_PROTOTYPE_METHOD(t, "bootstrap", bootstrap);
         NODE_SET_PROTOTYPE_METHOD(t, "logToCarbon", logToCarbon);
-        registerMemberFn(&Datacratic::ServiceProxies::useZookeeper, "useZookeeper");
         registerMemberFn(&Datacratic::ServiceProxies::getServiceClassInstances, "getServiceClassInstances");
     }
 

@@ -18,79 +18,10 @@
 #include <thread>
 #include "soa/service/zmq_utils.h"
 #include "soa/service/zmq_named_pub_sub.h"
-#include "soa/service/testing/zookeeper_temporary_server.h"
 
 using namespace std;
 using namespace ML;
 using namespace Datacratic;
-
-BOOST_AUTO_TEST_CASE( test_zookeeper_watches )
-{
-    ZooKeeper::TemporaryServer zookeeper;
-    zookeeper.start();
-
-    auto proxies = std::make_shared<ServiceProxies>();
-    proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()));
-
-    int numChangesRoot = 0;
-    int numChangesLeaf = 0;
-
-    ConfigurationService::Watch watchRoot;
-    watchRoot.init([&] (const std::string & node, const ConfigurationService::ChangeType change) {
-    	++numChangesRoot;
-    	cerr << "got root change " << node << " of type " << change << endl;
-    });
-
-    ConfigurationService::Watch watchLeaf;
-    watchLeaf.init([&] (const std::string & node, const ConfigurationService::ChangeType change) {
-    	++numChangesLeaf;
-    	cerr << "got leaf change " << node << " of type " << change << endl;
-    });
-
-    cerr << endl << "Watching parent" << endl;
-
-    auto config = proxies->config;
-    config->removePath("");
-    BOOST_CHECK_EQUAL(config->getChildren("parent", watchRoot), vector<string>());
-    BOOST_CHECK_EQUAL(numChangesRoot, 0);
-    BOOST_CHECK_EQUAL(numChangesLeaf, 0);
-
-    cerr << endl << "Setting child to howdy" << endl;
-
-    config->set("parent/child", Json::Value("howdy"));
-    ML::sleep(0.1);
-    BOOST_CHECK_EQUAL(numChangesRoot, 1);
-    BOOST_CHECK_EQUAL(numChangesLeaf, 0);
-    BOOST_CHECK_EQUAL(config->getJson("parent/child", watchLeaf), Json::Value("howdy"));
-    BOOST_CHECK_EQUAL(config->getChildren("parent", watchRoot), vector<string>{"child"});
-
-    cerr << endl << "Setting child to doody" << endl;
-
-    config->set("parent/child", Json::Value("doody"));
-    ML::sleep(0.1);
-    BOOST_CHECK_EQUAL(numChangesRoot, 1);
-    BOOST_CHECK_EQUAL(numChangesLeaf, 1);
-    BOOST_CHECK_EQUAL(config->getJson("parent/child", watchLeaf), Json::Value("doody"));
-    BOOST_CHECK_EQUAL(config->getChildren("parent", watchRoot), vector<string>{"child"});
-    ML::sleep(0.1);
-
-    cerr << endl << "Removing" << endl;
-
-    config->removePath("");
-    ML::sleep(0.1);
-    BOOST_CHECK_EQUAL(numChangesRoot, 3); // 3 registrations - 1 that already fired
-    BOOST_CHECK_EQUAL(numChangesLeaf, 2); // 2 registrations - 1 that already fired
-    BOOST_CHECK_EQUAL(config->getChildren("parent", watchRoot), vector<string>());
-    BOOST_CHECK_EQUAL(config->getJson("parent/child", watchLeaf), Json::Value());
-
-    cerr << endl << "Setting child back again" << endl;
-
-    config->set("parent/child", "hello");
-    ML::sleep(0.1);
-    BOOST_CHECK_EQUAL(numChangesRoot, 4);
-    BOOST_CHECK_EQUAL(numChangesLeaf, 2); // no notification changes on creation
-    BOOST_CHECK_EQUAL(config->getJson("parent/child"), Json::Value("hello"));
-}
 
 struct Publisher : public ServiceBase, public ZmqNamedPublisher {
 
@@ -116,11 +47,8 @@ struct Publisher : public ServiceBase, public ZmqNamedPublisher {
 
 BOOST_AUTO_TEST_CASE( test_named_publisher )
 {
-    ZooKeeper::TemporaryServer zookeeper;
-    zookeeper.start();
-
     auto proxies = std::make_shared<ServiceProxies>();
-    proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()));
+    // proxies->useZookeeper(ML::format("localhost:%d", zookeeper.getPort()));
 
     ZmqNamedSubscriber subscriber(*proxies->zmqContext);
     subscriber.init(proxies->config);

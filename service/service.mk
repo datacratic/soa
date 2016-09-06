@@ -48,7 +48,6 @@ LIBSERVICES_SOURCES := \
 	message_loop.cc \
 	loop_monitor.cc \
 	named_endpoint.cc \
-	zookeeper_configuration_service.cc \
 	zmq_endpoint.cc \
 	async_event_source.cc \
 	async_writer_source.cc \
@@ -62,7 +61,6 @@ LIBSERVICES_SOURCES := \
 	curl_wrapper.cc \
 	sink.cc \
 	openssl_threading.cc \
-	zookeeper.cc \
 	http_client.cc \
 	http_client_v1.cc \
 	http_client_v2.cc \
@@ -76,7 +74,7 @@ LIBSERVICES_SOURCES := \
 	event_subscriber.cc \
 	nsq_client.cc 
 
-LIBSERVICES_LINK := opstats curl boost_regex runner_common zeromq zookeeper_mt ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description crypto
+LIBSERVICES_LINK := opstats curl boost_regex runner_common zeromq ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description crypto
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
@@ -121,11 +119,6 @@ $(eval $(call program,s3_multipart_cmd,cloud boost_program_options utils))
 $(eval $(call program,syslog_trace,services))
 $(eval $(call program,s3cat,cloud boost_program_options utils))
 $(eval $(call program,sns_send,cloud boost_program_options utils))
-
-SERVICEDUMP_LINK = services boost_program_options
-
-$(eval $(call program,service_dump,$(SERVICEDUMP_LINK)))
-
 
 $(eval $(call include_sub_make,service_js,js,service_js.mk))
 $(eval $(call include_sub_make,service_testing,testing,service_testing.mk))

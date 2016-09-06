@@ -8,7 +8,6 @@
 #include "service_base.h"
 #include <iostream>
 #include "soa/service/carbon_connector.h"
-#include "zookeeper_configuration_service.h"
 #include "jml/arch/demangle.h"
 #include "jml/utils/exc_assert.h"
 #include "jml/utils/environment.h"
@@ -510,30 +509,6 @@ logToCarbon(std::shared_ptr<CarbonConnector> conn)
 
 void
 ServiceProxies::
-useZookeeper(std::string url,
-             std::string prefix,
-             std::string location)
-{
-    if (prefix == "CWD") {
-        char buf[1024];
-        if (!getcwd(buf, 1024))
-            throw ML::Exception(errno, "getcwd");
-        string cwd = buf;
-
-        utsname name;
-        if (uname(&name))
-            throw ML::Exception(errno, "uname");
-        string node = name.nodename;
-        
-        prefix = "/dev/" + node + cwd + "_" + __progname + "/";
-    }
-
-    config.reset(new ZookeeperConfigurationService(url, prefix, location));
-}
-
-
-void
-ServiceProxies::
 usePortRanges(const std::string& path)
 {
     ports.reset(new JsonPortRangeService(path));
@@ -653,9 +628,6 @@ bootstrap(const Json::Value& config)
 
         logToCarbon(uris, install, dumpInterval);
     }
-
-    if (config.isMember("zookeeper-uri"))
-        useZookeeper(config["zookeeper-uri"].asString(), install, location);
 
     if (config.isMember("portRanges"))
         usePortRanges(config["portRanges"]);

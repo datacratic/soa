@@ -62,6 +62,5 @@ int main(int argc, char ** argv)
     }
 
     shared_ptr<ServiceProxies> proxies(new ServiceProxies());
-    proxies->useZookeeper(zookeeperUri, installation);
     proxies->config->dump(cerr);
 }
