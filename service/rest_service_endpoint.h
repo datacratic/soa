@@ -1,15 +1,14 @@
 /* json_service_endpoint.h                                         -*- C++ -*-
    Jeremy Barnes, 9 November 2012
-   Copyright (c) 2012 Datacratic.  All rights reserved.
+   Copyright (c) 2012-2016 Datacratic.  All rights reserved.
 
 */
 
-#ifndef __service__zmq_json_endpoint_h__
-#define __service__zmq_json_endpoint_h__
+#pragma once
 
-#include "zmq_endpoint.h"
 #include "jml/utils/vector_utils.h"
-#include "http_named_endpoint.h"
+#include "soa/service/message_loop.h"
+#include "soa/service/http_named_endpoint.h"
 
 
 namespace Datacratic {
@@ -72,7 +71,7 @@ struct RestServiceEndpoint: public MessageLoop {
         then the service will bind to those specific ports for the given
         endpoints, and so no service discovery will need to be done.
     */
-    RestServiceEndpoint(std::shared_ptr<zmq::context_t> context);
+    RestServiceEndpoint();
 
     virtual ~RestServiceEndpoint();
 
@@ -88,14 +87,6 @@ struct RestServiceEndpoint: public MessageLoop {
         {
         }
         
-        /// Initialize for zeromq
-        ConnectionId(const std::string & zmqAddress,
-                     const std::string & requestId,
-                     RestServiceEndpoint * endpoint)
-            : itl(new Itl(zmqAddress, requestId, endpoint))
-        {
-        }
-
         /// Initialize for http
         ConnectionId(std::shared_ptr<HttpNamedEndpoint::RestConnectionHandler> http,
                      const std::string & requestId,
@@ -118,27 +109,12 @@ struct RestServiceEndpoint: public MessageLoop {
             {
             }
 
-            Itl(const std::string & zmqAddress,
-                const std::string & requestId,
-                RestServiceEndpoint * endpoint)
-                : zmqAddress(zmqAddress),
-                  requestId(requestId),
-                  http(0),
-                  endpoint(endpoint),
-                  responseSent(false),
-                  startDate(Date::now()),
-                  chunkedEncoding(false),
-                  keepAlive(true)
-            {
-            }
-
             ~Itl()
             {
                 if (!responseSent)
                     throw ML::Exception("no response sent on connection");
             }
 
-            std::string zmqAddress;
             std::string requestId;
             std::shared_ptr<HttpNamedEndpoint::RestConnectionHandler> http;
             RestServiceEndpoint * endpoint;
@@ -230,9 +206,7 @@ struct RestServiceEndpoint: public MessageLoop {
 
         bool isConnected() const
         {
-            if (itl->http)
-                return !itl->http->isZombie;  // NOTE: race condition
-            else return true;  // zmq is always "connected"
+            return !itl->http->isZombie;  // NOTE: race condition
         }
     };
 
@@ -244,10 +218,8 @@ struct RestServiceEndpoint: public MessageLoop {
     /** Bind to TCP/IP ports.  There is one for zeromq and one for
         http.
     */
-    std::pair<std::string, std::string>
-    bindTcp(PortRange const & zmqRange = PortRange(),
-            PortRange const & httpRange = PortRange(),
-            std::string host = "");
+    std::string bindTcp(PortRange const & httpRange = PortRange(),
+                        std::string host = "");
 
     /** Bind to a fixed URI for the HTTP endpoint.  This will throw an
         exception if it can't bind.
@@ -276,7 +248,6 @@ struct RestServiceEndpoint: public MessageLoop {
     virtual void handleRequest(const ConnectionId & connection,
                                const RestRequest & request) const;
 
-    ZmqNamedEndpoint zmqEndpoint;
     HttpNamedEndpoint httpEndpoint;
 
     std::function<void (const ConnectionId & conn, const RestRequest & req) > logRequest;
@@ -304,5 +275,3 @@ struct RestServiceEndpoint: public MessageLoop {
 };
 
 } // namespace Datacratic
-
-#endif /* __service__zmq_json_endpoint_h__ */

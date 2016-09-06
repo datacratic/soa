@@ -22,8 +22,7 @@ struct MockRestService : public ServiceBase,
 {
     MockRestService(std::shared_ptr<ServiceProxies> proxies,
                     const string & serviceName)
-        : ServiceBase(serviceName, proxies),
-          RestServiceEndpoint(proxies->zmqContext)
+        : ServiceBase(serviceName, proxies)
     {}
 
     ~MockRestService()
@@ -51,24 +50,20 @@ BOOST_AUTO_TEST_CASE( test_service_proxies_getServiceClassInstances )
     MockRestService testService1(proxies, "testServiceName1");
     testService1.init({"testServiceClass", "otherServiceClass"});
     testService1.bindTcp();
-    vector<string> uris(testService1.zmqEndpoint.getPublishedUris());
-    expectedUris.insert(uris.begin(), uris.end());
-    uris = testService1.httpEndpoint.getPublishedUris();
+    auto uris = testService1.httpEndpoint.getPublishedUris();
     expectedUris.insert(uris.begin(), uris.end());
 
     MockRestService testService2(proxies, "testServiceName2");
     testService2.init({"testServiceClass"});
     testService2.bindTcp();
-    uris = testService2.zmqEndpoint.getPublishedUris();
-    expectedUris.insert(uris.begin(), uris.end());
     uris = testService2.httpEndpoint.getPublishedUris();
     expectedUris.insert(uris.begin(), uris.end());
     
     set<string> instanceUris;
     uris = proxies->getServiceClassInstances("testServiceClass", "http");
     instanceUris.insert(uris.begin(), uris.end());
-    uris = proxies->getServiceClassInstances("testServiceClass", "zeromq");
-    instanceUris.insert(uris.begin(), uris.end());
 
+    /* Test fails because 127.0.0.1 is returned by getServiceClassInstances and
+       not the others. */
     BOOST_CHECK_EQUAL(instanceUris, expectedUris);
 }

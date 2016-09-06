@@ -12,16 +12,6 @@ $(eval $(call library,opstats,$(LIBOPSTATS_SOURCES),$(LIBOPSTATS_LINK)))
 
 
 
-LIBRECOSET_ZEROMQ_SOURCES := \
-	socket_per_thread.cc \
-	zmq_utils.cc
-
-LIBRECOSET_ZEROMQ_LINK := \
-	zmq
-
-$(eval $(call library,zeromq,$(LIBRECOSET_ZEROMQ_SOURCES),$(LIBRECOSET_ZEROMQ_LINK)))
-
-
 LIBRECOSET_RUNNERCOMMON_SOURCES := \
 	runner_common.cc
 
@@ -48,13 +38,11 @@ LIBSERVICES_SOURCES := \
 	message_loop.cc \
 	loop_monitor.cc \
 	named_endpoint.cc \
-	zmq_endpoint.cc \
 	async_event_source.cc \
 	async_writer_source.cc \
 	tcp_client.cc \
 	rest_service_endpoint.cc \
 	http_named_endpoint.cc \
-	rest_proxy.cc \
 	rest_request_router.cc \
 	rest_request_binding.cc \
 	runner.cc \
@@ -74,7 +62,7 @@ LIBSERVICES_SOURCES := \
 	event_subscriber.cc \
 	nsq_client.cc 
 
-LIBSERVICES_LINK := opstats curl boost_regex runner_common zeromq ACE arch utils jsoncpp boost_thread zmq types tinyxml2 boost_system value_description crypto
+LIBSERVICES_LINK := opstats curl boost_regex runner_common ACE arch utils jsoncpp boost_thread types tinyxml2 boost_system value_description crypto
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))

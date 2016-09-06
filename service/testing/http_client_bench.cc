@@ -16,7 +16,6 @@
 #include "soa/service/http_endpoint.h"
 #include "soa/service/named_endpoint.h"
 #include "soa/service/message_loop.h"
-#include "soa/service/rest_proxy.h"
 #include "soa/service/rest_service_endpoint.h"
 #include "soa/service/runner.h"
 
