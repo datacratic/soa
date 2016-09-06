@@ -21,7 +21,6 @@
 #include "jml/utils/vector_utils.h"
 #include "jml/arch/timers.h"
 #include <thread>
-#include "soa/service/zmq_utils.h"
 #include <boost/thread/thread.hpp>
 #include "jml/utils/testing/watchdog.h"
 

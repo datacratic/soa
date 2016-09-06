@@ -10,7 +10,6 @@
 #include "jml/arch/timers.h"
 #include "jml/utils/testing/watchdog.h"
 #include "soa/service/message_loop.h"
-#include "soa/service/rest_proxy.h"
 #include "soa/service/http_client.h"
 #include "soa/utils/print_utils.h"
 

@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include <sys/utsname.h>
 #include <boost/make_shared.hpp>
-#include "zmq.hpp"
 #include "soa/jsoncpp/reader.h"
 #include "soa/jsoncpp/value.h"
 #include <fstream>
@@ -474,8 +473,7 @@ ServiceProxies::
 ServiceProxies()
     : events(new NullEventService()),
       config(new InternalConfigurationService()),
-      ports(new DefaultPortRangeService()),
-      zmqContext(new zmq::context_t(1 /* num worker threads */))
+      ports(new DefaultPortRangeService())
 {
     checkSysLimits();
     bootstrap(bootstrapConfigPath());
@@ -552,7 +550,6 @@ ServiceProxies::getEndpointInstances(std::string const & name,
             for(auto & entry: json) {
                 std::string key;
                 if(protocol == "http") key = "httpUri";
-                if(protocol == "zeromq") key = "zmqConnectUri";
 
                 if(key.empty() || !entry.isMember(key))
                     continue;

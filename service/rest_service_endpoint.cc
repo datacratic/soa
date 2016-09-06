@@ -45,20 +45,7 @@ sendResponse(int responseCode,
         itl->endpoint->logResponse(*this, responseCode, response,
                                    contentType);
 
-    if (itl->http)
-        itl->http->sendResponse(responseCode, response, contentType);
-    else {
-        std::vector<std::string> message;
-        message.push_back(itl->zmqAddress);
-        message.push_back(itl->requestId);
-        message.push_back(std::to_string(responseCode));
-        message.push_back(response);
-
-        //std::cerr << "sending response to " << itl->requestId
-        //          << std::endl;
-        itl->endpoint->zmqEndpoint.sendMessage(message);
-    }
-
+    itl->http->sendResponse(responseCode, response, contentType);
     itl->responseSent = true;
 }
 
@@ -79,17 +66,7 @@ sendResponse(int responseCode,
         itl->endpoint->logResponse(*this, responseCode, response.toString(),
                                    contentType);
 
-    if (itl->http)
-        itl->http->sendResponse(responseCode, response, contentType);
-    else {
-        std::vector<std::string> message;
-        message.push_back(itl->zmqAddress);
-        message.push_back(itl->requestId);
-        message.push_back(std::to_string(responseCode));
-        message.push_back(response.toString());
-        itl->endpoint->zmqEndpoint.sendMessage(message);
-    }
-
+    itl->http->sendResponse(responseCode, response, contentType);
     itl->responseSent = true;
 }
 
@@ -111,17 +88,7 @@ sendErrorResponse(int responseCode,
         itl->endpoint->logResponse(*this, responseCode, error,
                                    contentType);
             
-    if (itl->http)
-        itl->http->sendResponse(responseCode, error);
-    else {
-        std::vector<std::string> message;
-        message.push_back(itl->zmqAddress);
-        message.push_back(itl->requestId);
-        message.push_back(std::to_string(responseCode));
-        message.push_back(error);
-        itl->endpoint->zmqEndpoint.sendMessage(message);
-    }
-
+    itl->http->sendResponse(responseCode, error);
     itl->responseSent = true;
 }
 
@@ -140,17 +107,7 @@ sendErrorResponse(int responseCode, const Json::Value & error) const
         itl->endpoint->logResponse(*this, responseCode, error.toString(),
                                    "application/json");
 
-    if (itl->http)
-        itl->http->sendResponse(responseCode, error);
-    else {
-        std::vector<std::string> message;
-        message.push_back(itl->zmqAddress);
-        message.push_back(itl->requestId);
-        message.push_back(std::to_string(responseCode));
-        message.push_back(error.toString());
-        itl->endpoint->zmqEndpoint.sendMessage(message);
-    }
-
+    itl->http->sendResponse(responseCode, error);
     itl->responseSent = true;
 }
 
@@ -165,13 +122,8 @@ sendRedirect(int responseCode, const std::string & location) const
         itl->endpoint->logResponse(*this, responseCode, location,
                                    "REDIRECT");
 
-    if (itl->http)
-        itl->http->sendResponse(responseCode, string(""), "",
-                                { { "Location", location } });
-    else {
-        throw ML::Exception("zeromq redirects not done yet");
-    }
-
+    itl->http->sendResponse(responseCode, string(""), "",
+                            { { "Location", location } });
     itl->responseSent = true;
 }
 
@@ -189,13 +141,8 @@ sendHttpResponse(int responseCode,
         itl->endpoint->logResponse(*this, responseCode, response,
                                    contentType);
 
-    if (itl->http)
-        itl->http->sendResponse(responseCode, response, contentType,
-                                headers);
-    else {
-        throw ML::Exception("zeromq redirects not done yet");
-    }
-
+    itl->http->sendResponse(responseCode, response, contentType,
+                            headers);
     itl->responseSent = true;
 }
 
@@ -208,9 +155,6 @@ sendHttpResponseHeader(int responseCode,
 {
     if (itl->responseSent)
         throw ML::Exception("response already sent");
-
-    if (!itl->http)
-        throw ML::Exception("sendHttpResponseHeader only works on HTTP connections");
 
     if (itl->endpoint->logResponse)
         itl->endpoint->logResponse(*this, responseCode, "", contentType);
@@ -265,8 +209,7 @@ finishResponse()
 /*****************************************************************************/
 
 RestServiceEndpoint::
-RestServiceEndpoint(std::shared_ptr<zmq::context_t> context)
-    : zmqEndpoint(context)
+RestServiceEndpoint()
 {
 }
 
@@ -286,10 +229,6 @@ shutdown()
 
     // 2.  Shut down the message loop
     MessageLoop::shutdown();
-
-    // 3.  Shut down the zmq endpoint now we know that the message loop is not using
-    //     it.
-    zmqEndpoint.shutdown();
 }
 
 void
@@ -300,31 +239,8 @@ init(std::shared_ptr<ConfigurationService> config,
      int numThreads)
 {
     MessageLoop::init(numThreads, maxAddedLatency);
-    zmqEndpoint.init(config, ZMQ_XREP, endpointName + "/zeromq");
     httpEndpoint.init(config, endpointName + "/http");
 
-    auto zmqHandler = [=] (std::vector<std::string> && message)
-        {
-            using namespace std;
-
-            if (message.size() < 6) {
-                cerr << "ignored message with invalid number of members:"
-                     << message.size()
-                     << endl;
-                return;
-            }
-            //cerr << "got REST message at " << this << " " << message << endl;
-            this->doHandleRequest(ConnectionId(message.at(0),
-                                               message.at(1),
-                                               this),
-                                  RestRequest(message.at(2),
-                                              message.at(3),
-                                              RestParams::fromBinary(message.at(4)),
-                                              message.at(5)));
-        };
-        
-    zmqEndpoint.messageHandler = zmqHandler;
-        
     httpEndpoint.onRequest
         = [=] (std::shared_ptr<HttpNamedEndpoint::RestConnectionHandler> connection,
                const HttpHeader & header,
@@ -335,19 +251,15 @@ init(std::shared_ptr<ConfigurationService> config,
                                   RestRequest(header, payload));
         };
         
-    addSource("RestServiceEndpoint::zmqEndpoint", zmqEndpoint);
     addSource("RestServiceEndpoint::httpEndpoint", httpEndpoint);
 
 }
 
-std::pair<std::string, std::string>
+std::string
 RestServiceEndpoint::
-bindTcp(PortRange const & zmqRange, PortRange const & httpRange,
-        std::string host)
+bindTcp(PortRange const & httpRange, std::string host)
 {
-    std::string httpAddr = httpEndpoint.bindTcp(httpRange, host);
-    std::string zmqAddr = zmqEndpoint.bindTcp(zmqRange, host);
-    return std::make_pair(zmqAddr, httpAddr);
+    return httpEndpoint.bindTcp(httpRange, host);
 }
 
 void

@@ -27,10 +27,6 @@
 #include "jml/utils/unnamed_bool.h"
 
 
-namespace zmq {
-struct context_t;
-} // namespace zmq
-
 namespace Datacratic {
 
 
@@ -404,9 +400,6 @@ struct ServiceProxies {
 
     std::string bankerUri;
 
-    /** Zeromq context for communication. */
-    std::shared_ptr<zmq::context_t> zmqContext;
-
     template<typename Configuration> 
     JML_ALWAYS_INLINE
     std::shared_ptr<Configuration> configAs() 
@@ -700,15 +693,6 @@ struct ServiceBase: public EventRecorder {
     void unregisterServiceProvider(const std::string & name,
                                    const std::vector<std::string> & serviceClasses);
 
-
-    /*************************************************************************/
-    /* ZEROMQ CONTEXT                                                        */
-    /*************************************************************************/
-
-    std::shared_ptr<zmq::context_t> getZmqContext() const
-    {
-        return services_->zmqContext;
-    }
 
     /*************************************************************************/
     /* CONFIGURATION SERVICE                                                 */
