@@ -23,19 +23,14 @@ namespace Datacratic {
 /******************************************************************************/
 
 enum ConfigurationServiceType {
-    CS_NULL, CS_INTERNAL, CS_ZOOKEEPER
-};
-
-enum ProgramOptions {
-    WITH_ZOOKEEPER, NO_ZOOKEEPER
+    CS_NULL, CS_INTERNAL
 };
 
 /** Turns command line arguments into a ServiceProxy object */
 struct ServiceProxyArguments
 {
     boost::program_options::options_description
-    makeProgramOptions(const std::string& title = "General Options",
-                       ProgramOptions opt = WITH_ZOOKEEPER)
+    makeProgramOptions(const std::string& title = "General Options")
     {
         using namespace boost::program_options;
 
@@ -52,12 +47,6 @@ struct ServiceProxyArguments
             ("location,L", value(&location),
              "Name of the current location");
 
-        if (opt == WITH_ZOOKEEPER) {
-            options.add_options()
-                ("zookeeper-uri,Z", value(&zookeeperUri),
-                 "URI for connecting to zookeeper server");
-        }
-
         return options;
     }
 
@@ -67,21 +56,14 @@ struct ServiceProxyArguments
     }
 
     std::shared_ptr<ServiceProxies>
-    makeServiceProxies(ConfigurationServiceType configurationType = CS_ZOOKEEPER)
+    makeServiceProxies(ConfigurationServiceType configurationType = CS_NULL)
     {
         auto services = std::make_shared<ServiceProxies>();
 
         if (!bootstrap.empty())
             services->bootstrap(bootstrap);
 
-        if (configurationType == CS_ZOOKEEPER) {
-            if (!zookeeperUri.empty()) {
-                ExcCheck(!installation.empty(), "installation is required");
-                ExcCheck(!location.empty(), "location is required");
-                services->useZookeeper(zookeeperUri, installation, location);
-            }
-        }
-        else if (configurationType == CS_INTERNAL) {
+        if (configurationType == CS_INTERNAL) {
             services->config.reset(new InternalConfigurationService);
         }
         else if (configurationType == CS_NULL) {
@@ -97,7 +79,6 @@ struct ServiceProxyArguments
     }
 
     std::string bootstrap;
-    std::string zookeeperUri;
     std::string carbonUri;
     std::string installation;
     std::string location;
