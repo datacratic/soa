@@ -18,6 +18,7 @@
 #include "fs_utils.h"
 #include "jml/utils/guard.h"
 #include "jml/utils/file_functions.h"
+#include "jml/utils/string_functions.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -57,6 +58,9 @@ static FsObjectInfo extractInfo(const struct stat & stats)
     objectInfo.exists = true;
     objectInfo.lastModified = Date::fromTimespec(stats.st_mtim);
     objectInfo.size = stats.st_size;
+    objectInfo.etag = ML::format("%d-%d-%d",
+                                 stats.st_ino, stats.st_mtime,
+                                 stats.st_blocks);
 
     return objectInfo;
 }
