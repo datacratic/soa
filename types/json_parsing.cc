@@ -4,6 +4,8 @@
 
 */
 
+#include "jml/utils/json_parsing.h"
+
 #include "json_parsing.h"
 #include "string.h"
 #include "value_description.h"
@@ -103,5 +105,91 @@ expectStringUtf8()
     return result;
 }
 
+Json::Value
+expectJson(ML::Parse_Context & context)
+{
+    context.skip_whitespace();
+    if (*context == '"')
+        return ML::expectJsonStringUTF8(context);
+    else if (context.match_literal("null"))
+        return Json::Value();
+    else if (context.match_literal("true"))
+       return Json::Value(true);
+    else if (context.match_literal("false"))
+        return Json::Value(false);
+    else if (*context == '[') {
+        Json::Value result(Json::arrayValue);
+        ML::expectJsonArray(context,
+                            [&] (int i, Parse_Context & context)
+                            {
+                                result[i] = expectJson(context);
+                            });
+        return result;
+    } else if (*context == '{') {
+        Json::Value result(Json::objectValue);
+        ML::expectJsonObject(context,
+                             [&] (const std::string & key, Parse_Context & context)
+                             {
+                                 result[key] = expectJson(context);
+                             });
+        return result;
+   } else {
+        JsonNumber number = ML::expectJsonNumber(context);
+        switch (number.type) {
+        case JsonNumber::UNSIGNED_INT:
+            return number.uns;
+        case JsonNumber::SIGNED_INT:
+            return number.sgn;
+        case JsonNumber::FLOATING_POINT:
+            return number.fp;
+        default:
+            throw ML::Exception("logic error in expectJson");
+        }
+    }
+}
+
+Json::Value
+expectJsonAscii(ML::Parse_Context & context)
+{
+    context.skip_whitespace();
+    if (*context == '"')
+        return expectJsonStringAscii(context);
+    else if (context.match_literal("null"))
+        return Json::Value();
+    else if (context.match_literal("true"))
+        return Json::Value(true);
+    else if (context.match_literal("false"))
+        return Json::Value(false);
+    else if (*context == '[') {
+        Json::Value result(Json::arrayValue);
+        ML::expectJsonArray(context,
+                            [&] (int i, Parse_Context & context)
+                            {
+                                result[i] = expectJsonAscii(context);
+                            });
+        return result;
+   } else if (*context == '{') {
+        Json::Value result(Json::objectValue);
+        ML::expectJsonObjectAscii(context,
+                                  [&] (const char * key,
+                                       ML::Parse_Context & context)
+                                  {
+                                      result[key] = expectJsonAscii(context);
+                                  });
+        return result;
+    } else {
+        JsonNumber number = ML::expectJsonNumber(context);
+        switch (number.type) {
+        case JsonNumber::UNSIGNED_INT:
+            return number.uns;
+        case JsonNumber::SIGNED_INT:
+            return number.sgn;
+        case JsonNumber::FLOATING_POINT:
+            return number.fp;
+        default:
+            throw ML::Exception("logic error in expectJson");
+        }
+    }
+}
 
 }  // namespace Datacratic

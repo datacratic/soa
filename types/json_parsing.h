@@ -17,6 +17,11 @@
 
 namespace Datacratic {
 
+
+Json::Value expectJson(ML::Parse_Context & context);
+Json::Value expectJsonAscii(ML::Parse_Context & context);
+
+
 struct JsonParsingContext;
 struct ValueDescription;
 
@@ -343,7 +348,7 @@ struct StreamingJsonParsingContext
 
     void skip()
     {
-        ML::expectJson(*context);
+        Datacratic::expectJson(*context);
     }
 
     virtual int expectInt()
@@ -508,7 +513,7 @@ struct StreamingJsonParsingContext
 
     virtual Json::Value expectJson()
     {
-        return ML::expectJson(*context);
+        return Datacratic::expectJson(*context);
     }
 
     virtual std::string printCurrent()
