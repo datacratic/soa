@@ -54,6 +54,7 @@ $(eval $(call test,http_parsers_test,services test_services,boost valgrind))
 $(eval $(call test,logs_test,services,boost))
 
 $(eval $(call test,sns_mock_test,cloud services,boost))
+$(eval $(call test,sns_parsing_test,cloud services,boost))
 
 $(eval $(call test,event_handler_test,cloud services,boost manual))
 $(eval $(call test,mongo_basic_test,services boost_filesystem mongo_tmp_server,boost manual))

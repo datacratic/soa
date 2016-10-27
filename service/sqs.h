@@ -11,6 +11,8 @@
 #include "http_rest_proxy.h"
 #include "jml/utils/unnamed_bool.h"
 #include "soa/types/value_description.h"
+#include "soa/types/string.h"
+
 
 namespace Datacratic {
 
@@ -116,8 +118,8 @@ struct SqsApi : public AwsBasicApi {
         std::string type;
         std::string messageId;
         std::string topicArn;
-        std::string subject;
-        std::string message;
+        Utf8String subject;
+        Utf8String message;
         Date timestamp;
         std::string signatureVersion;
         std::string signature;

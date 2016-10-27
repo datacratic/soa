@@ -1,0 +1,11 @@
+{
+  "Type" : "Notification",
+  "MessageId" : "abcdef-1234546",
+  "TopicArn" : "arn:aws:sns:abcdef123456:datacratic-prod",
+  "Message" : "\"Alex has an Éléphant\"",
+  "Timestamp" : "2016-10-26T18:58:42.446Z",
+  "SignatureVersion" : "1",
+  "Signature" : "signature",
+  "SigningCertURL" : "https://cert.pem",
+  "UnsubscribeURL" : "https://unsubscribe.com/"
+}
