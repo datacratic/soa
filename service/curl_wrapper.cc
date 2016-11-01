@@ -21,10 +21,15 @@ namespace Datacratic {
 namespace CurlWrapper {
 
 
-    RuntimeError::RuntimeError(const std::string & what, CURLcode code) :
-        ML::Exception(what), code(code)
-    {}
-    
+    RuntimeError::
+    RuntimeError(const std::string & what, CURLcode newCode)
+        : ML::Exception(what), code(newCode)
+    {
+        string explanation = ML::format(" (code = %d; message = %s)",
+                                        code, curl_easy_strerror(code));
+        ML::Exception(what + explanation);
+    }
+
     CURLcode RuntimeError::whatCode() const
     {
         return code;
