@@ -54,6 +54,10 @@ struct Url {
     void reconstitute(ML::DB::Store_Reader & store);
 };
 
+/* Returns a quoted version of the url part, similarly to
+   Python's "urllib.quote" function. */
+std::string quoteUrl(const std::string & urlPart, char safeChar = '/');
+
 inline std::ostream & operator << (std::ostream & stream, const Url & url)
 {
     return stream << url.toString();

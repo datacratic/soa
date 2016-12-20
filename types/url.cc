@@ -1,4 +1,6 @@
 
+#include <string>
+
 #include "url.h"
 
 #include "googleurl/src/gurl.h"
@@ -224,6 +226,25 @@ reconstitute(ML::DB::Store_Reader & store)
     if (version != 0)
         store >> original;
     *this = Url(original);
+}
+
+string
+quoteUrl(const string & urlPart, char safeChar)
+{
+    string result;
+
+    for (auto c: urlPart) {
+        if (isalnum(c)
+            || c == '-' || c == '_' || c == '.' || c == '~'
+            || c == safeChar) {
+            result += c;
+        }
+        else  {
+            result += ML::format("%%%02X", c);
+        }
+    }
+    
+    return result;
 }
 
 } // namespace Datacratic

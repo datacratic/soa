@@ -1192,14 +1192,7 @@ s3EscapeResource(const std::string & str)
         throw ML::Exception("resource name must start with a '/'");
     }
 
-    std::string result;
-    for (auto c: str) {
-        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' || c == '/')
-            result += c;
-        else result += ML::format("%%%02X", c);
-    }
-    
-    return result;
+    return quoteUrl(str);
 }
 
 S3Api::
