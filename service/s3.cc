@@ -984,7 +984,8 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
                             + "message: " + xmlError.second);
 
             /* retry on "InternalError" */
-            if (xmlError.first == "InternalError") {
+            if (xmlError.first == "InternalError"
+                || xmlError.first == "RequestTimeout") {
                 recoverable = true;
             }
         }
