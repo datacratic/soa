@@ -42,11 +42,11 @@ RegisterJsOps<int (int)> reg4;
 
 BOOST_AUTO_TEST_CASE( test_sizes )
 {
-    printSize<boost::function<void ()> >();
-    printSize<boost::function<int ()> >();
-    printSize<boost::function<int (int)> >();
-    printSize<boost::function<int (int, int)> >();
-    printSize<boost::function<int (int, int, int)> >();
+    printSize<std::function<void ()> >();
+    printSize<std::function<int ()> >();
+    printSize<std::function<int (int)> >();
+    printSize<std::function<int (int, int)> >();
+    printSize<std::function<int (int, int, int)> >();
     printSize<Slot>();
 }
 
@@ -55,8 +55,8 @@ BOOST_AUTO_TEST_CASE( test_c_calling_c )
     typedef int (Fn1) (int);
     typedef int (Fn2) (unsigned);
 
-    auto f1 = [] (int val) -> int { return val; };
-    auto f2 = [] (unsigned val) -> int { return 2 * val; };
+    std::function<int(int)> f1 = [] (int val) -> int { return val; };
+    std::function<int(unsigned)> f2 = [] (unsigned val) -> int { return 2 * val; };
 
     Slot n1 = slot<Fn1>(f1);
     BOOST_CHECK_EQUAL(n1.call<Fn1>(1), 1);
@@ -167,7 +167,7 @@ BOOST_AUTO_TEST_CASE( test_conversion_to_function )
 {
     int i = 0;
 
-    boost::function<void ()> fn;
+    std::function<void ()> fn;
 
     SlotT<void ()> slot([&] () { i += 1; });
 

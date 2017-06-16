@@ -7,12 +7,13 @@
 
 #pragma once
 
-#include "slot.h"
-#include "jml/arch/rtti_utils.h"
-#include <boost/function.hpp>
+#include <functional>
 #include <unordered_map>
 #include <boost/signals2.hpp>
+#include "jml/arch/rtti_utils.h"
 #include "jml/utils/string_functions.h"
+#include "slot.h"
+
 
 namespace Datacratic {
 
@@ -104,7 +105,7 @@ protected:
         different object types at run-time without requiring anything like
         a common base class, etc.
 
-        The return value should provide a boost::function that can be used
+        The return value should provide a std::function that can be used
         to disconnect the slot.
     */
     typedef SlotDisconnector (* RegisterFn) (void * thisPtr,
@@ -207,7 +208,7 @@ struct SignalRegistry : public SignalRegistryBase {
     }
 
     template<typename Fn,
-             SlotDisconnector (Class::* AddFn) (const boost::function<Fn> &,
+             SlotDisconnector (Class::* AddFn) (const std::function<Fn> &,
                                                 int priority)>
     struct Helper {
         static SlotDisconnector doRegister(void * thisPtr,
@@ -242,7 +243,7 @@ struct SignalRegistry : public SignalRegistryBase {
     }
 
     template<typename Fn,
-             SlotDisconnector (Class::* AddFn) (const boost::function<Fn> & slot, int priority)>
+             SlotDisconnector (Class::* AddFn) (const std::function<Fn> & slot, int priority)>
     void add(const std::string & name)
     {
         RegisterFn fn = &Helper<Fn, AddFn>::doRegister;

@@ -67,7 +67,7 @@ void test_filters(Filter & compressor, Filter & decompressor,
     ML::Timer timer;
 
     compressor.onOutput = [&] (const char * buf, size_t n, FlushLevel flush,
-                               boost::function<void ()> cb)
+                               std::function<void ()> cb)
         {
             out_bytes += n;
             //decompressor.process(buf, buf + n, flush, cb);
@@ -93,7 +93,7 @@ void test_filters(Filter & compressor, Filter & decompressor,
 
     size_t out_offset = 0;
     decompressor.onOutput = [&] (const char * buf, size_t n, FlushLevel flush,
-                                 boost::function<void ()> cb)
+                                 std::function<void ()> cb)
         {
             in_bytes += n;
             

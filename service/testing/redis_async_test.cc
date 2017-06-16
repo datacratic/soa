@@ -17,7 +17,6 @@
 #include "jml/arch/atomic_ops.h"
 #include <boost/thread.hpp>
 #include <boost/thread/barrier.hpp>
-#include <boost/function.hpp>
 #include <iostream>
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/timers.h"

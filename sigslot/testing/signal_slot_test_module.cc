@@ -42,7 +42,7 @@ struct SignalSlotTest {
 
     typedef void (Event1) (const std::string &);
 
-    SlotDisconnector onEvent1(const boost::function<Event1> & fn,
+    SlotDisconnector onEvent1(const std::function<Event1> & fn,
                               int priority = 0)
     {
         return event1.connect(priority, fn);
@@ -52,7 +52,7 @@ struct SignalSlotTest {
 
     typedef void (Event2) (int i);
 
-    virtual SlotDisconnector onEvent2(const boost::function<Event2> & fn,
+    virtual SlotDisconnector onEvent2(const std::function<Event2> & fn,
                                       int priority = 0)
     {
         return event2.connect(priority, fn);

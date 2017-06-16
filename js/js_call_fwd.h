@@ -9,7 +9,6 @@
 #define __js__js_call_fwd_h__
 
 #include <typeinfo>
-#include <boost/function.hpp>
 
 namespace v8 {
 struct Arguments;
@@ -28,7 +27,7 @@ namespace JS {
 template<typename Fn, int arity = Fn::arity>
 struct callfromjs;
 
-template<typename Fn, int arity = boost::function<Fn>::arity>
+template<typename Fn, int arity = std::function<Fn>::arity>
 struct calltojs;
 
 
@@ -41,20 +40,20 @@ struct JSArgs;
         var2 = pointer to JSArgs instance
         var3 = pointer to v8::Handle<v8::Value> for result
 
-    Operation 1: convert to boost::function
+    Operation 1: convert to std::function
         var1 = pointer to v8::Handle<v8::Function> for function
         var2 = pointer to v8::Handle<v8::Object> for This
-        var3 = pointer to boost::function for result
+        var3 = pointer to std::function for result
 */
 typedef void (*JSCallsBoost) (int op,
-                              const boost::function_base & fn,
+                              const std::function_base & fn,
                               const JS::JSArgs & args,
                               v8::Handle<v8::Value> & result);
 
 typedef void (*JSAsBoost) (int op,
                            const v8::Persistent<v8::Function> & fn,
                            const v8::Handle<v8::Object> & This,
-                           boost::function_base & result);
+                           std::function_base & result);
 
 // This is compatible with the previous two
 typedef void (*JSOperations) (int op,

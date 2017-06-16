@@ -970,19 +970,19 @@ valueToPmfInfo(v8::Handle<v8::Value> val)
 
 template<typename T, typename... Args>
 v8::Local<v8::Value>
-lambdaToValue(const boost::function<T (Args...)> & lambda)
+lambdaToValue(const std::function<T (Args...)> & lambda)
 {
     // TODO: this memory will be leaked...
-    boost::function<T (Args...)> * fn
-        = new boost::function<T (Args...)>(lambda);
+    std::function<T (Args...)> * fn
+        = new std::function<T (Args...)>(lambda);
     return v8::External::Wrap(fn);
 }
 
 template<typename T, typename... Args>
-const boost::function<T (Args...)> &
+const std::function<T (Args...)> &
 valueToLambda(const v8::Handle<v8::Value> & val)
 {
-    return *reinterpret_cast<boost::function<T (Args...)> *>
+    return *reinterpret_cast<std::function<T (Args...)> *>
         (v8::External::Unwrap(val));
 }
 
@@ -992,7 +992,7 @@ lambdaGetter(v8::Local<v8::String> property,
              const v8::AccessorInfo & info)
 {
     try {
-        boost::function<RT (const Obj &)> fn
+        std::function<RT (const Obj &)> fn
             = valueToLambda<RT, const Obj &>(info.Data());
         Obj & o = *Base::getShared(info.This());
         RT value = fn(o);
@@ -1174,7 +1174,7 @@ struct CallWithJsArgs<InPosition<const Arg &, Index> > {
     }
 };
 
-// Given a boost::function type Fn and a TypeList of InPosition values,
+// Given a std::function type Fn and a TypeList of InPosition values,
 // this calls the function with the JS arguments unpacked
 template<typename List>
 struct CallPmfWithTypePositionList {
@@ -1292,7 +1292,7 @@ struct LambdaCaller {
     call(const v8::Arguments & args)
     {
         try {
-            const boost::function<R (Obj &, const v8::Arguments &)> & fn
+            const std::function<R (Obj &, const v8::Arguments &)> & fn
                 = valueToLambda<R, Obj &, const v8::Arguments &>(args.Data());
             Obj & o = *Base::getShared(args);
             return JS::toJS(fn(0, args));
@@ -1307,7 +1307,7 @@ struct LambdaCaller<void, Obj, Base> {
     call(const v8::Arguments & args)
     {
         try {
-            const boost::function<void (Obj &, const v8::Arguments &)> & fn
+            const std::function<void (Obj &, const v8::Arguments &)> & fn
                 = valueToLambda<void, Obj &,
                                 const v8::Arguments &>(args.Data());
             Obj & o = *Base::getShared(args);
@@ -1332,7 +1332,7 @@ callGetterFn(v8::Local<v8::String> property,
     Puts the callback on the libev loop that Node uses internally for this
     task.
 */
-void callInJsThread(const boost::function<void ()> & fn);
+void callInJsThread(const std::function<void ()> & fn);
 
 /** Used to set up a callback to something that must be in JS from something
     that may or may not be in the JS context.
@@ -1356,22 +1356,22 @@ void callInJsContext(const Fn & fn)
     when you need to give a JS callback to some C++ code that might be called
     outside of the Javascript thread.
 */
-boost::function<void ()>
+std::function<void ()>
 createCrossThreadCallback(v8::Handle<v8::Function> fn,
                           v8::Handle<v8::Object> This);
 
-boost::function<void ()>
+std::function<void ()>
 createCrossThreadCallback(v8::Handle<v8::Function> fn,
                           v8::Handle<v8::Object> This,
                           v8::Handle<v8::Value> arg1);
 
-boost::function<void ()>
+std::function<void ()>
 createCrossThreadCallback(v8::Handle<v8::Function> fn,
                           v8::Handle<v8::Object> This,
                           v8::Handle<v8::Value> arg1,
                           v8::Handle<v8::Value> arg2);
 
-boost::function<void ()>
+std::function<void ()>
 createCrossThreadCallback(v8::Handle<v8::Function> fn,
                           v8::Handle<v8::Object> This,
                           v8::Handle<v8::Value> arg1,
@@ -1381,12 +1381,12 @@ createCrossThreadCallback(v8::Handle<v8::Function> fn,
 // Convert a callback to be called in JS context
 
 template<typename R, typename... Args>
-boost::function<void (Args...)>
-createAsyncJsCallback(const boost::function<R (Args...)> & fn)
+std::function<void (Args...)>
+createAsyncJsCallback(const std::function<R (Args...)> & fn)
 {
     auto newFn = [=] (Args... args)
         {
-            boost::function<void ()> cb
+            std::function<void ()> cb
                 = std::bind<void>(fn, args...);
 
             callInJsContext(cb);

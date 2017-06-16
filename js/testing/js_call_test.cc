@@ -13,22 +13,22 @@ void test_that_it_compiles()
 {
     JS::JSArgs & args = *(JS::JSArgs *)0;
     
-    typedef boost::function<void ()> Fn1;
+    typedef std::function<void ()> Fn1;
 
     Fn1 fn1;
     callfromjs<Fn1>::call(fn1, args);
 
-    typedef boost::function<int ()> Fn2;
+    typedef std::function<int ()> Fn2;
 
     Fn2 fn2;
     int i JML_UNUSED = callfromjs<Fn2>::call(fn2, args);
 
-    typedef boost::function<int (int)> Fn3;
+    typedef std::function<int (int)> Fn3;
 
     Fn3 fn3;
     i = callfromjs<Fn3>::call(fn3, args);
 
-    typedef boost::function<int (int, std::string, int, int, std::string)> Fn4;
+    typedef std::function<int (int, std::string, int, int, std::string)> Fn4;
 
     Fn4 fn4;
     i = callfromjs<Fn4>::call(fn4, args);

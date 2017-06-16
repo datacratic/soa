@@ -122,10 +122,10 @@ struct PassiveEndpoint: public EndpointBase {
     /** Object that can be overridden to create the connection handler to
         be associated with the transport.
     */
-    boost::function<std::shared_ptr<ConnectionHandler> ()> onMakeNewHandler;
+    std::function<std::shared_ptr<ConnectionHandler> ()> onMakeNewHandler;
 
     /** Object that can be overridden to deal with an accept error. */
-    boost::function<void (std::string)> onAcceptError;
+    std::function<void (std::string)> onAcceptError;
     
 protected:
 

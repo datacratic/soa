@@ -549,7 +549,7 @@ struct TestBase {
         }
     }
 
-    void run(boost::function<void (int)> allocFn,
+    void run(std::function<void (int)> allocFn,
              int runTime = 1)
     {
         gc.getEntry();

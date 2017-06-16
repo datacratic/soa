@@ -710,11 +710,11 @@ deferBarrier()
     runDefers();
 }
 
-/** Helper function to call an arbitrary boost::function passed through with a void * */
+/** Helper function to call an arbitrary std::function passed through with a void * */
 static void callFn(void * arg)
 {
-    boost::function<void ()> * fn
-        = reinterpret_cast<boost::function<void ()> *>(arg);
+    std::function<void ()> * fn
+        = reinterpret_cast<std::function<void ()> *>(arg);
     try {
         (*fn)();
     } catch (...) {
@@ -726,9 +726,9 @@ static void callFn(void * arg)
 
 void
 GcLockBase::
-defer(boost::function<void ()> work)
+defer(std::function<void ()> work)
 {
-    defer(callFn, new boost::function<void ()>(work));
+    defer(callFn, new std::function<void ()>(work));
 }
 
 template<typename... Args>

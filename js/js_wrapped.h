@@ -893,7 +893,7 @@ struct JSWrapped2 : public JSWrapped<Shared> {
     {
         typedef decltype(lambda(*(Shared *)0)) RT;
 
-        boost::function<RT (const Shared &)> fn
+        std::function<RT (const Shared &)> fn
             = lambda;
 
         tmpl->InstanceTemplate()
@@ -944,16 +944,16 @@ struct JSWrapped2 : public JSWrapped<Shared> {
     /** This function is used in a very particular case.
 
         If we have a C++ object that has a data member that is a
-        boost::function<...>, then calling this function will expose that
+        std::function<...>, then calling this function will expose that
         data member as a data member in the JS object.  Assigning a JS
-        function to that member will overwrite the boost::function with
+        function to that member will overwrite the std::function with
         a synthisized callback that performs the following:
 
         1.  Check if we're currently in the thread that's active in the JS
             runtime.  If so, call the JS function immediately.
         2.  If not, then queue the JS function on libuv so that node will
             eventually call it back with the supplied parameters.  Once
-            enqueued, the boost::function will then return.
+            enqueued, the std::function will then return.
 
         Note that the return code of the function has to be void, as there
         is no way for an asynchonous function's return code to be later
@@ -965,11 +965,11 @@ struct JSWrapped2 : public JSWrapped<Shared> {
     */
 
     template<typename R, typename Obj, typename... Args>
-    static void registerAsyncCallback(boost::function<R (Args...)> (Obj::* ptr),
+    static void registerAsyncCallback(std::function<R (Args...)> (Obj::* ptr),
                                       const char * name,
                                       unsigned options = v8::DontDelete)
     {
-        typedef boost::function<R (Args...)> T;
+        typedef std::function<R (Args...)> T;
 
         tmpl->InstanceTemplate()
             ->SetAccessor(v8::String::NewSymbol(name),
@@ -1391,11 +1391,11 @@ struct JSWrapped3 : public Base {
     }
 
     template<typename R, typename Obj, typename... Args>
-    static void registerAsyncCallback(boost::function<R (Args...)> (Obj::* ptr),
+    static void registerAsyncCallback(std::function<R (Args...)> (Obj::* ptr),
                                       const char * name,
                                       unsigned options = v8::DontDelete)
     {
-        typedef boost::function<R (Args...)> T;
+        typedef std::function<R (Args...)> T;
 
         tmpl->InstanceTemplate()
             ->SetAccessor(v8::String::NewSymbol(name),

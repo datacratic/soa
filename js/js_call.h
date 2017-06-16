@@ -12,7 +12,6 @@
 #include "soa/js/js_utils.h"
 #include "soa/js/js_value.h"
 #include "jml/arch/exception.h"
-#include <boost/function.hpp>
 #include <boost/bind.hpp>
 
 #ifdef ev_ref
@@ -29,7 +28,7 @@ namespace JS {
 /*****************************************************************************/
 
 
-// Given a boost::function type Fn and a TypeList of InPosition values,
+// Given a std::function type Fn and a TypeList of InPosition values,
 // this calls the function with the JS arguments unpacked
 template<typename Fn, typename List>
 struct CallWithList {
@@ -45,7 +44,7 @@ struct CallWithList<Fn, TypeList<ArgsWithPosition...> > {
     }
 };
 
-/** call a boost::function from JS, variardic version with a non-void
+/** call a std::function from JS, variardic version with a non-void
     return type.
 
     There is some funky template magic that has to happen here.  In order
@@ -54,9 +53,9 @@ struct CallWithList<Fn, TypeList<ArgsWithPosition...> > {
     which encodes the position within the type.
 */
 template<typename Return, typename... Args, int arity>
-struct callfromjs<boost::function<Return (Args...)>, arity> {
+struct callfromjs<std::function<Return (Args...)>, arity> {
     
-    typedef boost::function<Return (Args...)> Fn;
+    typedef std::function<Return (Args...)> Fn;
 
     static Return
     call(const Fn & fn, const JS::JSArgs & args)
@@ -68,9 +67,9 @@ struct callfromjs<boost::function<Return (Args...)>, arity> {
 
 /** Specialization of the previous for the void return case. */
 template<typename... Args, int arity>
-struct callfromjs<boost::function<void (Args...)>, arity> {
+struct callfromjs<std::function<void (Args...)>, arity> {
     
-    typedef boost::function<void (Args...)> Fn;
+    typedef std::function<void (Args...)> Fn;
 
     static void
     call(const Fn & fn, const JS::JSArgs & args)
@@ -192,7 +191,7 @@ struct calltojs<Return (Args...), arity> : public calltojsbase {
 
 template<typename Base, typename Fn>
 struct JsOpsBase {
-    typedef boost::function<Fn> Function;
+    typedef std::function<Fn> Function;
 
     static void op(int op,
                    const void * arg1,
@@ -215,7 +214,7 @@ struct JsOpsBase {
 };
 
 template<typename Fn,
-         typename Result = typename boost::function<Fn>::result_type>
+         typename Result = typename std::function<Fn>::result_type>
 struct DefaultJsOps : public JsOpsBase<DefaultJsOps<Fn, Result>, Fn> {
     typedef typename JsOpsBase<DefaultJsOps<Fn, void>, Fn>::Function Function;
 

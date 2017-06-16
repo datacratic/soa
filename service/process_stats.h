@@ -11,7 +11,7 @@
 
 #include "soa/jsoncpp/json.h"
 
-#include <boost/function.hpp>
+#include <functional>
 #include <string>
 
 

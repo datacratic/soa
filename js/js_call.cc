@@ -59,7 +59,7 @@ namespace JS {
 /*****************************************************************************/
 
 struct CallInJsContextData {
-    boost::function<void ()> callback;
+    std::function<void ()> callback;
     
     ~CallInJsContextData()
     {
@@ -113,7 +113,7 @@ static int doCallInJs(eio_req * req)
     return 0;
 }
 
-void callInJsThread(const boost::function<void ()> & fn)
+void callInJsThread(const std::function<void ()> & fn)
 {
     // This is called from a thread that is probably not the right thread for
     // JS to be executed in.  Here we arrange for the right thread to be called
@@ -124,7 +124,7 @@ void callInJsThread(const boost::function<void ()> & fn)
     eio_custom(doNothing, EIO_PRI_DEFAULT, doCallInJs, data.release());
 }
 
-boost::function<void ()>
+std::function<void ()>
 createCrossThreadCallback(v8::Handle<v8::Function> fn,
                           v8::Handle<v8::Object> This)
 {

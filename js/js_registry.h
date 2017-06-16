@@ -10,7 +10,6 @@
 #include <map>
 #include <vector>
 #include <v8/v8.h>
-#include <boost/function.hpp>
 #include "jml/arch/demangle.h"
 #include "jml/arch/exception.h"
 #include "jml/arch/format.h"
@@ -33,10 +32,10 @@ namespace Datacratic {
 namespace JS {
 
 
-typedef boost::function<void (const v8::Persistent<v8::FunctionTemplate> &,
+typedef std::function<void (const v8::Persistent<v8::FunctionTemplate> &,
                               const std::string & name,
                               const v8::Handle<v8::Object> &)> SetupFunction;
-typedef boost::function<void ()> InitFunction;
+typedef std::function<void ()> InitFunction;
 
 
 enum OnConstructorError {

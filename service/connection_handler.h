@@ -10,7 +10,6 @@
 
 #include "transport.h"
 #include <iostream>
-#include <boost/function.hpp>
 #include <list>
 #include "jml/arch/format.h"
 #include "jml/arch/demangle.h"
@@ -207,7 +206,7 @@ struct ConnectionHandler {
     /** Run the given function from a worker thread in the context of this
         handler.
     */
-    void doAsync(const boost::function<void ()> & callback,
+    void doAsync(const std::function<void ()> & callback,
                  const char * name)
     {
         transport().doAsync(callback, name);
@@ -251,7 +250,7 @@ struct PassiveConnectionHandler: public ConnectionHandler {
         NEXT_CONTINUE
     };
 
-    typedef boost::function<void ()> OnWriteFinished;
+    typedef std::function<void ()> OnWriteFinished;
 
     struct WriteEntry {
         Date date;

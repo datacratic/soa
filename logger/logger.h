@@ -16,7 +16,6 @@
 #include "jml/utils/vector_utils.h"
 #include "jml/arch/atomic_ops.h"
 #include "ace/Synch.h"
-#include <boost/function.hpp>
 #include <boost/regex.hpp>
 #include <boost/shared_ptr.hpp>
 #include "soa/jsoncpp/json.h"
@@ -131,7 +130,7 @@ struct Logger {
     /** Set up a callback that will call the given function when a message
         matching the filter is obtained.
     */
-    void addCallback(boost::function<void (std::string, std::string)> callback,
+    void addCallback(std::function<void (std::string, std::string)> callback,
                      const boost::regex & allowChannels = boost::regex(),
                      const boost::regex & denyChannels = boost::regex(),
                      double logProbability = 1.0);

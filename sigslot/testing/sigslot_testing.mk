@@ -1,5 +1,5 @@
-$(eval $(call test,signal_test,sigslot,boost valgrind))
-$(eval $(call test,slot_test,sigslot,boost valgrind))
+$(eval $(call test,signal_test,sigslot utils,boost valgrind))
+$(eval $(call test,slot_test,sigslot utils,boost valgrind))
 
 ifeq ($(NODEJS_ENABLED), 1)
 $(eval $(call nodejs_addon,signal_slot_test_module,signal_slot_test_module.cc,,sigslot))

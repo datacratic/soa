@@ -11,7 +11,6 @@
 #include <ace/Synch.h>
 #include <ace/Guard_T.h>
 #include <set>
-#include <boost/function.hpp>
 #include <boost/thread/thread.hpp>
 #include <iostream>
 #include "jml/arch/exception.h"
@@ -87,7 +86,7 @@ struct EndpointBase : public Epoller {
     virtual int port() const = 0;
 
     /** Function that will be called to know if we're finished. */
-    boost::function<bool ()> onCheckFinished;
+    std::function<bool ()> onCheckFinished;
 
     /** Sleep until there are no active connections. */
     void sleepUntilIdle() const;
@@ -111,7 +110,7 @@ struct EndpointBase : public Epoller {
     /** Thing to notify when a connection is closed.  Will be called
         before the normal cleanup.
     */
-    typedef boost::function<void (TransportBase *)> OnTransportEvent;
+    typedef std::function<void (TransportBase *)> OnTransportEvent;
     OnTransportEvent onTransportOpen, onTransportClose;
 
     const std::string & name() const { return name_; }
@@ -236,7 +235,7 @@ protected:
         context of the given transport.
     */
     void doAsync(const std::shared_ptr<TransportBase> & transport,
-                 const boost::function<void ()> & callback,
+                 const std::function<void ()> & callback,
                  const char * nameOfCallback);
 
     typedef ACE_Recursive_Thread_Mutex Lock;

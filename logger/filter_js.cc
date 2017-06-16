@@ -330,7 +330,7 @@ struct OnOutputJsOps: public JS::JsOpsBase<OnOutputJsOps, Filter::OnOutputFn> {
         calltojsbase params(fn, This ? *This : This2);
 
         auto result = [=] (const char * buf, size_t numChars,
-                           FlushLevel flush, boost::function<void ()> fn)
+                           FlushLevel flush, std::function<void ()> fn)
             {
                 string str(buf, buf + numChars);
 

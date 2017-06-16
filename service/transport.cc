@@ -28,7 +28,7 @@ using namespace ML;
 
 namespace Datacratic {
 
-boost::function<void (const char *, float)> onLatencyEvent;
+std::function<void (const char *, float)> onLatencyEvent;
 
 ML::Env_Option<bool> DEBUG_TRANSPORTS("DEBUG_TRANSPORTS", false);
 
@@ -250,7 +250,7 @@ handleError(const std::string & error)
 
 int
 TransportBase::
-handleAsync(const boost::function<void ()> & callback, const char * name,
+handleAsync(const std::function<void ()> & callback, const char * name,
             Date dateSet)
 {
     Date now = Date::now();
@@ -850,7 +850,7 @@ cancelTimer()
 
 void
 TransportBase::
-doAsync(const boost::function<void ()> & callback, const std::string & name)
+doAsync(const std::function<void ()> & callback, const std::string & name)
 {
     addActivity("doAsync: %s lockedByThisThread %d", name.c_str(),
                 lockedByThisThread());
@@ -859,7 +859,7 @@ doAsync(const boost::function<void ()> & callback, const std::string & name)
 
 void
 TransportBase::
-pushAsync(const boost::function<void ()> & fn, const std::string & name)
+pushAsync(const std::function<void ()> & fn, const std::string & name)
 {
     std::auto_ptr<AsyncNode> node(new AsyncNode(fn, name));
     

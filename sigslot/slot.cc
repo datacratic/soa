@@ -12,7 +12,6 @@
 #include "soa/js/js_call.h"
 #endif // NODEJS_ENABLED
 #include <boost/signals2.hpp>
-#include <boost/bind.hpp>
 #include "jml/arch/format.h"
 
 
@@ -53,9 +52,9 @@ void exitJs(void * & locker_)
 
 SlotDisconnector::
 SlotDisconnector(const boost::signals2::connection & connection)
-    : boost::function<void (void)>
-      (boost::bind(&boost::signals2::connection::disconnect,
-                   connection))
+    : std::function<void (void)>
+      (std::bind(&boost::signals2::connection::disconnect,
+                 connection))
 {
 }
 
@@ -71,9 +70,10 @@ Slot(const Slot & other)
 {
     switch (fntype) {
     case EMPTY: break;
-    case BOOST:
-        if (ops && fn)
-            fn = (boost::function_base *)(ops(3, fn));
+    case STD_FN:
+        if (ops && fn) {
+            fn = ops(3, fn);
+        }
         break;
     case JS:
         jsfn = new v8::Persistent<v8::Function>
@@ -90,9 +90,10 @@ Slot(const Slot & other)
 {
     switch (fntype) {
     case EMPTY: break;
-    case BOOST:
-        if (ops && fn)
-            fn = (boost::function_base *)(ops(3, fn));
+    case STD_FN:
+        if (ops && fn) {
+            fn = ops(3, fn);
+        }
         break;
     default:
         throw Exception("wrong fntype");
@@ -103,14 +104,19 @@ Slot(const Slot & other)
 #if NODEJS_ENABLED
 Slot::
 Slot(Slot && other)
-    : fn(other.fn), ops(other.ops), jsops(other.jsops), fntype(other.fntype)
+    : fn(std::move(other.fn)),
+      ops(std::move(other.ops)),
+      jsops(std::move(other.jsops)),
+      fntype(std::move(other.fntype))
 {
     other.fntype = EMPTY;
 }
 #else // NODEJS_ENABLED
 Slot::
 Slot(Slot && other)
-    : fn(other.fn), ops(other.ops), fntype(other.fntype)
+    : fn(std::move(other.fn)),
+      ops(std::move(other.ops)),
+      fntype(std::move(other.fntype))
 {
     other.fntype = EMPTY;
 }
@@ -154,7 +160,7 @@ free()
 {
     switch (fntype) {
     case EMPTY: break;
-    case BOOST:
+    case STD_FN:
         if (ops) ops(1, fn);
         break;
 #if NODEJS_ENABLED
@@ -210,9 +216,11 @@ print() const
     switch (fntype) {
     case EMPTY:
         return "(empty)";
-    case BOOST:
+    case STD_FN: {
+        std::function<void ()> * fnPtr = (std::function<void ()> *) fn;
         return "(c++) " + ML::demangle(type()) + "  as "
-            + ML::demangle(fn->target_type());
+            + ML::demangle(fnPtr->target_type());
+    }
 #if NODEJS_ENABLED
     case JS:
         return "(js) " + JS::cstr(*jsfn);
@@ -230,7 +238,7 @@ call(const v8::Arguments & args) const
     switch (fntype) {
     case EMPTY:
         throw Exception("cannot call an empty function");
-    case BOOST: {
+    case STD_FN: {
         if (!jsops)
             throw ML::Exception("no javascript translator");
         JS::JSCallsBoost op = (JS::JSCallsBoost)jsops;
@@ -263,7 +271,7 @@ call(const v8::Handle<v8::Object> & This,
     switch (fntype) {
     case EMPTY:
         throw Exception("cannot call an empty function");
-    case BOOST: {
+    case STD_FN: {
         if (!jsops)
             throw ML::Exception("no javascript translator");
         JS::JSCallsBoost op = (JS::JSCallsBoost)jsops;
@@ -291,7 +299,7 @@ type() const
     switch (fntype) {
     case EMPTY:
         return typeid(void);
-    case BOOST: {
+    case STD_FN: {
         std::type_info * p = 0;
         ops(0, &p);
         return *p;

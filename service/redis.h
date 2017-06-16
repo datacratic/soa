@@ -19,7 +19,6 @@
 #include "soa/jsoncpp/json.h"
 #include "soa/types/date.h"
 #include <boost/shared_ptr.hpp>
-#include <boost/function.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/thread/recursive_mutex.hpp>
 #include <deque>
@@ -403,8 +402,8 @@ struct AsyncConnection {
         Date expiry;
     };
 
-    typedef boost::function<void (const Result &)> OnResult;
-    typedef boost::function<void (const Results &)> OnResults;
+    typedef std::function<void (const Result &)> OnResult;
+    typedef std::function<void (const Results &)> OnResults;
 
     /** Queue an asynchronous command with a timeout.  Returns a handle that
         can be used to cancel the command (which means ignore the result).

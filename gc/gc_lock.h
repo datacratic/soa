@@ -515,7 +515,7 @@ public:
     */
     void deferBarrier();
 
-    void defer(boost::function<void ()> work);
+    void defer(std::function<void ()> work);
 
     typedef void (WorkFn1) (void *);
     typedef void (WorkFn2) (void *, void *);
@@ -550,7 +550,7 @@ public:
     template<typename Fn, typename... Args>
     void deferBind(Fn fn, Args... args)
     {
-        boost::function<void ()> bound = boost::bind<void>(fn, args...);
+        std::function<void ()> bound = boost::bind<void>(fn, args...);
         this->defer(bound);
     }
 

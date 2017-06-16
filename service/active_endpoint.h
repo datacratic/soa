@@ -63,9 +63,9 @@ struct ActiveEndpoint: public EndpointBase {
     /** Do nothing on a connection error. */
     static void doNothingOnConnectionError(const std::string & error);
 
-    typedef boost::function<void (const std::shared_ptr<TransportBase> &)>
+    typedef std::function<void (const std::shared_ptr<TransportBase> &)>
         OnNewConnection;
-    typedef boost::function<void (std::string)> OnConnectionError;
+    typedef std::function<void (std::string)> OnConnectionError;
 
     /** Initialize the endpoint.  This will pre-create the given number of
         connections to the given hostname:port and the given number of

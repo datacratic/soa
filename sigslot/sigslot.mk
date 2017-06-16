@@ -9,7 +9,7 @@ LIBSIGSLOT_SOURCES := \
 	signal.cc \
 	slot_js.cc
 
-LIBSIGSLOT_LINK := arch jsoncpp
+LIBSIGSLOT_LINK := arch utils jsoncpp
 
 ifeq ($(NODEJS_ENABLED), 1)
 LIBSIGSLOT_LINK += js

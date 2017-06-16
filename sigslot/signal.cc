@@ -5,9 +5,12 @@
    Code to deal with notifiers.
 */
 
-#include "signal.h"
+#include "jml/utils/exc_assert.h"
 #include "jml/utils/pair_utils.h"
 #include "soa/jsoncpp/json.h"
+
+#include "signal.h"
+
 
 using namespace std;
 using namespace ML;
@@ -109,6 +112,8 @@ add(const std::string & eventName,
     const std::type_info & objectType,
     RegisterFn registerFn, void * data)
 {
+    ExcAssert(!eventName.empty());
+    ExcAssert(registerFn != nullptr);
     Info info;
     info.eventName = eventName;
     info.callbackType = &callbackType;

@@ -36,7 +36,7 @@ struct ThingWithSignals {
 
     typedef void (Event1) (const std::string &);
 
-    SlotDisconnector onEvent1(const boost::function<Event1> & fn,
+    SlotDisconnector onEvent1(const std::function<Event1> & fn,
                               int priority = 0)
     {
         return event1.connect(priority, fn);
@@ -46,7 +46,7 @@ struct ThingWithSignals {
 
     typedef void (Event2) (int i);
 
-    virtual SlotDisconnector onEvent2(const boost::function<Event2> & fn,
+    virtual SlotDisconnector onEvent2(const std::function<Event2> & fn,
                                       int priority = 0)
     {
         return event2.connect(priority, fn);
@@ -66,7 +66,7 @@ struct ThingWithSignals {
     }
 
     template<typename Fn, typename Fn2>
-    void on(const std::string & event, const boost::function<Fn2> & fn,
+    void on(const std::string & event, const std::function<Fn2> & fn,
             int priority = 0)
     {
         Slot n = Slot::fromF<Fn>(fn);
@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE( test_signal_object )
     vector<string> strs;
 
     auto fn = [&] (const std::string & str) { strs.push_back(str); }; 
-    boost::function<void (const std::string &)> fn_ = fn;
+    std::function<void (const std::string &)> fn_ = fn;
     
     thing.on<void (const std::string &)>("event1", fn);
     thing.on<void (const std::string &)>("event1", fn_);
@@ -140,7 +140,7 @@ struct DerivedThingWithSignals : public ThingWithSignals {
 
     boost::signals2::signal<Event3> event3;
 
-    SlotDisconnector onEvent3(const boost::function<Event3> & fn,
+    SlotDisconnector onEvent3(const std::function<Event3> & fn,
                               int priority = 0)
     {
         return event3.connect(priority, fn);
@@ -158,7 +158,7 @@ struct DerivedThingWithSignals : public ThingWithSignals {
     }
 
     template<typename Fn, typename Fn2>
-    void on(const std::string & event, const boost::function<Fn2> & fn)
+    void on(const std::string & event, const std::function<Fn2> & fn)
     {
         Slot n = Slot::fromF<Fn>(fn);
         on(event, n);
@@ -191,7 +191,7 @@ BOOST_AUTO_TEST_CASE( test_signal_derived_object )
     vector<string> strs;
 
     auto fn = [&] (const std::string & str) { strs.push_back(str); }; 
-    boost::function<void (const std::string &)> fn_ = fn;
+    std::function<void (const std::string &)> fn_ = fn;
     
     thing.on<void (const std::string &)>("event1", fn);
     thing.on<void (const std::string &)>("event1", fn_);
