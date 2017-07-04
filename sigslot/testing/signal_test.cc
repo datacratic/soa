@@ -20,7 +20,7 @@
 #if NODEJS_ENABLED
 #include "soa/sigslot/slot_impl_js.h"
 
-#include "soa/js/js_call.h"
+#include "soa/js/js_call_fwd.h"
 #endif // NODEJS_ENABLED
 
 using namespace std;

@@ -241,12 +241,12 @@ call(const v8::Arguments & args) const
     case STD_FN: {
         if (!jsops)
             throw ML::Exception("no javascript translator");
-        JS::JSCallsBoost op = (JS::JSCallsBoost)jsops;
+        JS::JSCallsStdFn op = (JS::JSCallsStdFn)jsops;
 
         v8::HandleScope scope;
 
         v8::Handle<v8::Value> result;
-        op(0, *fn, args, result);
+        op(0, fn, args, result);
         return scope.Close(result);
     }
     case JS: {
@@ -274,12 +274,12 @@ call(const v8::Handle<v8::Object> & This,
     case STD_FN: {
         if (!jsops)
             throw ML::Exception("no javascript translator");
-        JS::JSCallsBoost op = (JS::JSCallsBoost)jsops;
+        JS::JSCallsStdFn op = (JS::JSCallsStdFn)jsops;
 
         v8::HandleScope scope;
 
         v8::Handle<v8::Value> result;
-        op(0, *fn, JS::JSArgs(This, argc, argv), result);
+        op(0, fn, JS::JSArgs(This, argc, argv), result);
 
         return scope.Close(result);
     }

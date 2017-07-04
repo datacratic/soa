@@ -33,8 +33,8 @@ namespace JS {
 
 
 typedef std::function<void (const v8::Persistent<v8::FunctionTemplate> &,
-                              const std::string & name,
-                              const v8::Handle<v8::Object> &)> SetupFunction;
+                            const std::string & name,
+                            const v8::Handle<v8::Object> &)> SetupFunction;
 typedef std::function<void ()> InitFunction;
 
 

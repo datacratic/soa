@@ -311,12 +311,12 @@ struct Slot {
             if (!jsops)
                 jsops = JS::getOps(typeid(Fn));
 
-            JS::JSAsBoost op = (JS::JSAsBoost)jsops;
+            JS::JSAsStdFn op = (JS::JSAsStdFn)jsops;
 
             std::function<Fn> result;
             v8::Handle<v8::Object> * This = 0;
 
-            op(1, *jsfn, *This, result);
+            op(1, *jsfn, *This, &result);
 
             return result;
         }
@@ -499,18 +499,6 @@ template<typename Fn>
 SlotT<Fn> from_js(const JSValue & val, SlotT<Fn> * = 0)
 {
     return SlotT<Fn>(from_js(val, (Slot *)0));
-}
-
-template<typename Fn>
-std::function<Fn> from_js(const JSValue & val, std::function<Fn> * = 0)
-{
-    return SlotT<Fn>(from_js(val, (Slot *)0)).toStd();
-}
-
-template<typename Fn>
-std::function<Fn> from_js_ref(const JSValue & val, std::function<Fn> * = 0)
-{
-    return SlotT<Fn>(from_js(val, (Slot *)0)).toStd();
 }
 
 template<typename Fn>

@@ -200,13 +200,13 @@ struct JsOpsBase {
     {
         if (op == 0) {
             *(v8::Handle<v8::Value> *)result
-                = Base::callBoost(*(const Function *)arg1,
+                = Base::callStdFn(*(const Function *)arg1,
                                   *(const JS::JSArgs *)arg2);
             return;
         }
         else if (op == 1) {
             *(Function *)result
-                = Base::asBoost(*(const v8::Handle<v8::Function> *)arg1,
+                = Base::asStdFn(*(const v8::Handle<v8::Function> *)arg1,
                                 (const v8::Handle<v8::Object> *)arg2);
         }
         else throw ML::Exception("unknown op");
@@ -219,11 +219,11 @@ struct DefaultJsOps : public JsOpsBase<DefaultJsOps<Fn, Result>, Fn> {
     typedef typename JsOpsBase<DefaultJsOps<Fn, void>, Fn>::Function Function;
 
     static v8::Handle<v8::Value>
-    callBoost(const Function & fn,
+    callStdFn(const Function & fn,
               const JS::JSArgs & args)
     {
         Result result
-            = JS::callfromjs<Function, Function::arity>::call(fn, args);
+            = JS::callfromjs<Function, fn_arity<Function >::value>::call(fn, args);
 
         JS::JSValue jsresult;
         JS::to_js(jsresult, result);
@@ -232,13 +232,13 @@ struct DefaultJsOps : public JsOpsBase<DefaultJsOps<Fn, Result>, Fn> {
     }
     
     static Function
-    asBoost(const v8::Handle<v8::Function> & fn,
+    asStdFn(const v8::Handle<v8::Function> & fn,
             const v8::Handle<v8::Object> * This)
     {
         v8::Handle<v8::Object> This2;
         if (!This)
             This2 = v8::Object::New();
-        return JS::calltojs<Fn, Function::arity>(fn, This ? *This : This2);
+        return JS::calltojs<Fn, fn_arity<Function >::value>(fn, This ? *This : This2);
     }
 };
 
@@ -247,21 +247,21 @@ struct DefaultJsOps<Fn, void> : public JsOpsBase<DefaultJsOps<Fn, void>, Fn> {
     typedef typename JsOpsBase<DefaultJsOps<Fn, void>, Fn>::Function Function;
 
     static v8::Handle<v8::Value>
-    callBoost(const Function & fn,
+    callStdFn(const Function & fn,
               const JS::JSArgs & args)
     {
-        JS::callfromjs<Function, Function::arity>::call(fn, args);
+        JS::callfromjs<Function, fn_arity<Fn >::value>::call(fn, args);
         return v8::Undefined();
     }
     
     static Function
-    asBoost(const v8::Handle<v8::Function> & fn,
+    asStdFn(const v8::Handle<v8::Function> & fn,
             const v8::Handle<v8::Object> * This)
     {
         v8::Handle<v8::Object> This2;
         if (!This)
             This2 = v8::Object::New();
-        return JS::calltojs<Fn, Function::arity>(fn, This ? *This : This2);
+        return JS::calltojs<Fn, fn_arity<Fn >::value>(fn, This ? *This : This2);
     }
 };
 

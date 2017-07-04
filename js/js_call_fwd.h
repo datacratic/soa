@@ -8,6 +8,7 @@
 #ifndef __js__js_call_fwd_h__
 #define __js__js_call_fwd_h__
 
+#include <functional>
 #include <typeinfo>
 
 namespace v8 {
@@ -24,10 +25,29 @@ struct Object;
 namespace Datacratic {
 namespace JS {
 
-template<typename Fn, int arity = Fn::arity>
+/* Arity utility */
+template <typename T>
+struct fn_arity
+{
+};
+
+template <typename R, typename... Args>
+struct fn_arity<std::function<R(Args...)> >
+{
+    static constexpr int value = sizeof...(Args);
+};
+
+template <typename R, typename... Args>
+struct fn_arity<R(Args...)>
+{
+    static constexpr int value = sizeof...(Args);
+};
+
+
+template<typename Fn, int arity = fn_arity<Fn >::value>
 struct callfromjs;
 
-template<typename Fn, int arity = std::function<Fn>::arity>
+template<typename Fn, int arity = fn_arity<Fn >::value>
 struct calltojs;
 
 
@@ -35,7 +55,7 @@ struct JSArgs;
 
 /** Operations function for Javascript.  Defined in js_call.h.
     
-    Operation 0: call boost function
+    Operation 0: call std function
         var1 = pointer to function
         var2 = pointer to JSArgs instance
         var3 = pointer to v8::Handle<v8::Value> for result
@@ -45,21 +65,21 @@ struct JSArgs;
         var2 = pointer to v8::Handle<v8::Object> for This
         var3 = pointer to std::function for result
 */
-typedef void (*JSCallsBoost) (int op,
-                              const std::function_base & fn,
+typedef void (*JSCallsStdFn) (int op,
+                              void * fn,
                               const JS::JSArgs & args,
                               v8::Handle<v8::Value> & result);
 
-typedef void (*JSAsBoost) (int op,
+typedef void (*JSAsStdFn) (int op,
                            const v8::Persistent<v8::Function> & fn,
                            const v8::Handle<v8::Object> & This,
-                           std::function_base & result);
+                           void * result);
 
 // This is compatible with the previous two
 typedef void (*JSOperations) (int op,
-                             const void * arg1,
-                             const void * arg2,
-                             void * result);
+                              const void * arg1,
+                              const void * arg2,
+                              void * result);
 
 JSOperations getOps(const std::type_info & fntype);
 void registerJsOps(const std::type_info & type,
