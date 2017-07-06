@@ -11,6 +11,7 @@
 
 #define GC_LOCK_DEBUG 0
 
+#include <functional>
 #include "jml/utils/exc_assert.h"
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/thread_specific.h"
@@ -550,7 +551,7 @@ public:
     template<typename Fn, typename... Args>
     void deferBind(Fn fn, Args... args)
     {
-        std::function<void ()> bound = boost::bind<void>(fn, args...);
+        std::function<void ()> bound = std::bind<void>(fn, args...);
         this->defer(bound);
     }
 

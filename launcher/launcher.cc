@@ -12,7 +12,6 @@
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/thread/thread.hpp>
 #include <fstream>
 
 #include "soa/launcher/launcher.h"

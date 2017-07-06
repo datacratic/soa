@@ -6,6 +6,7 @@
 
 */
 
+#include <mutex>
 #include "threaded_test.h"
 #include "future_fix.h"
 #include "jml/arch/timers.h"
@@ -33,11 +34,12 @@ start(const TestFn& testFn, int threadCount, int group)
     }
 
     for (int id = 0;  id < threadCount;  ++id) {
-        threads[group].create_thread([=] {
-                    int r = testFn(id);
-                    lock_guard<mutex> guard(this->lock);
-                    this->promises[group][id].set_value(r);
-                });
+        auto & tg = threads[group];
+        tg.emplace_back([=] () {
+            int r = testFn(id);
+            lock_guard<mutex> guard(this->lock);
+            this->promises[group][id].set_value(r);
+        });
     }
 
 }
@@ -55,7 +57,11 @@ join(int group, uint64_t timeout)
         r += future.get();
     }
 
-    threads[group].join_all();
+    auto & tg = threads[group];
+    for (auto & th: tg) {
+        th.join();
+    }
+
     return r;
 }
 

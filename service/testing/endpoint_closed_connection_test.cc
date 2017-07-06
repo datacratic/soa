@@ -7,6 +7,8 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
+#include <vector>
+#include <thread>
 #include "jml/arch/format.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/utils/exc_assert.h"
@@ -17,9 +19,6 @@
 #include "jml/arch/timers.h"
 #include "soa/service/http_endpoint.h"
 #include "soa/service/json_endpoint.h"
-#include <boost/thread/thread.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
 
 #include <poll.h>
 #include <sys/socket.h>
@@ -67,7 +66,7 @@ BOOST_AUTO_TEST_CASE( test_protocol_dump )
             
     int nClientThreads = 10;
 
-    boost::thread_group tg;
+    vector<thread> tg;
 
     int shutdown = false;
 
@@ -208,7 +207,7 @@ BOOST_AUTO_TEST_CASE( test_protocol_dump )
     
     
     for (unsigned i = 0;  i <= nClientThreads;  ++i)
-        tg.create_thread(doReadyThread);
+        tg.emplace_back(doReadyThread);
 
     for (unsigned i = 0;  i < 10;  ++i) {
         ML::sleep(0.1);
@@ -220,7 +219,9 @@ BOOST_AUTO_TEST_CASE( test_protocol_dump )
     shutdown = true;
     futex_wake(shutdown);
 
-    tg.join_all();
+    for (auto & th: tg) {
+        th.join();
+    }
 
     cerr << "done " << doneRequests << " requests" << endl;
 }

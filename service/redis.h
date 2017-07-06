@@ -19,8 +19,6 @@
 #include "soa/jsoncpp/json.h"
 #include "soa/types/date.h"
 #include <boost/shared_ptr.hpp>
-#include <boost/thread/thread.hpp>
-#include <boost/thread/recursive_mutex.hpp>
 #include <deque>
 
 
@@ -444,7 +442,7 @@ private:
 
     struct RequestData;
 
-    typedef boost::recursive_mutex Lock;
+    typedef std::recursive_mutex Lock;
     Lock lock;
 
     typedef std::map<uint64_t, std::shared_ptr<RequestData> > Requests;

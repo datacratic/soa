@@ -16,7 +16,6 @@
 #include <boost/test/unit_test.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/smart_ptr.hpp>
-#include <boost/thread/barrier.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 #include <vector>

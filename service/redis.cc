@@ -7,7 +7,6 @@
 
 #include "soa/service/redis.h"
 #include "jml/utils/guard.h"
-#include <boost/thread.hpp>
 #include <poll.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -420,7 +419,7 @@ struct AsyncConnection::EventLoop {
     ML::Wakeup_Fd wakeupfd;
     volatile bool finished;
     AsyncConnection * connection;
-    std::shared_ptr<boost::thread> thread;
+    std::shared_ptr<std::thread> thread;
     pollfd fds[2];
     volatile int disconnected;
 
@@ -439,7 +438,7 @@ struct AsyncConnection::EventLoop {
 
         registerMe(connection->context_);
 
-        thread.reset(new boost::thread(boost::bind(&EventLoop::run, this)));
+        thread.reset(new std::thread(std::bind(&EventLoop::run, this)));
     }
 
     ~EventLoop()
@@ -531,13 +530,13 @@ struct AsyncConnection::EventLoop {
             if ((fds[1].revents & POLLOUT)
                 && (fds[1].events & POLLOUT)) {
                 //cerr << "got write on " << fds[1].fd << endl;
-                boost::unique_lock<Lock> guard(connection->lock);
+                std::unique_lock<Lock> guard(connection->lock);
                 redisAsyncHandleWrite(connection->context_);
             }
             if ((fds[1].revents & POLLIN)
                 && (fds[1].events & POLLIN)) {
                 //cerr << "got read on " << fds[1].fd << endl;
-                boost::unique_lock<Lock> guard(connection->lock);
+                std::unique_lock<Lock> guard(connection->lock);
                 redisAsyncHandleRead(connection->context_);
             }
 
@@ -853,7 +852,7 @@ resultCallback(redisAsyncContext * context, void * reply, void * privData)
     AsyncConnection * c = data->connection;
 
     {
-        boost::unique_lock<Lock> guard(c->lock);
+        std::unique_lock<Lock> guard(c->lock);
         
         if (data->requestIterator != c->requests.end()) {
             c->requests.erase(data->requestIterator);
@@ -906,7 +905,7 @@ queue(const Command & command,
       const OnResult & onResult,
       Timeout timeout)
 {
-    boost::unique_lock<Lock> guard(lock);
+    std::unique_lock<Lock> guard(lock);
 
     ExcAssert(context_);
     ExcAssert(!context_->err);
@@ -1032,7 +1031,7 @@ queueMulti(const std::vector<Command> & commands,
         = std::make_shared<MultiAggregator>(commands.size(), onResults);
     
     // Make sure they all get executed as a block
-    boost::unique_lock<Lock> guard(lock);
+    std::unique_lock<Lock> guard(lock);
     
     // Now queue them one at a time
     for (unsigned i = 0;  i < commands.size();  ++i) {
@@ -1076,7 +1075,7 @@ void
 AsyncConnection::
 expireTimeouts(Date now)
 {
-    boost::unique_lock<Lock> guard(lock);
+    std::unique_lock<Lock> guard(lock);
     
     auto it = timeouts.begin(), end = timeouts.end();
     for (;  it != end;  ++it) {

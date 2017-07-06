@@ -9,6 +9,7 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
+#include <thread>
 #include "soa/service/http_endpoint.h"
 #include "soa/service/active_endpoint.h"
 #include "soa/service/passive_endpoint.h"
@@ -81,7 +82,7 @@ BOOST_AUTO_TEST_CASE( test_connect_speed )
     ACE_Semaphore started(0);
     bool finished = false;
 
-    boost::thread thread([&] () { runAcceptThread(port, started, finished); });
+    std::thread thread([&] () { runAcceptThread(port, started, finished); });
 
     started.acquire();
 

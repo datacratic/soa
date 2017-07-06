@@ -8,9 +8,9 @@
 #ifndef __rtb__transport_h__
 #define __rtb__transport_h__
 
+#include <mutex>
 #include <boost/shared_ptr.hpp>
 #include <boost/utility.hpp>
-#include <boost/thread/locks.hpp>
 #include <ace/SOCK_Stream.h>
 #include <ace/Synch.h>
 #include "jml/arch/exception.h"
@@ -231,7 +231,7 @@ public:
     private:
         std::vector<Activity> activities;
         
-        typedef boost::lock_guard<ML::Spinlock> Guard;
+        typedef std::lock_guard<ML::Spinlock> Guard;
         mutable ML::Spinlock lock;
     };
     

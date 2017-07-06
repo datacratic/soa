@@ -111,22 +111,17 @@ spinup(int num_threads, bool synchronous)
 {
     shutdown_ = false;
 
-    if (eventThreads)
+    if (eventThreads.size() > 0)
         throw Exception("spinup with threads already up");
-    eventThreads.reset(new boost::thread_group());
 
     threadsActive_ = 0;
 
     totalSleepTime.resize(num_threads, 1.0);
 
     for (unsigned i = 0;  i < num_threads;  ++i) {
-        boost::thread * thread
-            = eventThreads->create_thread
-            ([=] ()
-             {
-                 this->runEventThread(i, num_threads);
-             });
-        eventThreadList.push_back(thread);
+        eventThreads.emplace_back([=] () {
+            this->runEventThread(i, num_threads);
+        });
     }
 
     if (synchronous) {
@@ -226,10 +221,10 @@ shutdown()
         }
     }
 
-    if (eventThreads) {
-        eventThreads->join_all();
-        eventThreads.reset();
+    for (auto & th: eventThreads) {
+        th.join();
     }
+    eventThreads.clear();
     eventThreadList.clear();
 
     // Now undo the signal

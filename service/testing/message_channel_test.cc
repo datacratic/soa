@@ -20,7 +20,6 @@
 #include "jml/utils/vector_utils.h"
 #include "jml/arch/timers.h"
 #include <thread>
-#include <boost/thread/thread.hpp>
 #include "jml/utils/testing/watchdog.h"
 
 
@@ -69,21 +68,21 @@ BOOST_AUTO_TEST_CASE( test_message_channel )
 
         finished = false;
 
-        boost::thread_group pushThreads;
+        vector<thread> pushThreads;
         for (unsigned i = 0;  i < numPushThreads;  ++i)
-            pushThreads.create_thread(pushThread);
+            pushThreads.emplace_back(pushThread);
 
-        boost::thread_group processThreads;
+        vector<thread> processThreads;
         for (unsigned i = 0;  i < numProcessThreads;  ++i)
-            processThreads.create_thread(processThread);
+            processThreads.emplace_back(processThread);
     
-        pushThreads.join_all();
+        for (auto & th: pushThreads) { th.join(); }
 
         cerr << "finished push threads" << endl;
     
         finished = true;
 
-        processThreads.join_all();
+        for (auto & th: processThreads) { th.join(); }
     }
 }
 

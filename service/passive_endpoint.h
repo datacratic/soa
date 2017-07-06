@@ -214,7 +214,7 @@ struct AcceptorT<SocketTransport> : public Acceptor {
     void waitListening() const;
 
 protected:
-    std::shared_ptr<boost::thread> acceptThread;
+    std::shared_ptr<std::thread> acceptThread;
     ML::Wakeup_Fd wakeup;
     ACE_INET_Addr addr;
     int fd;

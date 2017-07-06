@@ -12,12 +12,13 @@
 
 #include <boost/ptr_container/ptr_map.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
-#include <boost/thread.hpp>
 #include <functional>
 #include <future>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <chrono>
+#include <vector>
 
 
 namespace Datacratic {
@@ -75,7 +76,7 @@ private:
     // This ptr silliness is required to avoid calling copy constructors
     // and still get RAII
     boost::ptr_map<int, boost::ptr_vector<std::promise<int> > > promises;
-    boost::ptr_map<int, boost::thread_group> threads;
+    boost::ptr_map<int, std::vector<std::thread> > threads;
 
 };
 

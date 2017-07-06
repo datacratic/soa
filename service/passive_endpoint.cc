@@ -149,7 +149,7 @@ listen(PortRange const & portRange,
 
     shutdown = false;
 
-    acceptThread.reset(new boost::thread([=] () { this->runAcceptThread(); }));
+    acceptThread.reset(new std::thread([=] () { this->runAcceptThread(); }));
     return port;
 }
 

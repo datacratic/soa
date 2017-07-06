@@ -8,10 +8,10 @@
 #ifndef __rtb__endpoint_h__
 #define __rtb__endpoint_h__
 
+#include <thread>
 #include <ace/Synch.h>
 #include <ace/Guard_T.h>
 #include <set>
-#include <boost/thread/thread.hpp>
 #include <iostream>
 #include "jml/arch/exception.h"
 #include "jml/arch/backtrace.h"
@@ -253,8 +253,8 @@ protected:
 
 private:
     std::string name_;
-    std::unique_ptr<boost::thread_group> eventThreads;
-    std::vector<boost::thread *> eventThreadList;
+    std::vector<std::thread> eventThreads;
+    std::vector<std::thread *> eventThreadList;
     int threadsActive_;
 
     friend class TransportBase;

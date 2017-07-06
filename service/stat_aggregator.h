@@ -9,7 +9,6 @@
 
 #include "ace/SOCK_Dgram.h"
 #include "jml/stats/distribution.h"
-#include <boost/thread.hpp>
 #include "soa/types/date.h"
 #include "stats_events.h"
 #include <unordered_map>

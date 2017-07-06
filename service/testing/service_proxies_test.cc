@@ -4,7 +4,6 @@
 #include <string>
 
 #include <boost/test/unit_test.hpp>
-#include <boost/thread/thread.hpp>
 
 #include <jml/utils/set_utils.h>
 

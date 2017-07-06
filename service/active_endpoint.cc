@@ -106,8 +106,8 @@ createConnections(int nconnections, bool synchronous,
         //    inProgress.insert(i);
         //}
         
-        newConnection(boost::bind<void>(onConnection, _1, i),
-                      boost::bind<void>(onConnectionError2, _1, i),
+        newConnection(std::bind<void>(onConnection, placeholders::_1, i),
+                      std::bind<void>(onConnectionError2, placeholders::_1, i),
                       timeout);
     }
 

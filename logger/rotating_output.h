@@ -10,7 +10,6 @@
 
 #include "logger.h"
 #include "soa/types/date.h"
-#include <boost/thread/recursive_mutex.hpp>
 #include "soa/types/periodic_utils.h"
 #include "soa/gc/rcu_protected.h"
 

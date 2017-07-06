@@ -22,8 +22,6 @@
 #include <iostream>
 #include <atomic>
 
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
 
 
 using namespace ML;

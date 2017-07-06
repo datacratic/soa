@@ -9,15 +9,14 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
+#include <iostream>
+#include <mutex>
 #include "soa/service/redis.h"
 #include "soa/service/testing/redis_temporary_server.h"
 #include <boost/test/unit_test.hpp>
 #include "jml/utils/smart_ptr_utils.h"
 #include "jml/utils/string_functions.h"
 #include "jml/arch/atomic_ops.h"
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
-#include <iostream>
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/timers.h"
 #include <linux/futex.h>
@@ -47,7 +46,7 @@ BOOST_AUTO_TEST_CASE( test_redis_async )
 
     Redis::AsyncConnection connection(redis);
     
-    boost::mutex m;
+    std::mutex m;
     m.lock();
 
     auto onResult = [&] (const Redis::Result & result)
@@ -273,15 +272,15 @@ BOOST_AUTO_TEST_CASE( test_redis_mt )
             while (pending != 0) ;
         };
 
-    boost::thread_group tg;
+    vector<thread> tg;
         
     for (unsigned i = 0;  i < nthreads;  ++i)
-        tg.create_thread(boost::bind<void>(doRedisThread, i));
+        tg.emplace_back(std::bind<void>(doRedisThread, i));
 
     ML::sleep(1.0);
     finished = true;
     
-    tg.join_all();
+    for (auto & th: tg) { th.join(); }
 
     cerr << "numRequests = " << numRequests << endl;
 

@@ -11,7 +11,6 @@
 #include "soa/service/socket_per_thread.h"
 #include <sstream>
 #include "jml/utils/filter_streams.h"
-#include <boost/thread/thread.hpp>
 #include "jml/utils/smart_ptr_utils.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/arch/atomic_ops.h"
