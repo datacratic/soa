@@ -11,7 +11,6 @@
 #include "jml/utils/string_functions.h"
 #include "jml/utils/exc_assert.h"
 #include <fstream>
-#include <boost/make_shared.hpp>
 
 
 using namespace std;

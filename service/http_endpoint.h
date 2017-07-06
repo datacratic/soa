@@ -10,7 +10,6 @@
 #include "soa/service/passive_endpoint.h"
 #include "soa/types/date.h"
 #include "http_header.h"
-#include <boost/make_shared.hpp>
 #include <boost/algorithm/string.hpp>
 
 namespace Datacratic {

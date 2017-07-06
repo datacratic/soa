@@ -9,7 +9,6 @@
 #include "jml/utils/vector_utils.h"
 #include "named_endpoint.h"
 #include "http_rest_proxy.h"
-#include <boost/make_shared.hpp>
 
 
 namespace Datacratic {

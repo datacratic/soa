@@ -6,7 +6,6 @@
 */
 
 #include "stats_output.h"
-#include <boost/make_shared.hpp>
 
 
 using namespace std;

@@ -14,7 +14,6 @@
 #include "jml/utils/file_functions.h"
 #include <unistd.h>
 #include <sys/utsname.h>
-#include <boost/make_shared.hpp>
 #include "soa/jsoncpp/reader.h"
 #include "soa/jsoncpp/value.h"
 #include <fstream>

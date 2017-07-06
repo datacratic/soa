@@ -13,7 +13,6 @@
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/timers.h"
 #include "soa/service/passive_endpoint.h"
-#include <boost/make_shared.hpp>
 
 
 using namespace std;

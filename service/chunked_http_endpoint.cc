@@ -6,7 +6,6 @@
 */
 
 #include "soa/service/chunked_http_endpoint.h"
-#include <boost/make_shared.hpp>
 
 
 using namespace std;

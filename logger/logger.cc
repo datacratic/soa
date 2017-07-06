@@ -14,7 +14,6 @@
 #include "file_output.h"
 #include "publish_output.h"
 #include "callback_output.h"
-#include <boost/make_shared.hpp>
 
 
 using namespace std;

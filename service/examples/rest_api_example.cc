@@ -12,7 +12,6 @@
 #include <boost/program_options/variables_map.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/thread/thread.hpp>
-#include <boost/make_shared.hpp>
 
 #include "soa/types/value_description.h"
 #include "soa/types/basic_value_descriptions.h"

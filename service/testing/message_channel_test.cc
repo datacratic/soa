@@ -9,7 +9,6 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
-#include <boost/make_shared.hpp>
 #include "soa/service/named_endpoint.h"
 #include "soa/service/message_loop.h"
 #include "soa/service/typed_message_channel.h"

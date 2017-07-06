@@ -20,7 +20,6 @@
 #include <boost/thread/thread.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/barrier.hpp>
-#include <boost/make_shared.hpp>
 
 #include <poll.h>
 #include <sys/socket.h>

@@ -18,7 +18,6 @@
 #include "jml/utils/exc_assert.h"
 #include <boost/tuple/tuple.hpp>
 #include <boost/bind.hpp>
-#include <boost/make_shared.hpp>
 #include <poll.h>
 
 

@@ -4,7 +4,6 @@
 #include <string>
 
 #include <boost/test/unit_test.hpp>
-#include <boost/make_shared.hpp>
 #include "jml/utils/filter_streams.h"
 #include "soa/types/value_description.h"
 #include "soa/service/sqs.h"
