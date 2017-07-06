@@ -983,9 +983,10 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
                             + to_string(response_.code_) + "\n"
                             + "message: " + xmlError.second);
 
-            /* retry on "InternalError" */
+            /* retry on temporary request errors */
             if (xmlError.first == "InternalError"
-                || xmlError.first == "RequestTimeout") {
+                || xmlError.first == "RequestTimeout"
+                || xmlError.first == "RequestTimeTooSkewed") {
                 recoverable = true;
             }
         }
