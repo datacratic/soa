@@ -1007,8 +1007,11 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         recoverable = true;
         if (state_->rq->params.useRange()) {
             state_->range.adjust(state_->requestBody.size());
+            state_->body.append(state_->requestBody);
         }
-        state_->body.append(state_->requestBody);
+        else {
+            state_->body.clear();
+        }
     }
 
     if (errorCondition) {
