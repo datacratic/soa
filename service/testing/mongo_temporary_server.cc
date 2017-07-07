@@ -7,6 +7,7 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <boost/filesystem.hpp>
 #include "jml/utils/exc_assert.h"
 #include "mongo_temporary_server.h"
 

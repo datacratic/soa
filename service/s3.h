@@ -595,10 +595,6 @@ struct S3Api : public AwsApi {
                           const std::string & uploadId,
                           const std::vector<std::string> & etags) const;
 
-    void uploadRecursive(std::string dirSrc,
-                         std::string bucketDest,
-                         bool includeDir);
-
     /** Pre-escaped versions of the above methods */
 
     /* head */

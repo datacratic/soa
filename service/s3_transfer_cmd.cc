@@ -1,18 +1,19 @@
-#include "soa/service/s3.h"
-#include "jml/utils/file_functions.h"
+#include <fstream>
+#include <iostream>
 #include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/positional_options.hpp> 
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <boost/filesystem.hpp>
-#include <fstream>
-#include <iostream>
+#include "jml/utils/file_functions.h"
+#include "soa/service/s3.h"
+#include "soa/service/fs_utils.h"
 
 namespace po = boost::program_options;
-namespace fs = boost::filesystem;
 
 using namespace std;
+using namespace Datacratic;
+
 
 int main(int argc, char* argv[]){
     po::options_description desc("Allowed options");
@@ -75,30 +76,27 @@ int main(int argc, char* argv[]){
         return 1;
     }
     
-    try{
-        if(direction == "u"){
-            //upload
-            cout << "File: " << localFile 
-                    << " - Size: " << fs::file_size(localFile) <<  "\n";
-            ML::File_Read_Buffer frb(localFile);
-            Datacratic::S3Api s3(id, key);
-            string result = s3.upload(
-                    frb.start(), 
-                    fs::file_size(localFile), 
-                    bucket, "/" + s3File); 
-            cout << result << "\n";
-        }else{
-            //download
-            Datacratic::S3Api s3(id, key);
-            s3.downloadToFile(
-                    "s3://" + bucket + "/" + s3File, 
-                    localFile, 
-                    maxSizeKB > 0 ? 1024 * maxSizeKB : -1);
-        }
-    }catch(const fs::filesystem_error& ex){
-        cout << "File does not exist.\n";
-        return 1;
+    if(direction == "u"){
+        //upload
+        auto info = getUriObjectInfo(localFile);
+        cout << "File: " << localFile 
+             << " - Size: " << info.size <<  "\n";
+        ML::File_Read_Buffer frb(localFile);
+        S3Api s3(id, key);
+        string result = s3.upload(
+            frb.start(),
+            info.size,
+            bucket, "/" + s3File);
+        cout << result << "\n";
+    }else{
+        //download
+        S3Api s3(id, key);
+        s3.downloadToFile(
+            "s3://" + bucket + "/" + s3File, 
+            localFile,
+            maxSizeKB > 0 ? 1024 * maxSizeKB : -1);
     }
+
     return 0;
 }
 

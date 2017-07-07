@@ -10,7 +10,6 @@
 
 #define BOOST_SYSTEM_NO_DEPRECATED
 
-#include <boost/filesystem.hpp>
 
 
 using namespace std;

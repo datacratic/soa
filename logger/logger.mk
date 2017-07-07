@@ -10,7 +10,7 @@ LIBLOGGER_SOURCES := \
 	multi_output.cc 
 
 LIBLOGGER_LINK := \
-	ACE arch utils boost_thread boost_regex zeromq endpoint lzma boost_filesystem opstats cloud gc
+	ACE arch utils boost_regex zeromq endpoint lzma boost_filesystem opstats cloud gc
 
 $(eval $(call library,logger,$(LIBLOGGER_SOURCES),$(LIBLOGGER_LINK)))
 

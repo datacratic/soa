@@ -6,7 +6,6 @@
 
 #include "cloud_output.h"
 #include <memory>
-#include <boost/filesystem.hpp>
 #include "jml/utils/file_functions.h"
 
 namespace Datacratic {

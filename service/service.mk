@@ -63,7 +63,7 @@ LIBSERVICES_SOURCES := \
 	event_subscriber.cc \
 	nsq_client.cc 
 
-LIBSERVICES_LINK := opstats curl boost_regex runner_common ACE arch utils jsoncpp boost_thread types tinyxml2 value_description boost_system boost_filesystem crypto
+LIBSERVICES_LINK := opstats curl boost_regex runner_common ACE arch utils jsoncpp types tinyxml2 value_description boost_system boost_filesystem crypto
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
@@ -95,12 +95,12 @@ $(eval $(call library,cloud,$(LIBCLOUD_SOURCES),$(LIBCLOUD_LINK)))
 LIBREDIS_SOURCES := \
 	redis.cc
 
-LIBREDIS_LINK := hiredis utils types boost_thread
+LIBREDIS_LINK := hiredis utils types
 
 $(eval $(call library,redis,$(LIBREDIS_SOURCES),$(LIBREDIS_LINK)))
 
 
-$(eval $(call program,s3_transfer_cmd,cloud boost_program_options boost_filesystem utils))
+$(eval $(call program,s3_transfer_cmd,cloud boost_program_options utils))
 $(eval $(call program,s3tee,cloud boost_program_options utils))
 $(eval $(call program,s3cp,cloud boost_program_options utils))
 $(eval $(call program,s3_multipart_cmd,cloud boost_program_options utils))

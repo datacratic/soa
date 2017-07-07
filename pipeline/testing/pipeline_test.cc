@@ -8,8 +8,9 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
-#include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+
+#include "soa/service/fs_utils.h"
 
 #include "soa/pipeline/headers.h"
 
@@ -110,7 +111,7 @@ BOOST_AUTO_TEST_CASE( test_blocks )
     DefaultPipeline pipeline;
 
     std::string path("./build/x86_64/tmp");
-    boost::filesystem::create_directories(path);
+    makeUriDirectory(path + "/");
 
     auto environment = std::make_shared<Environment>();
     environment->set("name", "lorem");

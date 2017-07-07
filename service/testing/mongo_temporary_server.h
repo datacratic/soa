@@ -22,7 +22,6 @@
 #include <sys/prctl.h>
 #include <signal.h>
 #include <boost/noncopyable.hpp>
-#include <boost/filesystem.hpp>
 #include "soa/service/message_loop.h"
 #include "soa/service/runner.h"
 #include "soa/service/sink.h"

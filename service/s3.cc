@@ -40,7 +40,6 @@
 #include <exception>
 #include <unordered_map>
 
-#include <boost/filesystem.hpp>
 
 #include "message_loop.h"
 #include "http_client.h"
@@ -2386,29 +2385,6 @@ forEachBucket(const OnBucket & onBucket) const
     }
 
     return true;
-}
-
-void
-S3Api::
-uploadRecursive(string dirSrc, string bucketDest, bool includeDir){
-    using namespace boost::filesystem;
-    path targetDir(dirSrc);
-    if(!is_directory(targetDir)){
-        throw ML::Exception("%s is not a directory", dirSrc.c_str());
-    }
-    recursive_directory_iterator it(targetDir), itEnd;
-    int toTrim = includeDir ? 0 : dirSrc.length() + 1;
-    for(; it != itEnd; it ++){
-        if(!is_directory(*it)){
-            string path = it->path().string();
-            ML::File_Read_Buffer frb(path);
-            size_t size = file_size(path);
-            if(toTrim){
-                path = path.substr(toTrim);
-            }
-            upload(frb.start(), size, "s3://" + bucketDest + "/" + path);
-        }
-    }
 }
 
 void S3Api::setDefaultBandwidthToServiceMbps(double mbps){

@@ -11,7 +11,6 @@
 #include "logger.h"
 #include "jml/arch/timers.h"
 #include "soa/types/date.h"
-#include <boost/filesystem.hpp>
 #include "soa/types/periodic_utils.h"
 #include "compressor.h"
 
