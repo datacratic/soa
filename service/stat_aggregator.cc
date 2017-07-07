@@ -14,7 +14,6 @@
 #include "jml/utils/floating_point.h"
 #include "jml/utils/smart_ptr_utils.h"
 #include "jml/utils/exc_check.h"
-#include <boost/tuple/tuple.hpp>
 #include <algorithm>
 
 
@@ -70,7 +69,7 @@ read(const std::string & prefix)
     double current;
     Date oldStart;
 
-    boost::tie(current, oldStart) = reset();
+    std::tie(current, oldStart) = reset();
 
     if (totalsBuffer.size() >= 10)
         totalsBuffer.pop_front();
@@ -145,7 +144,7 @@ read(const std::string & prefix)
     ML::distribution<float> * values;
     Date oldStart;
 
-    boost::tie(values, oldStart) = reset();
+    std::tie(values, oldStart) = reset();
 
     std::auto_ptr<ML::distribution<float> > vptr(values);
 

@@ -16,8 +16,6 @@
 #include "jml/utils/floating_point.h"
 #include "jml/utils/smart_ptr_utils.h"
 #include "jml/utils/exc_assert.h"
-#include <boost/tuple/tuple.hpp>
-#include <boost/bind.hpp>
 #include <poll.h>
 
 

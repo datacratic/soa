@@ -9,6 +9,9 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
+#include <vector>
+#include <thread>
+#include <mutex>
 #include "soa/service/carbon_connector.h"
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/timers.h"
@@ -33,7 +36,7 @@ BOOST_AUTO_TEST_CASE( test_counter_aggregator )
     uint64_t nthreads = 8, iter = 100000;
     boost::barrier barrier(nthreads);
     uint64_t total = 0;
-    boost::thread_group tg;
+    vector<thread> tg;
     for (unsigned i = 0;  i < nthreads;  ++i) {
         auto doThread = [&] ()
             {
@@ -55,10 +58,12 @@ BOOST_AUTO_TEST_CASE( test_counter_aggregator )
                 }
             };
         
-        tg.create_thread(doThread);
+        tg.emplace_back(doThread);
     }
 
-    tg.join_all();
+    for (auto & th: tg) {
+        th.join();
+    }
 
     double val = aggregator.reset().first;
     uint64_t val2 = val;
@@ -83,9 +88,9 @@ BOOST_AUTO_TEST_CASE( test_gauge_aggregator )
 
     uint64_t nthreads = 8, iter = 100000;
     boost::barrier barrier(nthreads);
-    boost::thread_group tg;
+    vector<thread> tg;
 
-    boost::mutex mutex;
+    mutex m;
 
     ML::distribution<float> allValues;
 
@@ -110,15 +115,17 @@ BOOST_AUTO_TEST_CASE( test_gauge_aggregator )
                     }
                 }
                 
-                boost::lock_guard<boost::mutex> lock(mutex);
+                lock_guard<mutex> guard(m);
                 allValues.insert(allValues.end(),
                                  threadValues.begin(), threadValues.end());
             };
         
-        tg.create_thread(doThread);
+        tg.emplace_back(doThread);
     }
 
-    tg.join_all();
+    for (auto & th: tg) {
+        th.join();
+    }
 
     ML::distribution<float> * values
         = aggregator.reset().first;
@@ -136,7 +143,7 @@ BOOST_AUTO_TEST_CASE( test_multi_aggregator )
 {
     std::vector<StatReading> readings;
 
-    boost::mutex m;
+    mutex m;
     m.lock();
 
     auto recordReading = [&] (const std::vector<StatReading> & stats)

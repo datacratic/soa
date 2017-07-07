@@ -101,7 +101,8 @@ inheritSignals(SignalRegistryBase & inheritFrom)
     
     parentRegistrations.push_back
         (inheritFrom.newEvent.connect
-         (boost::bind(&SignalRegistryBase::addSignal, this, _2, true)));
+         (bind(&SignalRegistryBase::addSignal, this,
+               placeholders::_2, true)));
 }
 
 void

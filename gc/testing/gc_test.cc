@@ -8,6 +8,8 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
+#include <thread>
+#include <vector>
 #include "soa/gc/gc_lock.h"
 #include "jml/utils/string_functions.h"
 #include "jml/utils/exc_assert.h"
@@ -18,7 +20,6 @@
 #include "jml/arch/spinlock.h"
 #include "jml/arch/tick_counter.h"
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <iostream>
 #include <atomic>
 
@@ -123,11 +124,13 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
     {
         cerr << "single shared" << endl;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
-        tg.create_thread(sharedThread);
+        vector<thread> tg;
+        tg.emplace_back(sharedThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         cerr << "iterations: shared " << sharedIterations
              << " exclusive " << exclusiveIterations << endl;
@@ -137,12 +140,14 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
     {
         cerr << "multi shared" << endl;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
+        vector<thread> tg;
         for (unsigned i = 0;  i < nthreads;  ++i)
-            tg.create_thread(sharedThread);
+            tg.emplace_back(sharedThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         if (nthreads > 1)
             BOOST_CHECK_GE(multiShared, 0);
@@ -154,11 +159,13 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
     {
         cerr << "single exclusive" << endl;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
-        tg.create_thread(exclusiveThread);
+        vector<thread> tg;
+        tg.emplace_back(exclusiveThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         cerr << "iterations: shared " << sharedIterations
              << " exclusive " << exclusiveIterations << endl;
@@ -168,12 +175,14 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
     {
         cerr << "multi exclusive" << endl;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
+        vector<thread> tg;
         for (unsigned i = 0;  i < nthreads;  ++i)
-            tg.create_thread(exclusiveThread);
+            tg.emplace_back(exclusiveThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         cerr << "iterations: shared " << sharedIterations
              << " exclusive " << exclusiveIterations << endl;
@@ -183,14 +192,16 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
     {
         cerr << "mixed shared and exclusive" << endl;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
+        vector<thread> tg;
         for (unsigned i = 0;  i < nthreads;  ++i)
-            tg.create_thread(sharedThread);
+            tg.emplace_back(sharedThread);
         for (unsigned i = 0;  i < nthreads;  ++i)
-            tg.create_thread(exclusiveThread);
+            tg.emplace_back(exclusiveThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         if (nthreads > 1)
             BOOST_CHECK_GE(multiShared, 0);
@@ -203,11 +214,13 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
         cerr << "overflow" << endl;
         gcLockStartingEpoch = 0xFFFFFFF0;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
-        tg.create_thread(sharedThread);
+        vector<thread> tg;
+        tg.emplace_back(sharedThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         cerr << "iterations: shared " << sharedIterations
              << " exclusive " << exclusiveIterations << endl;
@@ -218,11 +231,13 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
         cerr << "INT_MIN to INT_MAX" << endl;
         gcLockStartingEpoch = 0x7FFFFFF0;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
-        tg.create_thread(sharedThread);
+        vector<thread> tg;
+        tg.emplace_back(sharedThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         cerr << "iterations: shared " << sharedIterations
              << " exclusive " << exclusiveIterations << endl;
@@ -233,11 +248,13 @@ BOOST_AUTO_TEST_CASE(test_mutual_exclusion)
         cerr << "benign overflow" << endl;
         gcLockStartingEpoch = 0xBFFFFFF0;
         sharedIterations = exclusiveIterations = multiShared = finished = 0;
-        boost::thread_group tg;
-        tg.create_thread(sharedThread);
+        vector<thread> tg;
+        tg.emplace_back(sharedThread);
         sleep(1);
         finished = true;
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
         BOOST_CHECK_EQUAL(errors, 0);
         cerr << "iterations: shared " << sharedIterations
              << " exclusive " << exclusiveIterations << endl;
@@ -551,22 +568,24 @@ struct TestBase {
              int runTime = 1)
     {
         gc.getEntry();
-        boost::thread_group tg;
+        vector<thread> tg;
 
         for (unsigned i = 0;  i < nthreads;  ++i)
-            tg.create_thread(boost::bind(&TestBase::doReadThread, this, i));
+            tg.emplace_back(bind(&TestBase::doReadThread, this, i));
 
         for (unsigned i = 0;  i < nthreads;  ++i)
-            tg.create_thread(boost::bind(allocFn, i));
+            tg.emplace_back(bind(allocFn, i));
 
         for (unsigned i = 0;  i < nSpinThreads;  ++i)
-            tg.create_thread(boost::bind(&TestBase::doSpinThread, this));
+            tg.emplace_back(bind(&TestBase::doSpinThread, this));
 
         sleep(runTime);
 
         finished = true;
 
-        tg.join_all();
+        for (auto & th: tg) {
+            th.join();
+        }
 
         gc.deferBarrier();
 
@@ -593,7 +612,7 @@ BOOST_AUTO_TEST_CASE ( test_gc_sync_many_threads_contention )
     int nblocks = 2;
 
     TestBase<GcLock> test(nthreads, nblocks, nSpinThreads);
-    test.run(boost::bind(&TestBase<GcLock>::allocThreadSync, &test, _1));
+    test.run(bind(&TestBase<GcLock>::allocThreadSync, &test, _1));
 }
 #endif
 
@@ -606,7 +625,7 @@ BOOST_AUTO_TEST_CASE ( test_gc_deferred_contention )
     int nblocks = 2;
 
     TestBase<GcLock> test(nthreads, nblocks, nSpinThreads);
-    test.run(boost::bind(&TestBase<GcLock>::allocThreadDefer, &test, _1));
+    test.run(bind(&TestBase<GcLock>::allocThreadDefer, &test, _1));
 }
 
 
@@ -620,7 +639,7 @@ BOOST_AUTO_TEST_CASE ( test_gc_sync )
     int nblocks = 2;
 
     TestBase<GcLock> test(nthreads, nblocks);
-    test.run(boost::bind(&TestBase<GcLock>::allocThreadSync, &test, _1));
+    test.run(bind(&TestBase<GcLock>::allocThreadSync, &test, _1));
 }
 
 BOOST_AUTO_TEST_CASE ( test_gc_sync_many_threads )
@@ -631,7 +650,7 @@ BOOST_AUTO_TEST_CASE ( test_gc_sync_many_threads )
     int nblocks = 2;
 
     TestBase<GcLock> test(nthreads, nblocks);
-    test.run(boost::bind(&TestBase<GcLock>::allocThreadSync, &test, _1));
+    test.run(bind(&TestBase<GcLock>::allocThreadSync, &test, _1));
 }
 
 BOOST_AUTO_TEST_CASE ( test_gc_deferred )
@@ -642,7 +661,7 @@ BOOST_AUTO_TEST_CASE ( test_gc_deferred )
     int nblocks = 2;
 
     TestBase<GcLock> test(nthreads, nblocks);
-    test.run(boost::bind(&TestBase<GcLock>::allocThreadDefer, &test, _1));
+    test.run(bind(&TestBase<GcLock>::allocThreadDefer, &test, _1));
 }
 
 
@@ -666,7 +685,7 @@ BOOST_AUTO_TEST_CASE( test_shared_lock_sync )
     int nblocks = 2;
 
     TestBase<SharedGcLockProxy> test(nthreads, nblocks, nSpinThreads);
-    test.run(boost::bind(
+    test.run(bind(
                     &TestBase<SharedGcLockProxy>::allocThreadSync, &test, _1));
 
 }
@@ -683,7 +702,7 @@ BOOST_AUTO_TEST_CASE( test_shared_lock_defer )
     int nblocks = 2;
 
     TestBase<SharedGcLockProxy> test(nthreads, nblocks, nSpinThreads);
-    test.run(boost::bind(
+    test.run(bind(
                     &TestBase<SharedGcLockProxy>::allocThreadSync, &test, _1));
 }
 
@@ -692,7 +711,7 @@ BOOST_AUTO_TEST_CASE ( test_defer_race )
     cerr << "testing defer race" << endl;
     GcLock gc;
 
-    boost::thread_group tg;
+    vector<thread> tg;
 
     volatile bool finished = false;
 
@@ -715,7 +734,7 @@ BOOST_AUTO_TEST_CASE ( test_defer_race )
 
 
     for (unsigned i = 0;  i < nthreads;  ++i)
-        tg.create_thread(doTestThread);
+        tg.emplace_back(doTestThread);
 
     int runTime = 1;
 
@@ -723,7 +742,9 @@ BOOST_AUTO_TEST_CASE ( test_defer_race )
 
     finished = true;
 
-    tg.join_all();
+    for (auto & th: tg) {
+        th.join();
+    }
 }
 
 #endif

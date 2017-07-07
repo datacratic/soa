@@ -4,6 +4,7 @@
 
 */
 
+#include <functional>
 #include "remote_output.h"
 #include <boost/iostreams/categories.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
@@ -31,9 +32,10 @@ struct RemoteOutputConnection
     {
         std::shared_ptr<ZlibCompressor> filter
             (new ZlibCompressor());
-        filter->onOutput = boost::bind(&RemoteOutputConnection::write,
-                                       this,
-                                       _1, _2, _4);
+        filter->onOutput = bind(&RemoteOutputConnection::write,
+                                this,
+                                placeholders::_1, placeholders::_2,
+                                placeholders::_4);
         this->filter = filter;
     }
 
@@ -187,8 +189,8 @@ reconnect(std::function<void ()> onFinished,
           std::function<void (const std::string &)> onError,
           double timeout)
 {
-    newConnection(boost::bind(&RemoteOutput::setupConnection,
-                              this, _1, onFinished, onError),
+    newConnection(bind(&RemoteOutput::setupConnection,
+                       this, placeholders::_1, onFinished, onError),
                   onError, timeout);
 }
 
