@@ -7,6 +7,7 @@
 */
 
 #include <libgen.h>
+#include <unistd.h>
 
 #include <memory>
 #include <map>
@@ -349,6 +350,18 @@ dirName(const std::string & filename)
     string dirname(dirNameC);
 
     return dirname;
+}
+
+string
+getCurrentWorkingDirectory()
+{
+    char cwd[PATH_MAX];
+    char * cwdPtr = ::getcwd(cwd, PATH_MAX - 1);
+    if (!cwdPtr) {
+        throw ML::Exception(errno, "getcwd");
+    }
+
+    return string(cwdPtr);
 }
 
 /****************************************************************************/

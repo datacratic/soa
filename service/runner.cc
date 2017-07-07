@@ -24,15 +24,15 @@
 #include "jml/utils/guard.h"
 #include "jml/utils/file_functions.h"
 
+#include "soa/types/basic_value_descriptions.h"
+
+#include "fs_utils.h"
 #include "logs.h"
 #include "message_loop.h"
 #include "sink.h"
 
 #include "runner.h"
 
-#include "soa/types/basic_value_descriptions.h"
-
-#include <future>
 
 using namespace std;
 using namespace Datacratic;
@@ -757,11 +757,7 @@ findRunnerHelper()
                 binDir = cBin;
             }
             if (binDir.empty()) {
-                char binBuffer[16384];
-                char * res = ::getcwd(binBuffer, 16384);
-                ExcAssert(res != NULL);
-                binDir = res;
-                binDir += "/" BIN;
+                binDir = getCurrentWorkingDirectory() + "/" BIN;
             }
             staticHelper = binDir + "/runner_helper";
 

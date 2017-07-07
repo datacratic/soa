@@ -32,6 +32,7 @@ LIBSERVICES_SOURCES := \
 	chunked_http_endpoint.cc \
 	epoller.cc \
 	epoll_loop.cc \
+	fs_utils.cc \
 	http_header.cc \
 	port_range_service.cc \
 	service_base.cc \
@@ -62,7 +63,7 @@ LIBSERVICES_SOURCES := \
 	event_subscriber.cc \
 	nsq_client.cc 
 
-LIBSERVICES_LINK := opstats curl boost_regex runner_common ACE arch utils jsoncpp boost_thread types tinyxml2 boost_system value_description crypto
+LIBSERVICES_LINK := opstats curl boost_regex runner_common ACE arch utils jsoncpp boost_thread types tinyxml2 value_description boost_system boost_filesystem crypto
 
 $(eval $(call library,services,$(LIBSERVICES_SOURCES),$(LIBSERVICES_LINK)))
 $(eval $(call set_compile_option,runner.cc,-DBIN=\"$(BIN)\"))
@@ -79,14 +80,13 @@ $(eval $(call library,endpoint,$(LIBENDPOINT_SOURCES),$(LIBENDPOINT_LINK)))
 
 
 LIBCLOUD_SOURCES := \
-	fs_utils.cc \
 	sftp.cc \
 	s3.cc \
 	sns.cc \
 	aws.cc \
 	sqs.cc
 
-LIBCLOUD_LINK := crypto++ utils arch types tinyxml2 services ssh2 boost_filesystem value_description
+LIBCLOUD_LINK := crypto++ utils arch types tinyxml2 services ssh2 value_description
 
 
 $(eval $(call library,cloud,$(LIBCLOUD_SOURCES),$(LIBCLOUD_LINK)))
