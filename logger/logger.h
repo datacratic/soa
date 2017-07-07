@@ -16,7 +16,6 @@
 #include "jml/arch/atomic_ops.h"
 #include "ace/Synch.h"
 #include <boost/regex.hpp>
-#include <boost/shared_ptr.hpp>
 #include "soa/jsoncpp/json.h"
 
 

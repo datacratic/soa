@@ -12,7 +12,6 @@
 #include "stdarg.h"
 #include "jml/compiler/compiler.h"
 #include <string>
-#include <boost/shared_ptr.hpp>
 #include "jml/arch/exception.h"
 #include "jml/arch/format.h"
 #include "jml/arch/spinlock.h"

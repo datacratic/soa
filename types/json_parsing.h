@@ -10,9 +10,9 @@
 #include "jml/utils/json_parsing.h"
 #include "jml/utils/parse_context.h"
 #include "jml/utils/compact_vector.h"
+#include "jml/utils/string_functions.h"
 #include "soa/types/id.h"
 #include "soa/types/string.h"
-#include <boost/algorithm/string.hpp>
 
 
 namespace Datacratic {
@@ -520,7 +520,7 @@ struct StreamingJsonParsingContext
     {
         try {
             ML::Parse_Context::Revert_Token token(*context);
-            return boost::trim_copy(expectJson().toString());
+            return ML::trim(expectJson().toString());
         } catch (const std::exception & exc) {
             ML::Parse_Context::Revert_Token token(*context);
             return context->expect_text("\n");
@@ -545,7 +545,7 @@ struct StructuredJsonParsingContext: public JsonParsingContext {
         //cerr << *top << endl;
         throw ML::Exception("At path " + printPath() + ": "
                             + message + " parsing "
-                            + boost::trim_copy(top->toString()));
+                            + ML::trim(top->toString()));
     }
     
     virtual std::string getContext() const
@@ -769,7 +769,7 @@ struct StructuredJsonParsingContext: public JsonParsingContext {
 
     virtual std::string printCurrent()
     {
-        return boost::trim_copy(current->toString());
+        return ML::trim(current->toString());
     }
 };
 

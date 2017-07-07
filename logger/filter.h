@@ -8,7 +8,6 @@
 #define __logger__filter_h__
 
 
-#include <boost/shared_ptr.hpp>
 #include "soa/sigslot/slot.h"
 
 namespace boost {

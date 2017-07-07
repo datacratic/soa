@@ -12,9 +12,10 @@
 #include <vector>
 #include <thread>
 #include <mutex>
-#include "soa/service/carbon_connector.h"
+#include <boost/thread/barrier.hpp>
 #include "jml/arch/atomic_ops.h"
 #include "jml/arch/timers.h"
+#include "soa/service/carbon_connector.h"
 #include "soa/service/passive_endpoint.h"
 
 

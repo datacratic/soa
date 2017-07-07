@@ -56,7 +56,9 @@ extern int32_t SpeculativeThreshold;
 /* GC LOCK BASE                                                              */
 /*****************************************************************************/
 
-struct GcLockBase : public boost::noncopyable {
+struct GcLockBase {
+    GcLockBase(const GcLockBase & gc) = delete;
+    GcLockBase & operator = (const GcLockBase & other) = delete;
 
 public:
 

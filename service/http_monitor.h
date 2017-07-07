@@ -19,7 +19,6 @@
 #include "jml/arch/format.h"
 #include "soa/jsoncpp/value.h"
 
-#include <boost/shared_ptr.hpp>
 
 
 namespace Datacratic {

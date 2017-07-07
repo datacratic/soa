@@ -18,7 +18,6 @@
 #include "jml/utils/ring_buffer.h"
 #include "soa/jsoncpp/json.h"
 #include "soa/types/date.h"
-#include <boost/shared_ptr.hpp>
 #include <deque>
 
 

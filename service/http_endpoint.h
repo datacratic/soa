@@ -7,10 +7,10 @@
 
 #pragma once
 
+#include "jml/utils/string_functions.h"
 #include "soa/service/passive_endpoint.h"
 #include "soa/types/date.h"
 #include "http_header.h"
-#include <boost/algorithm/string.hpp>
 
 namespace Datacratic {
 
@@ -63,7 +63,7 @@ struct HttpResponse {
         : responseCode(responseCode),
           responseStatus(getResponseReasonPhrase(responseCode)),
           contentType("application/json"),
-          body(boost::trim_copy(body.toString())),
+          body(ML::trim(body.toString())),
           extraHeaders(extraHeaders),
           sendBody(true)
     {

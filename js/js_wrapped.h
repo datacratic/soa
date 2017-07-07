@@ -35,7 +35,6 @@
 #include "jml/utils/smart_ptr_utils.h"
 #include <node/node.h>
 #include <v8/v8.h>
-#include <boost/shared_ptr.hpp>
 #include <boost/type_traits/is_base_of.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/utility/enable_if.hpp>

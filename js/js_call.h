@@ -12,7 +12,6 @@
 #include "soa/js/js_utils.h"
 #include "soa/js/js_value.h"
 #include "jml/arch/exception.h"
-#include <boost/bind.hpp>
 
 #ifdef ev_ref
 #define ev_default_loop() /* empty parameter */

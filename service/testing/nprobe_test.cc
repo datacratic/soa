@@ -223,7 +223,7 @@ struct Widget : public Traceable {
     {
         boost::uuids::random_generator gen;
         const auto uuid = gen();
-        id_ = boost::to_string(uuid);
+        id_ = boost::uuids::to_string(uuid);
     }
 
     const char *name() const { return "Widget"; }

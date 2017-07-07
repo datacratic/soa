@@ -9,7 +9,6 @@
 #define __rtb__transport_h__
 
 #include <mutex>
-#include <boost/shared_ptr.hpp>
 #include <boost/utility.hpp>
 #include <ace/SOCK_Stream.h>
 #include <ace/Synch.h>
@@ -23,7 +22,6 @@
 #include "soa/types/date.h"
 #include "soa/jsoncpp/json.h"
 #include <boost/type_traits/is_convertible.hpp>
-#include <boost/enable_shared_from_this.hpp>
 
 namespace Datacratic {
 

@@ -6,7 +6,6 @@
 
 #include "periodic_utils.h"
 #include "jml/utils/parse_context.h"
-#include <boost/tuple/tuple.hpp>
 #include "jml/utils/exc_assert.h"
 
 using namespace std;
@@ -167,7 +166,7 @@ findPeriod(Date current, const std::string & period)
 {
     TimeGranularity p;
     double n;
-    boost::tie(p, n) = parsePeriod(period);
+    std::tie(p, n) = parsePeriod(period);
     return findPeriod(current, p, n);
 }
 

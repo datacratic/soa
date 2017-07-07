@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <boost/thread/tss.hpp>
+
 #include "soa/service/stat_aggregator.h"
 #include "soa/service/stats_events.h"
 #include "ace/INET_Addr.h"
@@ -18,7 +20,6 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
-#include <boost/thread.hpp>
 
 
 namespace Datacratic {

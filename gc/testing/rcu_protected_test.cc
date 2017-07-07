@@ -4,6 +4,7 @@
 
 */
 
+#include <map>
 #include "soa/gc/rcu_protected.h"
 #include "jml/utils/vector_utils.h"
 #include <thread>

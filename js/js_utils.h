@@ -15,17 +15,14 @@
 #include "jml/arch/demangle.h"
 #include "jml/arch/format.h"
 #include "jml/utils/positioned_types.h"
-#include <boost/shared_ptr.hpp>
 #include "js_value.h"
 #include <iostream>
 #include <set>
 #include <unordered_map>
 #include "js_registry.h"
-#include <boost/tuple/tuple.hpp>
 #include <boost/type_traits/remove_reference.hpp>
 #include <boost/type_traits/is_abstract.hpp>
 #include <boost/type_traits/is_pod.hpp>
-#include <boost/bind.hpp>
 #include <tuple>
 #include <array>
 
@@ -298,7 +295,7 @@ from_js(const JSValue & val, const std::map<K, V, H> * = 0)
 }
 
 template<typename T, typename V>
-void to_js(JSValue & val, const boost::tuple<T, V> & v)
+void to_js(JSValue & val, const std::tuple<T, V> & v)
 {
     v8::HandleScope scope;
     v8::Local<v8::Array> arr(v8::Array::New(2));

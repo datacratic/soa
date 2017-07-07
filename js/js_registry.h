@@ -17,7 +17,6 @@
 #include "jml/arch/backtrace.h"
 #include "jml/utils/exc_assert.h"
 #include "js_value.h"
-#include <boost/shared_ptr.hpp>
 #include <iostream>
 
 

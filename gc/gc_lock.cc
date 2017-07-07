@@ -146,8 +146,8 @@ struct GcLockBase::DeferredList {
         //ExcAssertEqual(lock.locked(), 0);
         //ExcAssertEqual(other.lock.locked(), 0);
 
-        //boost::lock_guard<ML::Spinlock> guard(lock);
-        //boost::lock_guard<ML::Spinlock> guard2(other.lock);
+        //std::lock_guard<ML::Spinlock> guard(lock);
+        //std::lock_guard<ML::Spinlock> guard2(other.lock);
 
         deferred1.swap(other.deferred1);
         deferred2.swap(other.deferred2);
@@ -161,7 +161,7 @@ struct GcLockBase::DeferredList {
 
     bool addDeferred(int forEpoch, void (fn) (void *), void * data)
     {
-        //boost::lock_guard<ML::Spinlock> guard(lock);
+        //std::lock_guard<ML::Spinlock> guard(lock);
         deferred1.push_back(DeferredEntry1(fn, data));
         return true;
     }
@@ -169,7 +169,7 @@ struct GcLockBase::DeferredList {
     bool addDeferred(int forEpoch, void (fn) (void *, void *),
                      void * data1, void * data2)
     {
-        //boost::lock_guard<ML::Spinlock> guard(lock);
+        //std::lock_guard<ML::Spinlock> guard(lock);
         deferred2.push_back(DeferredEntry2(fn, data1, data2));
         return true;
     }
@@ -177,21 +177,21 @@ struct GcLockBase::DeferredList {
     bool addDeferred(int forEpoch, void (fn) (void *, void *, void *),
                      void * data1, void * data2, void * data3)
     {
-        //boost::lock_guard<ML::Spinlock> guard(lock);
+        //std::lock_guard<ML::Spinlock> guard(lock);
         deferred3.push_back(DeferredEntry3(fn, data1, data2, data3));
         return true;
     }
         
     size_t size() const
     {
-        //boost::lock_guard<ML::Spinlock> guard(lock);
+        //std::lock_guard<ML::Spinlock> guard(lock);
         return deferred1.size() + deferred2.size() + deferred3.size();
     }
 
     void runAll()
     {
         // Spinlock should be unnecessary...
-        //boost::lock_guard<ML::Spinlock> guard(lock);
+        //std::lock_guard<ML::Spinlock> guard(lock);
 
         for (unsigned i = 0;  i < deferred1.size();  ++i) {
             try {
@@ -229,7 +229,7 @@ struct GcLockBase::Deferred {
 
     bool empty() const
     {
-        boost::lock_guard<ML::Spinlock> guard(lock);
+        std::lock_guard<ML::Spinlock> guard(lock);
         return entries.empty();
     }
 };
@@ -389,7 +389,7 @@ runDefers()
 {
     std::vector<DeferredList *> toRun;
     {
-        boost::lock_guard<ML::Spinlock> guard(deferred->lock);
+        std::lock_guard<ML::Spinlock> guard(deferred->lock);
         toRun = checkDefers();
     }
 
@@ -766,7 +766,7 @@ doDefer(void (fn) (Args...), Args... args)
 
     for (int i = 0; i == 0; ++i) {
         // Lock the deferred structure
-        boost::lock_guard<ML::Spinlock> guard(deferred->lock);
+        std::lock_guard<ML::Spinlock> guard(deferred->lock);
 
 #if 1
         // Get back to current again
@@ -846,7 +846,7 @@ dump()
          << " excl " << current.exclusive << endl;
     cerr << "deferred: ";
     {
-        boost::lock_guard<ML::Spinlock> guard(deferred->lock);
+        std::lock_guard<ML::Spinlock> guard(deferred->lock);
         cerr << deferred->entries.size() << " epochs: ";
         
         for (auto it = deferred->entries.begin(), end = deferred->entries.end();
