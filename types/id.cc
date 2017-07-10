@@ -4,7 +4,6 @@
 
 */
 
-#include <boost/algorithm/string.hpp>
 #include "id.h"
 #include "jml/arch/bit_range_ops.h"
 #include "jml/arch/format.h"

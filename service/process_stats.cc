@@ -6,24 +6,24 @@
 */
 
 
-#include "soa/service/process_stats.h"
-#include "jml/arch/exception.h"
+#include <unistd.h>
+#include <sys/resource.h>
 
-#include <boost/algorithm/string/split.hpp>
-#include <boost/lexical_cast.hpp>
-#include <string>
-#include <vector>
 #include <array>
 #include <functional>
 #include <fstream>
 #include <iostream>
-#include <unistd.h>
-#include <sys/resource.h>
+#include <string>
+#include <vector>
 
+#include <boost/lexical_cast.hpp>
+
+#include "soa/service/process_stats.h"
+#include "jml/arch/exception.h"
+#include "jml/utils/string_functions.h"
 
 using namespace Datacratic;
 using namespace std;
-using namespace boost;
 
 
 namespace {
@@ -60,16 +60,15 @@ vector<string> readProcFile(const string& procFile) {
         throw ML::Exception ("Unable to open proc file " + procFile);
     }
 
-    std::array<char, 1024> buffer;
+    array<char, 1024> buffer;
     ifs.getline(&buffer[0], buffer.max_size());
     if (ifs.fail() || ifs.eof()) {
         throw ML::Exception ("Unable to read proc file " + procFile);
     }
 
-    std::string rawStats = &buffer[0];
+    string rawStats = &buffer[0];
 
-    vector<string> stats;
-    split(stats, rawStats, [](char rhs)->bool {return rhs == ' ';});
+    vector<string> stats = ML::split(rawStats);
 
     return stats;
 }
@@ -83,9 +82,9 @@ void ProcessStats::sampleLoadAverage () {
 
     vector<string> stats = readProcFile(ProcLoadAvgFile);
 
-    loadAverage1 = lexical_cast<float>(stats[LOADAVG_1]);
-    loadAverage5 = lexical_cast<float>(stats[LOADAVG_5]);
-    loadAverage15 = lexical_cast<float>(stats[LOADAVG_15]);
+    loadAverage1 = boost::lexical_cast<float>(stats[LOADAVG_1]);
+    loadAverage5 = boost::lexical_cast<float>(stats[LOADAVG_5]);
+    loadAverage15 = boost::lexical_cast<float>(stats[LOADAVG_15]);
 }
 
 //! \deperecated by sampleRUsage and sampleStatm
@@ -94,23 +93,23 @@ void ProcessStats::sampleStat () {
 
     long ticks = sysconf(_SC_CLK_TCK);
 
-    minorFaults = lexical_cast<uint64_t>(stats[STAT_MINFLT]);
-    majorFaults = lexical_cast<uint64_t>(stats[STAT_MAJFLT]);
+    minorFaults = boost::lexical_cast<uint64_t>(stats[STAT_MINFLT]);
+    majorFaults = boost::lexical_cast<uint64_t>(stats[STAT_MAJFLT]);
 
-    userTime = lexical_cast<uint64_t>(stats[STAT_UTIME]) / ((double) ticks);
-    systemTime = lexical_cast<uint64_t>(stats[STAT_STIME]) / ((double) ticks);
+    userTime = boost::lexical_cast<uint64_t>(stats[STAT_UTIME]) / ((double) ticks);
+    systemTime = boost::lexical_cast<uint64_t>(stats[STAT_STIME]) / ((double) ticks);
 
-    virtualMem = lexical_cast<uint64_t>(stats[STAT_VSIZE]);
-    residentMem = lexical_cast<uint64_t>(stats[STAT_RSS]);
+    virtualMem = boost::lexical_cast<uint64_t>(stats[STAT_VSIZE]);
+    residentMem = boost::lexical_cast<uint64_t>(stats[STAT_RSS]);
 }
 
 void ProcessStats::sampleStatm () {
     vector<string> stats = readProcFile(ProcStatmFile);
 
     int pageSize = getpagesize();
-    virtualMem = lexical_cast<uint64_t>(stats[STATM_SIZE]) * pageSize;
-    residentMem = lexical_cast<uint64_t>(stats[STATM_RESIDENT]) * pageSize; 
-    sharedMem = lexical_cast<uint64_t>(stats[STATM_SHARED]) * pageSize;
+    virtualMem = boost::lexical_cast<uint64_t>(stats[STATM_SIZE]) * pageSize;
+    residentMem = boost::lexical_cast<uint64_t>(stats[STATM_RESIDENT]) * pageSize; 
+    sharedMem = boost::lexical_cast<uint64_t>(stats[STATM_SHARED]) * pageSize;
 }
 
 void ProcessStats::sampleRUsage () {
@@ -134,7 +133,7 @@ void ProcessStats::logToCallback (
         const ProcessStats& cur,
         const string& prefix)
 {
-    std::string p = !prefix.empty() ? prefix + "." : "";
+    string p = !prefix.empty() ? prefix + "." : "";
 
     cb(p + "timeUser", cur.userTime - last.userTime);
     cb(p + "timeSystem", cur.systemTime - last.systemTime);

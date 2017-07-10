@@ -10,7 +10,6 @@
 #include <iostream>
 
 #include "xml_helpers.h"
-#include <boost/algorithm/string.hpp>
 
 #define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
 #include "crypto++/sha.h"
@@ -100,8 +99,7 @@ encodeDigest(const std::string & digest)
     //cerr << "last character is " << (int)outBuf[got - 1] << endl;
     //cerr << "got " << got << " characters" << endl;
 
-    string result(outBuf, outBuf + got);
-    boost::trim(result);
+    string result = ML::trim(string(outBuf, outBuf + got));
     return result;
 }
 
@@ -314,7 +312,7 @@ addSignatureV4(BasicRequest & request,
         RestParams headers = request.headers;
         for (auto & h: headers) {
             h.first = lowercase(h.first);
-            boost::trim(h.second);
+            h.second = ML::trim(h.second);
         }
         std::sort(headers.begin(), headers.end());
         

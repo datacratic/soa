@@ -7,7 +7,6 @@
 
 #include "sqs.h"
 #include "xml_helpers.h"
-#include <boost/algorithm/string.hpp>
 #include "jml/utils/exc_assert.h"
 #include "soa/types/basic_value_descriptions.h"
 

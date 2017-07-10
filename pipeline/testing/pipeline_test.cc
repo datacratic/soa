@@ -8,7 +8,6 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
-#include <boost/algorithm/string.hpp>
 
 #include "soa/service/fs_utils.h"
 
@@ -93,9 +92,8 @@ struct MyBlockThatSplitsString :
     }
 
     void run() {
-        std::vector<std::string> items;
-        boost::split(items, *text, boost::is_any_of(" "));
-        for(auto & item : items) {
+        std::vector<std::string> items = ML::split(*text);
+        for (auto & item : items) {
             lines.push(item);
         }
 
