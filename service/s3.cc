@@ -1985,63 +1985,6 @@ finishMultiPartUpload(const string & bucket,
     }
 }
 
-string
-S3Api::
-upload(const char * data,
-       size_t dataSize,
-       const string & bucket,
-       const string & resource, // starts with "/", unescaped (buggy),
-       CheckMethod check,
-       ObjectMetadata metadata,
-       int numInParallel)
-{
-    //cerr << "need to upload " << dataSize << " bytes" << endl;
-
-    // Check if it's already there
-
-    if (check == CM_SIZE || check == CM_MD5_ETAG) {
-        string object = s3EscapeResource(resource);
-        auto info = tryGetObjectInfo(bucket, object.substr(1));
-        if (info.size == dataSize) {
-            //cerr << "already uploaded" << endl;
-            return info.etag;
-        }
-    }
-
-    if (numInParallel != -1) {
-        metadata.numRequests = numInParallel;
-    }
-    S3Uploader uploader(this, bucket, resource, nullptr, metadata);
-
-    /* The size of the slices we pass as argument to S3Uploader::write.
-       Internally, S3Uploader will uses its own chunk size when performing the
-       actual upload requests. */
-    size_t partSize = 5 * 1024 * 1024;
-    for (size_t i = 0; i < dataSize;) {
-        size_t remaining = dataSize - i;
-        size_t currentSize = std::min(partSize, remaining);
-        uploader.write(data + i, currentSize);
-        i += currentSize;
-    }
-
-    return uploader.close();
-}
-
-string
-S3Api::
-upload(const char * data,
-       size_t dataSize,
-       const string & uri,
-       CheckMethod check,
-       ObjectMetadata metadata,
-       int numInParallel)
-{
-    string bucket, resource;
-    std::tie(bucket, resource) = parseUri(uri);
-    return upload(data, dataSize, bucket, "/" + resource,
-                  check, move(metadata), numInParallel);
-}
-
 void
 S3Api::
 forEachObject(const string & bucket,
@@ -2377,66 +2320,6 @@ getPublicUri(const string & bucket,
 {
     return protocol + "://" + bucket + ".s3.amazonaws.com/" + object;
 }
-
-void
-S3Api::
-download(const string & bucket,
-         const string & resource, // starts with "/", unescaped (buggy),
-         const OnChunk & onChunk,
-         ssize_t startOffset, ssize_t endOffset)
-    const
-{
-    S3Downloader downloader(this, bucket, resource, startOffset, endOffset);
-    uint64_t downloadSize = downloader.getDownloadSize();
-    uint64_t downloaded(0);
-    int chunkIndex(0);
-    while (!downloader.endOfDownload()) {
-        char buffer[1024 * 1024];
-        streamsize chunkSize = downloader.read(buffer, sizeof(buffer));
-        onChunk(buffer, chunkSize, chunkIndex, downloaded, downloadSize);
-        downloaded += chunkSize;
-        chunkIndex++;
-    }
-    downloader.close();
-}
-
-void
-S3Api::
-download(const string & uri,
-         const OnChunk & onChunk,
-         ssize_t startOffset, ssize_t endOffset)
-    const
-{
-    string bucket, resource;
-
-    std::tie(bucket, resource) = parseUri(uri);
-    download(bucket, "/" + resource, onChunk, startOffset, endOffset);
-}
-
-/**
- * Downloads a file from s3 to a local file. If the maxSize is specified, only
- * the first maxSize bytes will be downloaded.
- */
-void
-S3Api::
-downloadToFile(const string & uri, const string & outfile,
-               ssize_t endOffset)
-    const
-{
-    ofstream myFile;
-    myFile.open(outfile.c_str());
-
-    auto onChunk = [&] (const char * data, size_t size,
-                        int chunkIndex,
-                        uint64_t offset, uint64_t totalSize) {
-        ExcAssertLessEqual(offset + size, totalSize);
-        myFile.seekp(offset);
-        myFile.write(data, size);
-    };
-    download(uri, onChunk, 0, endOffset);
-    myFile.close();
-}
-
 
 /****************************************************************************/
 /* STREAMING DOWNLOAD SOURCE                                                */

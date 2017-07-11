@@ -100,7 +100,6 @@ LIBREDIS_LINK := hiredis utils types
 $(eval $(call library,redis,$(LIBREDIS_SOURCES),$(LIBREDIS_LINK)))
 
 
-$(eval $(call program,s3_transfer_cmd,cloud boost_program_options utils))
 $(eval $(call program,s3tee,cloud boost_program_options utils))
 $(eval $(call program,s3cp,cloud boost_program_options utils))
 $(eval $(call program,s3_multipart_cmd,cloud boost_program_options utils))
