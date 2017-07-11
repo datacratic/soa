@@ -16,6 +16,8 @@
 
 #include <boost/iostreams/stream_buffer.hpp>
 
+#include "tinyxml2/tinyxml2.h"
+
 #include "jml/arch/futex.h"
 #include "jml/arch/timers.h"
 #include "jml/utils/exc_assert.h"
@@ -39,6 +41,25 @@ using namespace Datacratic;
 
 
 namespace {
+
+std::unique_ptr<tinyxml2::XMLDocument>
+makeBodyXml(const S3Api::Response & response)
+{
+    if (response.code_ != 200)
+        throw ML::Exception("invalid http code returned");
+    std::unique_ptr<tinyxml2::XMLDocument> result(new tinyxml2::XMLDocument());
+    result->Parse(response.body_.c_str());
+    return result;
+}
+
+string
+xmlAsStr(const std::unique_ptr<tinyxml2::XMLDocument> & document)
+{
+    tinyxml2::XMLPrinter printer;
+    document->Print(&printer);
+    return printer.CStr();
+}
+
 
 std::mutex s3ApiLock;
 
@@ -470,7 +491,7 @@ private:
                 throw ML::Exception("http error "
                                     + to_string(response.code_)
                                     + " while getting chunk "
-                                    + response.bodyXmlStr());
+                                    + xmlAsStr(makeBodyXml(response)));
             }
 
             /* It can sometimes happen that a file changes during download i.e
@@ -699,7 +720,7 @@ struct S3Uploader {
             }
 
             if (response.code_ != 200) {
-                cerr << response.bodyXmlStr() << endl;
+                cerr << xmlAsStr(makeBodyXml(response)) << endl;
                 throw ML::Exception("put didn't work: %d", (int)response.code_);
             }
 
@@ -1208,36 +1229,6 @@ body()
     if (code_ < 200 || code_ >= 300)
         throw ML::Exception("invalid http code returned");
     return body_;
-}
-
-std::unique_ptr<tinyxml2::XMLDocument>
-S3Api::Response::
-bodyXml()
-    const
-{
-    if (code_ != 200)
-        throw ML::Exception("invalid http code returned");
-    std::unique_ptr<tinyxml2::XMLDocument> result(new tinyxml2::XMLDocument());
-    result->Parse(body_.c_str());
-    return result;
-}
-
-S3Api::Response::
-operator std::unique_ptr<tinyxml2::XMLDocument>()
-    const
-{
-    return bodyXml();
-}
-
-string
-S3Api::Response::
-bodyXmlStr()
-    const
-{
-    auto x = bodyXml();
-    tinyxml2::XMLPrinter printer;
-    x->Print(&printer);
-    return printer.CStr();
 }
 
 string
@@ -1777,9 +1768,9 @@ S3Api::isMultiPartUploadInProgress(
                              { { "prefix", outputPrefix } });
     if (inProgressReq.code_ != 200)
         throw ML::Exception("invalid http code returned");
-    //cerr << inProgressReq.bodyXmlStr() << endl;
+    //cerr << xmlAsStr(makeBodyXml(inProgressReq)) << endl;
 
-    auto inProgress = inProgressReq.bodyXml();
+    auto inProgress = makeBodyXml(inProgressReq);
 
     using namespace tinyxml2;
 
@@ -1836,9 +1827,9 @@ obtainMultiPartUpload(const string & bucket,
             throw ML::Exception("invalid http code returned");
 
         //cerr << "in progress requests:" << endl;
-        //cerr << inProgressReq.bodyXmlStr() << endl;
+        //cerr << xmlAsStr(makeBodyXml(inProgressReq)) << endl;
 
-        auto inProgress = inProgressReq.bodyXml();
+        auto inProgress = makeBodyXml(inProgressReq);
 
         using namespace tinyxml2;
 
@@ -1876,10 +1867,10 @@ obtainMultiPartUpload(const string & bucket,
             // TODO: check metadata, etc
             auto inProgressRq = getEscaped(bucket, escapedResource, Range::Full,
                                            "uploadId=" + uploadId);
-            if (inProgressReq.code_ != 200)
+            if (inProgressRq.code_ != 200)
                 throw ML::Exception("invalid http code returned");
 
-            auto inProgressInfo = inProgressReq.bodyXml();
+            auto inProgressInfo = makeBodyXml(inProgressRq);
             XMLHandle handle(*inProgressInfo);
 
             auto foundPart
@@ -1923,7 +1914,7 @@ obtainMultiPartUpload(const string & bucket,
         if (result.code_ != 200)
             throw ML::Exception("invalid http code returned");
 
-        auto xmlResult = result.bodyXml();
+        auto xmlResult = makeBodyXml(result);
         uploadId
             = extract<string>(xmlResult, "InitiateMultipartUploadResult/UploadId");
 
@@ -1968,9 +1959,9 @@ finishMultiPartUpload(const string & bucket,
     if (joinResponse.code_ != 200)
         throw ML::Exception("invalid http code returned");
 
-    //cerr << joinResponse.bodyXmlStr() << endl;
+    //cerr << xmlAsStr(makeBodyXml(joinResponse)) << endl;
 
-    auto joinResponseXml = joinResponse.bodyXml();
+    auto joinResponseXml = makeBodyXml(joinResponse);
 
     try {
 
@@ -2015,11 +2006,11 @@ forEachObject(const string & bucket,
                                  {}, queryParams);
         if (listingResult.code_ != 200)
             throw ML::Exception("invalid http code returned");
-        auto listingResultXml = listingResult.bodyXml();
+        auto listingResultXml = makeBodyXml(listingResult);
         string foundPrefix
-            = extractDef<string>(listingResult, "ListBucketResult/Prefix", "");
+            = extractDef<string>(listingResultXml, "ListBucketResult/Prefix", "");
         string truncated
-            = extract<string>(listingResult, "ListBucketResult/IsTruncated");
+            = extract<string>(listingResultXml, "ListBucketResult/IsTruncated");
         bool isTruncated = truncated == "true";
         marker = "";
 
@@ -2133,11 +2124,11 @@ getObjectInfoFull(const string & bucket, const string & object)
     auto listingResult = getEscaped(bucket, "/", Range::Full, "", {}, queryParams);
 
     if (listingResult.code_ != 200) {
-        cerr << listingResult.bodyXmlStr() << endl;
+        cerr << xmlAsStr(makeBodyXml(listingResult)) << endl;
         throw ML::Exception("error getting object");
     }
 
-    auto listingResultXml = listingResult.bodyXml();
+    auto listingResultXml = makeBodyXml(listingResult);
 
     auto foundObject
         = tinyxml2::XMLHandle(*listingResultXml)
@@ -2195,12 +2186,12 @@ tryGetObjectInfoFull(const string & bucket, const string & object)
     queryParams.push_back({"prefix", object});
 
     auto listingResult = get(bucket, "/", Range::Full, "", {}, queryParams);
-    if (listingResult.code_ != 200) {
-        cerr << listingResult.bodyXmlStr() << endl;
+    if (listingResult.code_ != 200) { 
+        cerr << xmlAsStr(makeBodyXml(listingResult)) << endl;
         throw ML::Exception("error getting object request: %ld",
                             listingResult.code_);
     }
-    auto listingResultXml = listingResult.bodyXml();
+    auto listingResultXml = makeBodyXml(listingResult);
 
     auto foundObject
         = tinyxml2::XMLHandle(*listingResultXml)
@@ -2264,7 +2255,7 @@ eraseObject(const string & bucket,
     Response response = erase(bucket, object);
 
     if (response.code_ != 204) {
-        cerr << response.bodyXmlStr() << endl;
+        cerr << xmlAsStr(makeBodyXml(response)) << endl;
         throw ML::Exception("error erasing object request: %ld",
                             response.code_);
     }
@@ -2375,13 +2366,6 @@ makeStreamingDownload(const string & uri)
     return result;
 }
 
-std::unique_ptr<std::streambuf>
-makeStreamingDownload(const string & bucket,
-                      const string & object)
-{
-    return makeStreamingDownload("s3://" + bucket + "/" + object);
-}
-
 
 /****************************************************************************/
 /* STREAMING UPLOAD SOURCE                                                  */
@@ -2442,16 +2426,6 @@ makeStreamingUpload(const string & uri,
     return result;
 }
 
-std::unique_ptr<std::streambuf>
-makeStreamingUpload(const string & bucket,
-                    const string & object,
-                    const ML::OnUriHandlerException & onException,
-                    const S3Api::ObjectMetadata & metadata)
-{
-    return makeStreamingUpload("s3://" + bucket + "/" + object,
-                               onException, metadata);
-}
-
 std::pair<string, string>
 S3Api::
 parseUri(const string & uri)
@@ -2480,7 +2454,7 @@ forEachBucket(const OnBucket & onBucket)
     auto listingResult = get("", "/", Range::Full, "");
     if (listingResult.code_ != 200)
         throw ML::Exception("invalid http code returned");
-    auto listingResultXml = listingResult.bodyXml();
+    auto listingResultXml = makeBodyXml(listingResult);
     auto foundBucket
         = XMLHandle(*listingResultXml)
         .FirstChildElement("ListAllMyBucketsResult")

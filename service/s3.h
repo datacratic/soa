@@ -14,13 +14,20 @@
 #include <utility>
 #include <vector>
 #include <map>
-#include "jml/arch/exception.h"
+
 #include "soa/service/aws.h"
 #include "soa/service/fs_utils.h"
 #include "soa/service/http_client.h"
 #include "soa/types/value_description_fwd.h"
-#include "tinyxml2/tinyxml2.h"
 
+
+
+namespace tinyxml2 {
+
+struct XMLElement;
+struct XMLNode;
+
+}
 
 
 namespace Datacratic {
@@ -133,9 +140,6 @@ struct S3Api : public AwsApi {
         Response();
 
         const std::string & body() const;
-        std::unique_ptr<tinyxml2::XMLDocument> bodyXml() const;
-        operator std::unique_ptr<tinyxml2::XMLDocument>() const;
-        std::string bodyXmlStr() const;
         std::string getHeader(const std::string & name) const;
 
         long code_;
