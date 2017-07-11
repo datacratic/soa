@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <exception>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -105,63 +106,6 @@ getS3Globals()
     static S3Globals s3Config;
     return s3Config;
 }
-
-
-/****************************************************************************/
-/* SYNC RESPONSE                                                            */
-/****************************************************************************/
-
-/* This class provides a standard way of propagating the response to an async
- * requests from the worker thread to the caller. */
-
-struct SyncResponse {
-    SyncResponse()
-        : data_(new Data())
-    {
-    }
-
-    S3Api::Response response()
-    {
-        return std::move(data_->response());
-    }
-
-    void operator () (S3Api::Response && response)
-    {
-        data_->setResponse(std::move(response));
-    }
-
-private:
-    struct Data {
-        Data()
-            : done_(false)
-        {
-        }
-
-        S3Api::Response response()
-        {
-            while (!done_) {
-                ML::futex_wait(done_, false);
-            }
-            if (response_.excPtr_) {
-                rethrow_exception(response_.excPtr_);
-            }
-
-            return std::move(response_);
-        }
-
-        void setResponse(S3Api::Response && response)
-        {
-            response_ = std::move(response);
-            done_ = true;
-            ML::futex_wake(done_);
-        }
-
-        int done_;
-        S3Api::Response response_;
-    };
-
-    shared_ptr<Data> data_;
-};
 
 
 /****************************************************************************/
@@ -500,8 +444,11 @@ private:
         activeRqs++;
         chunk.setQuerying();
 
-        auto onResponse = [&, chunkNr, chunkSize] (S3Api::Response && response) {
-            this->handleResponse(chunkNr, chunkSize, std::move(response));
+        auto onResponse
+            = [&, chunkNr, chunkSize] (S3Api::Response && response,
+                                       std::exception_ptr excPtr) {
+            this->handleResponse(chunkNr, chunkSize,
+                                 std::move(response), excPtr);
         };
         S3Api::Range range(offset + requestedBytes, chunkSize);
         api->getAsync(onResponse, bucket, resource, range);
@@ -511,11 +458,12 @@ private:
     }
 
     void handleResponse(unsigned int chunkNr, size_t chunkSize,
-                        S3Api::Response && response)
+                        S3Api::Response && response,
+                        std::exception_ptr excPtr)
     {
         try {
-            if (response.excPtr_) {
-                rethrow_exception(response.excPtr_);
+            if (excPtr) {
+                rethrow_exception(excPtr);
             }
 
             if (response.code_ != 200 && response.code_ != 206) {
@@ -718,8 +666,9 @@ struct S3Uploader {
         excPtrHandler.rethrowIfSet();
 
         unsigned int rqNbr(currentRq);
-        auto onResponse = [&, rqNbr] (S3Api::Response && response) {
-            this->handleResponse(rqNbr, std::move(response));
+        auto onResponse = [&, rqNbr] (S3Api::Response && response,
+                                      std::exception_ptr excPtr) {
+            this->handleResponse(rqNbr, std::move(response), excPtr);
         };
 
         unsigned int partNumber = currentRq + 1;
@@ -740,11 +689,13 @@ struct S3Uploader {
         currentRq = partNumber;
     }
 
-    void handleResponse(unsigned int rqNbr, S3Api::Response && response)
+    void handleResponse(unsigned int rqNbr,
+                        S3Api::Response && response,
+                        std::exception_ptr excPtr)
     {
         try {
-            if (response.excPtr_) {
-                rethrow_exception(response.excPtr_);
+            if (excPtr) {
+                rethrow_exception(excPtr);
             }
 
             if (response.code_ != 200) {
@@ -823,14 +774,6 @@ struct AtInit {
         registerUrlFsHandler("s3", new S3UrlFsHandler());
     }
 } atInit;
-
-HttpRequest::Content
-makeXmlContent(const tinyxml2::XMLDocument & xmlDocument)
-{
-    string docStr = xmlDocumentAsString(xmlDocument);
-
-    return HttpRequest::Content(std::move(docStr), "application/xml");
-}
 
 
 /****************************************************************************/
@@ -1035,8 +978,8 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
             scheduleRestart();
         }
         else {
-            response_.excPtr_ = make_exception_ptr(ML::Exception(message));
-            state_->onResponse(std::move(response_));
+            auto excPtr = make_exception_ptr(ML::Exception(message));
+            state_->onResponse(std::move(response_), excPtr);
         }
     }
     else {
@@ -1045,7 +988,7 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         state_->body.append(state_->requestBody);
         state_->requestBody.clear();
         response_.body_ = std::move(state_->body);
-        state_->onResponse(std::move(response_));
+        state_->onResponse(std::move(response_), nullptr);
     }
 }
 
@@ -1495,9 +1438,23 @@ S3Api::
 performSync(const shared_ptr<SignedRequest> & rq)
     const
 {
-    SyncResponse syncResponse;
-    perform(syncResponse, rq);
-    return syncResponse.response();
+    std::promise<S3Api::Response> respPromise;
+
+    auto onResponse = [&] (S3Api::Response && response,
+                           std::exception_ptr excPtr) {
+        if (excPtr) {
+            respPromise.set_exception(excPtr);
+        }
+        else {
+            respPromise.set_value(response);
+        }
+    };
+    perform(onResponse, rq);
+
+    auto respFuture = respPromise.get_future();
+    respFuture.wait();
+
+    return respFuture.get();
 }
 
 string
@@ -1619,10 +1576,17 @@ getEscaped(const string & bucket,
            const RestParams & queryParams)
     const
 {
-    SyncResponse syncResponse;
-    getEscapedAsync(syncResponse, bucket, resource, downloadRange,
-                    subResource, headers, queryParams);
-    return syncResponse.response();
+    RequestParams request;
+    request.verb = "GET";
+    request.bucket = bucket;
+    request.resource = resource;
+    request.subResource = subResource;
+    request.headers = headers;
+    request.queryParams = queryParams;
+    request.date = Date::now().printRfc2616();
+    request.downloadRange = downloadRange;
+
+    return performSync(prepare(request));;
 }
 
 void
@@ -1713,10 +1677,17 @@ putEscaped(const string & bucket,
            const HttpRequest::Content & content)
     const
 {
-    SyncResponse syncResponse;
-    putEscapedAsync(syncResponse, bucket, resource, subResource, headers,
-                    queryParams, content);
-    return syncResponse.response();
+    RequestParams request;
+    request.verb = "PUT";
+    request.bucket = bucket;
+    request.resource = resource;
+    request.subResource = subResource;
+    request.headers = headers;
+    request.queryParams = queryParams;
+    request.date = Date::now().printRfc2616();
+    request.content = content;
+
+    return performSync(prepare(request));;
 }
 
 void
@@ -1990,9 +1961,10 @@ finishMultiPartUpload(const string & bucket,
 
     string escapedResource = s3EscapeResource(resource);
 
+    HttpRequest::Content xmlReq(xmlDocumentAsString(joinRequest));
     auto joinResponse
         = postEscaped(bucket, escapedResource, "uploadId=" + uploadId,
-                      {}, {}, makeXmlContent(joinRequest));
+                      {}, {}, xmlReq);
     if (joinResponse.code_ != 200)
         throw ML::Exception("invalid http code returned");
 

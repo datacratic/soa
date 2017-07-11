@@ -139,7 +139,6 @@ struct S3Api : public AwsApi {
         std::string getHeader(const std::string & name) const;
 
         long code_;
-        std::exception_ptr excPtr_;
         std::string body_;
         HttpHeader header_;
     };
@@ -195,7 +194,7 @@ struct S3Api : public AwsApi {
     std::shared_ptr<SignedRequest> prepare(const RequestParams
                                            & request) const;
 
-    typedef std::function<void (Response && response)> OnResponse;
+    typedef std::function<void (Response &&, std::exception_ptr)> OnResponse;
 
     /** Perform the request asynchronously. */
     void perform(const OnResponse & onResponse,
@@ -477,14 +476,14 @@ struct S3Api : public AwsApi {
     struct MultiPartUploadPart {
         MultiPartUploadPart();
 
+        void fromXml(tinyxml2::XMLElement * element);
+
         int partNumber;
         uint64_t startOffset;
         uint64_t size;
         std::string lastModified;
         std::string etag;
         bool done;
-
-        void fromXml(tinyxml2::XMLElement * element);
     };
 
     struct MultiPartUpload {
