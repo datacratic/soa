@@ -107,6 +107,5 @@ $(eval $(call program,syslog_trace,services))
 $(eval $(call program,s3cat,cloud boost_program_options utils))
 $(eval $(call program,sns_send,cloud boost_program_options utils))
 
-$(eval $(call include_sub_make,service_js,js,service_js.mk))
 $(eval $(call include_sub_make,service_testing,testing,service_testing.mk))
 
