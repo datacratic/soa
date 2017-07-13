@@ -64,8 +64,7 @@ xmlAsStr(const std::unique_ptr<tinyxml2::XMLDocument> & document)
 string
 makeSignature(const string & accessKey,
               const S3Api::Request & request,
-              const string & dateStr,
-              const RestParams & headers)
+              const string & dateStr)
 {
     string digest
         = AwsApi::getStringToSignV2Multi(request.verb,
@@ -74,7 +73,7 @@ makeSignature(const string & accessKey,
                                          request.subResource,
                                          request.content.contentType,
                                          request.contentMd5,
-                                         dateStr, headers);
+                                         dateStr, request.headers);
 
     return AwsApi::signV2(digest, accessKey);
 }
@@ -869,11 +868,12 @@ struct S3RequestState {
     RestParams makeHeaders()
         const
     {
-        string sig = makeSignature(accessKey, rq, rq.date, rq.headers);
+        string date = Date::now().printRfc2616();
+        string sig = makeSignature(accessKey, rq, date);
         string auth = "AWS " + accessKeyId + ":" + sig;
 
         RestParams headers = rq.headers;
-        headers.push_back({"Date", rq.date});
+        headers.push_back({"Date", date});
         headers.push_back({"Authorization", auth});
         if (rq.useRange()) {
             headers.push_back({"Range", range.headerValue()});
@@ -1541,7 +1541,6 @@ headEscaped(const string & bucket,
     request.subResource = subResource;
     request.headers = headers;
     request.queryParams = queryParams;
-    request.date = Date::now().printRfc2616();
 
     return performSync(std::move(request));
 }
@@ -1577,7 +1576,6 @@ getEscaped(const string & bucket,
     request.subResource = subResource;
     request.headers = headers;
     request.queryParams = queryParams;
-    request.date = Date::now().printRfc2616();
     request.downloadRange = downloadRange;
 
     return performSync(std::move(request));
@@ -1617,7 +1615,6 @@ getEscapedAsync(const S3Api::OnResponse & onResponse,
     request.subResource = subResource;
     request.headers = headers;
     request.queryParams = queryParams;
-    request.date = Date::now().printRfc2616();
     request.downloadRange = downloadRange;
 
     perform(std::move(request), onResponse);
@@ -1655,7 +1652,6 @@ postEscaped(const string & bucket,
     request.subResource = subResource;
     request.headers = headers;
     request.queryParams = queryParams;
-    request.date = Date::now().printRfc2616();
     request.content = content;
 
     return performSync(std::move(request));
@@ -1678,7 +1674,6 @@ putEscaped(const string & bucket,
     request.subResource = subResource;
     request.headers = headers;
     request.queryParams = queryParams;
-    request.date = Date::now().printRfc2616();
     request.content = content;
 
     return performSync(std::move(request));
@@ -1717,7 +1712,6 @@ putEscapedAsync(const OnResponse & onResponse,
     request.subResource = subResource;
     request.headers = headers;
     request.queryParams = queryParams;
-    request.date = Date::now().printRfc2616();
     request.content = content;
 
     perform(std::move(request), onResponse);
@@ -1752,7 +1746,6 @@ eraseEscaped(const string & bucket,
     request.subResource = subResource;
     request.headers = headers;
     request.queryParams = queryParams;
-    request.date = Date::now().printRfc2616();
 
     return performSync(std::move(request));
 }

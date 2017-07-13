@@ -124,7 +124,6 @@ struct S3Api : public AwsApi {
         std::string bucket;
         std::string resource;
         std::string subResource;
-        std::string date;
 
         std::string contentType;
         std::string contentMd5;
