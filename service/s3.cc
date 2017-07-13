@@ -60,6 +60,25 @@ xmlAsStr(const std::unique_ptr<tinyxml2::XMLDocument> & document)
     return printer.CStr();
 }
 
+/** Calculate the signature for a given request. */
+string
+makeSignature(const string & accessKey,
+              const S3Api::Request & request,
+              const string & dateStr,
+              const RestParams & headers)
+{
+    string digest
+        = AwsApi::getStringToSignV2Multi(request.verb,
+                                         request.bucket,
+                                         request.resource,
+                                         request.subResource,
+                                         request.content.contentType,
+                                         request.contentMd5,
+                                         dateStr, headers);
+
+    return AwsApi::signV2(digest, accessKey);
+}
+
 
 std::mutex s3ApiLock;
 
@@ -802,20 +821,61 @@ struct AtInit {
 /****************************************************************************/
 
 struct S3RequestState {
-    S3RequestState(const shared_ptr<S3Api::SignedRequest> & rq,
+    S3RequestState(const S3Api & s3Api, S3Api::Request && rq,
                    const S3Api::OnResponse & onResponse)
-        : rq(rq), onResponse(onResponse),
-          range(rq->params.downloadRange), retries(0)
+        : accessKeyId(s3Api.accessKeyId), accessKey(s3Api.accessKey),
+          bandwidthToServiceMbps(s3Api.bandwidthToServiceMbps),
+          rq(std::move(rq)),
+          range(rq.downloadRange),
+          onResponse(onResponse),
+          retries(0)
     {
+    }
+
+    string makeResource()
+        const
+    {
+        if (rq.resource.find("//") != string::npos) {
+            throw ML::Exception("attempt to perform s3 request with double slash: "
+                                + rq.resource);
+        }
+        size_t spacePos = rq.resource.find(" ");
+        if (spacePos != string::npos) {
+            throw ML::Exception("url '" + rq.resource + "' contains an unescaped"
+                                " space at position " + to_string(spacePos));
+        }
+
+        string resource = rq.resource;
+        bool hasParams(false);
+        if (rq.subResource.size() > 0) {
+            hasParams = true;
+            resource += "?" + rq.subResource;
+        }
+        for (const auto & param: rq.queryParams) {
+            if (hasParams) {
+                resource += "&";
+            }
+            else {
+                resource += "?";
+                hasParams = true;
+            }
+            resource += (AwsApi::uriEncode(param.first)
+                         + "=" + AwsApi::uriEncode(param.second));
+        }
+
+        return resource;
     }
 
     RestParams makeHeaders()
         const
     {
-        RestParams headers = rq->params.headers;
-        headers.push_back({"Date", rq->params.date});
-        headers.push_back({"Authorization", rq->auth});
-        if (rq->params.useRange()) {
+        string sig = makeSignature(accessKey, rq, rq.date, rq.headers);
+        string auth = "AWS " + accessKeyId + ":" + sig;
+
+        RestParams headers = rq.headers;
+        headers.push_back({"Date", rq.date});
+        headers.push_back({"Authorization", auth});
+        if (rq.useRange()) {
             headers.push_back({"Range", range.headerValue()});
         }
 
@@ -826,19 +886,23 @@ struct S3RequestState {
         const
     {
         double expectedTimeSeconds
-            = (range.size / 1000000.0) / rq->bandwidthToServiceMbps;
+            = (range.size / 1000000.0) / bandwidthToServiceMbps;
         return 15 + std::max<int>(30, expectedTimeSeconds * 6);
     }
 
-    shared_ptr<S3Api::SignedRequest> rq;
+    string accessKeyId;
+    string accessKey;
+    double bandwidthToServiceMbps;
 
+    S3Api::Request rq;
+    S3Api::Range range;
     S3Api::OnResponse onResponse;
 
     string body;
     string requestBody;
-    S3Api::Range range;
     int retries;
 };
+
 
 /****************************************************************************/
 /* S3 REQUEST CALLBACKS                                                     */
@@ -873,18 +937,18 @@ struct S3RequestCallbacks : public HttpClientCallbacks {
 void
 performStateRequest(const shared_ptr<S3RequestState> & state)
 {
-    const auto & client = getS3Globals().getClient(state->rq->params.bucket);
+    const auto & client = getS3Globals().getClient(state->rq.bucket);
 
-    const S3Api::RequestParams & params = state->rq->params;
+    const S3Api::Request & request = state->rq;
+    string resource = state->makeResource();
     auto callbacks = make_shared<S3RequestCallbacks>(state);
     RestParams headers = state->makeHeaders();
     int timeout = state->makeTimeout();
 
-    if (!client->enqueueRequest(params.verb, state->rq->resource,
+    if (!client->enqueueRequest(request.verb, resource,
                                 callbacks,
-                                state->rq->params.content,
-                                /* query params already encoded in
-                                   resource */
+                                request.content,
+                                /* query params already encoded in resource */
                                 {},
                                 headers,
                                 timeout)) {
@@ -955,7 +1019,7 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         errorCondition = true;
         errorCause = "internal error \"" + errorMessage(errorCode) + "\"";
         recoverable = true;
-        if (state_->rq->params.useRange()) {
+        if (state_->rq.useRange()) {
             state_->range.adjust(state_->requestBody.size());
             state_->body.append(state_->requestBody);
         }
@@ -982,10 +1046,10 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
 
         string message("S3 operation failed with " + errorCause);
 
-        const S3Api::RequestParams & params = state_->rq->params;
+        const S3Api::Request & params = state_->rq;
         string diagnostic(message + "\n"
                           + "operation: " + params.verb
-                          + " " + state_->rq->resource + "\n");
+                          + " " + state_->rq.resource + "\n");
         if (!errorDetails.empty()) {
             diagnostic += errorDetails + "\n";
         }
@@ -1030,9 +1094,9 @@ detectXMLError()
 
     pair<string, string> xmlError; /* {code, message} */
 
-    const S3Api::RequestParams & params = state_->rq->params;
+    const S3Api::Request & request = state_->rq;
     if (!(response_.code_ == 200
-          && (params.verb == "GET" || params.verb == "HEAD"))
+          && (request.verb == "GET" || request.verb == "HEAD"))
         && ((header_.find("Content-Type: application/xml")
              != string::npos)
             || (header_.find("content-type: application/xml")
@@ -1091,10 +1155,9 @@ scheduleRestart()
 
     numSeconds = 0.05;
 
-    const S3Api::RequestParams & params = state_->rq->params;
-
-    cerr << ("S3 operation retry in" + to_string(numSeconds) + " seconds: "
-             + params.verb + " " + params.resource + "\n");
+    const S3Api::Request & request = state_->rq;
+    cerr << ("S3 operation retry in " + to_string(numSeconds) + " seconds: "
+             + request.verb + " " + request.resource + "\n");
 
     auto timer = make_shared<PeriodicEventSource>();
 
@@ -1188,17 +1251,17 @@ operator != (const Range & other)
 
 
 /****************************************************************************/
-/* S3 API :: REQUEST PARAMS                                                 */
+/* S3 API :: REQUEST                                                        */
 /****************************************************************************/
 
-S3Api::RequestParams::
-RequestParams()
+S3Api::Request::
+Request()
     : downloadRange(0)
 {
 }
 
 bool
-S3Api::RequestParams::
+S3Api::Request::
 useRange()
     const
 {
@@ -1411,22 +1474,23 @@ init(const string & accessKeyId,
 
 void
 S3Api::
-perform(const OnResponse & onResponse, const shared_ptr<SignedRequest> & rq)
+perform(S3Api::Request && rq, const OnResponse & onResponse)
     const
 {
-    size_t spacePos = rq->resource.find(" ");
-    if (spacePos != string::npos) {
-        throw ML::Exception("url '" + rq->resource + "' contains an unescaped"
-                            " space at position " + to_string(spacePos));
+    string protocol = defaultProtocol;
+    if (protocol.length() == 0) {
+        throw ML::Exception("attempt to perform s3 request without a "
+                            "default protocol. (Could be caused by S3Api"
+                            " initialisation with the empty constructor.)");
     }
 
-    auto state = make_shared<S3RequestState>(rq, onResponse);
+    auto state = make_shared<S3RequestState>(*this, std::move(rq), onResponse);
     performStateRequest(state);
 }
 
 S3Api::Response
 S3Api::
-performSync(const shared_ptr<SignedRequest> & rq)
+performSync(S3Api::Request && rq)
     const
 {
     std::promise<S3Api::Response> respPromise;
@@ -1434,79 +1498,18 @@ performSync(const shared_ptr<SignedRequest> & rq)
     auto onResponse = [&] (S3Api::Response && response,
                            std::exception_ptr excPtr) {
         if (excPtr) {
-            respPromise.set_exception(excPtr);
+            respPromise.set_exception(std::move(excPtr));
         }
         else {
-            respPromise.set_value(response);
+            respPromise.set_value(std::move(response));
         }
     };
-    perform(onResponse, rq);
+    perform(std::move(rq), onResponse);
 
     auto respFuture = respPromise.get_future();
     respFuture.wait();
 
     return respFuture.get();
-}
-
-string
-S3Api::
-signature(const RequestParams & request)
-    const
-{
-    string digest
-        = S3Api::getStringToSignV2Multi(request.verb,
-                                        request.bucket,
-                                        request.resource, request.subResource,
-                                        request.content.contentType, request.contentMd5,
-                                        request.date, request.headers);
-
-    //cerr << "digest = " << digest << endl;
-
-    return signV2(digest, accessKey);
-}
-
-shared_ptr<S3Api::SignedRequest>
-S3Api::
-prepare(const RequestParams & request)
-    const
-{
-    string protocol = defaultProtocol;
-    if(protocol.length() == 0){
-        throw ML::Exception("attempt to perform s3 request without a "
-            "default protocol. (Could be caused by S3Api initialisation with "
-            "the empty constructor.)");
-    }
-
-    auto sharedResult = make_shared<SignedRequest>();
-    SignedRequest & result = *sharedResult;
-    result.params = request;
-    result.bandwidthToServiceMbps = bandwidthToServiceMbps;
-
-    if (request.resource.find("//") != string::npos)
-        throw ML::Exception("attempt to perform s3 request with double slash: "
-                            + request.resource);
-
-    result.resource += request.resource;
-    if (request.subResource.size() > 0) {
-        result.resource += "?" + request.subResource;
-    }
-
-    for (unsigned i = 0;  i < request.queryParams.size();  ++i) {
-        if (i == 0 && request.subResource == "")
-            result.resource += "?";
-        else
-            result.resource += "&";
-        result.resource += (uriEncode(request.queryParams[i].first)
-                            + "=" + uriEncode(request.queryParams[i].second));
-    }
-
-    string sig = signature(request);
-    result.auth = "AWS " + accessKeyId + ":" + sig;
-
-    //cerr << "result.resource = " << result.resource << endl;
-    //cerr << "result.auth = " << result.auth << endl;
-
-    return sharedResult;
 }
 
 S3Api::Response
@@ -1531,7 +1534,7 @@ headEscaped(const string & bucket,
             const RestParams & queryParams)
     const
 {
-    RequestParams request;
+    S3Api::Request request;
     request.verb = "HEAD";
     request.bucket = bucket;
     request.resource = resource;
@@ -1540,7 +1543,7 @@ headEscaped(const string & bucket,
     request.queryParams = queryParams;
     request.date = Date::now().printRfc2616();
 
-    return performSync(prepare(request));
+    return performSync(std::move(request));
 }
 
 S3Api::Response
@@ -1567,7 +1570,7 @@ getEscaped(const string & bucket,
            const RestParams & queryParams)
     const
 {
-    RequestParams request;
+    S3Api::Request request;
     request.verb = "GET";
     request.bucket = bucket;
     request.resource = resource;
@@ -1577,7 +1580,7 @@ getEscaped(const string & bucket,
     request.date = Date::now().printRfc2616();
     request.downloadRange = downloadRange;
 
-    return performSync(prepare(request));;
+    return performSync(std::move(request));
 }
 
 void
@@ -1607,7 +1610,7 @@ getEscapedAsync(const S3Api::OnResponse & onResponse,
                 const RestParams & queryParams)
     const
 {
-    RequestParams request;
+    S3Api::Request request;
     request.verb = "GET";
     request.bucket = bucket;
     request.resource = resource;
@@ -1617,7 +1620,7 @@ getEscapedAsync(const S3Api::OnResponse & onResponse,
     request.date = Date::now().printRfc2616();
     request.downloadRange = downloadRange;
 
-    perform(onResponse, prepare(request));
+    perform(std::move(request), onResponse);
 }
 
 /** Perform a POST request from end to end. */
@@ -1645,7 +1648,7 @@ postEscaped(const string & bucket,
             const HttpRequest::Content & content)
     const
 {
-    RequestParams request;
+    S3Api::Request request;
     request.verb = "POST";
     request.bucket = bucket;
     request.resource = resource;
@@ -1655,7 +1658,7 @@ postEscaped(const string & bucket,
     request.date = Date::now().printRfc2616();
     request.content = content;
 
-    return performSync(prepare(request));
+    return performSync(std::move(request));
 }
 
 S3Api::Response
@@ -1668,7 +1671,7 @@ putEscaped(const string & bucket,
            const HttpRequest::Content & content)
     const
 {
-    RequestParams request;
+    S3Api::Request request;
     request.verb = "PUT";
     request.bucket = bucket;
     request.resource = resource;
@@ -1678,7 +1681,7 @@ putEscaped(const string & bucket,
     request.date = Date::now().printRfc2616();
     request.content = content;
 
-    return performSync(prepare(request));;
+    return performSync(std::move(request));
 }
 
 void
@@ -1707,7 +1710,7 @@ putEscapedAsync(const OnResponse & onResponse,
                 const HttpRequest::Content & content)
     const
 {
-    RequestParams request;
+    S3Api::Request request;
     request.verb = "PUT";
     request.bucket = bucket;
     request.resource = resource;
@@ -1717,7 +1720,7 @@ putEscapedAsync(const OnResponse & onResponse,
     request.date = Date::now().printRfc2616();
     request.content = content;
 
-    perform(onResponse, prepare(request));
+    perform(std::move(request), onResponse);
 }
 
 S3Api::Response
@@ -1742,7 +1745,7 @@ eraseEscaped(const string & bucket,
              const RestParams & queryParams)
     const
 {
-    RequestParams request;
+    S3Api::Request request;
     request.verb = "DELETE";
     request.bucket = bucket;
     request.resource = resource;
@@ -1751,7 +1754,7 @@ eraseEscaped(const string & bucket,
     request.queryParams = queryParams;
     request.date = Date::now().printRfc2616();
 
-    return performSync(prepare(request));
+    return performSync(std::move(request));
 }
 
 pair<bool,string>

@@ -115,8 +115,8 @@ struct S3Api : public AwsApi {
     };
 
     /** A set of parameters that specify a request. */
-    struct RequestParams {
-        RequestParams();
+    struct Request {
+        Request();
 
         bool useRange() const;
 
@@ -183,29 +183,13 @@ struct S3Api : public AwsApi {
         unsigned int numRequests;
     };
 
-    /** Signed request that can be executed. */
-    struct SignedRequest {
-        RequestParams params;
-        std::string auth;
-        std::string resource;
-        double bandwidthToServiceMbps;
-    };
-
-    /** Calculate the signature for a given request. */
-    std::string signature(const RequestParams & request) const;
-
-    /** Prepare a request to be executed. */
-    std::shared_ptr<SignedRequest> prepare(const RequestParams
-                                           & request) const;
-
     typedef std::function<void (Response &&, std::exception_ptr)> OnResponse;
 
     /** Perform the request asynchronously. */
-    void perform(const OnResponse & onResponse,
-                 const std::shared_ptr<SignedRequest> & rq) const;
+    void perform(Request && rq, const OnResponse & onResponse) const;
 
     /** Perform the request synchronously and return the result. */
-    Response performSync(const std::shared_ptr<SignedRequest> & rq) const;
+    Response performSync(Request && rq) const;
 
     /** Escape a resource used by S3; this in particular leaves a slash
         in place. */
