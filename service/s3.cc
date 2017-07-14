@@ -1493,6 +1493,33 @@ S3Api::
 performSync(S3Api::Request && rq)
     const
 {
+#if 1
+    /* Temporary version relying on ML::futex_XXX since std::future and
+       std::promise seems to be problematic in gcc 4.6 */
+    S3Api::Response result;
+    ML::ExceptionPtrHandler excPtr;
+    std::atomic<int> done(0);
+
+    auto onResponse = [&] (S3Api::Response && response,
+                           std::exception_ptr newExc) {
+        if (newExc) {
+            excPtr.takeException(std::move(newExc));
+        }
+        else {
+            result = std::move(response);
+        }
+        done = 1;
+        ML::futex_wake(done);
+    };
+    perform(std::move(rq), onResponse);
+
+    while (!done) {
+        ML::futex_wait(done, done);
+    }
+    excPtr.rethrowIfSet();
+
+    return result;
+#else
     std::promise<S3Api::Response> respPromise;
 
     auto onResponse = [&] (S3Api::Response && response,
@@ -1510,6 +1537,7 @@ performSync(S3Api::Request && rq)
     respFuture.wait();
 
     return respFuture.get();
+#endif
 }
 
 S3Api::Response
