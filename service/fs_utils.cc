@@ -40,9 +40,9 @@ struct Registry
     map<string, std::unique_ptr<const UrlFsHandler> > handlers;
 };
 
-Registry& getRegistry()
+Registry & getRegistry()
 {
-    static Registry* registry = new Registry;
+    static std::unique_ptr<Registry> registry(new Registry());
     return *registry;
 }
 
