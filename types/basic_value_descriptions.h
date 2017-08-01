@@ -744,6 +744,11 @@ struct Optional: public std::unique_ptr<T> {
     {
         this->reset(new T(std::forward<Args>(args)...));
     }
+
+    // Return object if non-empty, or return passed default if non-inhabited
+    T getWithDefault(T& d) noexcept {
+        return this->get() == nullptr ? d: *(this->get());
+    }
 };
 
 template<typename Cls, int defValue = -1>
