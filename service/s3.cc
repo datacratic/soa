@@ -72,7 +72,7 @@ makeSignature(const string & accessKey,
                                          request.resource,
                                          request.subResource,
                                          request.content.contentType,
-                                         request.contentMd5,
+                                         request.contentMD5,
                                          dateStr, request.headers);
 
     return AwsApi::signV2(digest, accessKey);
@@ -719,7 +719,7 @@ struct S3Uploader {
         api->putAsync(onResponse, bucket, resource,
                       ML::format("partNumber=%d&uploadId=%s",
                                  partNumber, uploadId),
-                      {}, {}, current);
+                      {}, {}, current, true);
 
         if (currentRq % 5 == 0 && chunkSize < maxChunkSize)
             chunkSize *= 2;
@@ -875,6 +875,9 @@ struct S3RequestState {
         RestParams headers = rq.headers;
         headers.push_back({"Date", date});
         headers.push_back({"Authorization", auth});
+        if (rq.contentMD5.size() > 0) {
+            headers.push_back({"Content-MD5", rq.contentMD5});
+        }
         if (rq.useRange()) {
             headers.push_back({"Range", range.headerValue()});
         }
@@ -1692,7 +1695,8 @@ putEscaped(const string & bucket,
            const string & subResource,
            const RestParams & headers,
            const RestParams & queryParams,
-           const HttpRequest::Content & content)
+           const HttpRequest::Content & content,
+           bool withMD5)
     const
 {
     S3Api::Request request;
@@ -1703,6 +1707,11 @@ putEscaped(const string & bucket,
     request.headers = headers;
     request.queryParams = queryParams;
     request.content = content;
+    if (withMD5) {
+        auto b64Digest
+            = AwsApi::base64EncodeDigest(AwsApi::md5Digest(content.str));
+        request.contentMD5 = std::move(b64Digest);
+    }
 
     return performSync(std::move(request));
 }
@@ -1715,11 +1724,12 @@ putAsync(const OnResponse & onResponse,
          const string & subResource,
          const RestParams & headers,
          const RestParams & queryParams,
-         const HttpRequest::Content & content)
+         const HttpRequest::Content & content,
+         bool withMD5)
     const
 {
     putEscapedAsync(onResponse, bucket, s3EscapeResource(resource),
-                    subResource, headers, queryParams, content);
+                    subResource, headers, queryParams, content, withMD5);
 }
 
 void
@@ -1730,7 +1740,8 @@ putEscapedAsync(const OnResponse & onResponse,
                 const string & subResource,
                 const RestParams & headers,
                 const RestParams & queryParams,
-                const HttpRequest::Content & content)
+                const HttpRequest::Content & content,
+                bool withMD5)
     const
 {
     S3Api::Request request;
@@ -1741,6 +1752,11 @@ putEscapedAsync(const OnResponse & onResponse,
     request.headers = headers;
     request.queryParams = queryParams;
     request.content = content;
+    if (withMD5) {
+        auto b64Digest
+            = AwsApi::base64EncodeDigest(AwsApi::md5Digest(content.str));
+        request.contentMD5 = std::move(b64Digest);
+    }
 
     perform(std::move(request), onResponse);
 }

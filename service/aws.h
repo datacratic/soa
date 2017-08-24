@@ -35,7 +35,8 @@ struct AwsApi {
 
     static std::string hmacSha256Digest(const std::string & stringToSign,
                                         const std::string & accessKey);
-    
+
+    static std::string md5Digest(const std::string & stringToSign);
     static std::string sha256Digest(const std::string & stringToSign);
 
     static std::string base64EncodeDigest(const std::string & digest);

@@ -68,6 +68,22 @@ hmacSha256Digest(const std::string & stringToSign,
 
 std::string
 AwsApi::
+md5Digest(const std::string & stringToSign)
+{
+    typedef CryptoPP::Weak::MD5 Hash;
+    size_t digestLen = Hash::DIGESTSIZE;
+    byte digest[digestLen];
+    Hash h;
+    h.CalculateDigest(digest,
+                      (byte *)stringToSign.c_str(),
+                      stringToSign.length());
+    
+    return std::string((const char *)digest,
+                       digestLen);
+}
+
+std::string
+AwsApi::
 sha256Digest(const std::string & stringToSign)
 {
     typedef CryptoPP::SHA256 Hash;

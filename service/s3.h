@@ -126,7 +126,7 @@ struct S3Api : public AwsApi {
         std::string subResource;
 
         std::string contentType;
-        std::string contentMd5;
+        std::string contentMD5;
         HttpRequest::Content content;
         Range downloadRange;
 
@@ -257,14 +257,16 @@ struct S3Api : public AwsApi {
                  const RestParams & headers = RestParams(),
                  const RestParams & queryParams = RestParams(),
                  const HttpRequest::Content & content
-                 = HttpRequest::Content()) const;
+                 = HttpRequest::Content(),
+                 bool withMD5 = false) const;
     Response putEscaped(const std::string & bucket,
                         const std::string & resource,
                         const std::string & subResource = "",
                         const RestParams & headers = RestParams(),
                         const RestParams & queryParams = RestParams(),
                         const HttpRequest::Content & content
-                        = HttpRequest::Content()) const;
+                        = HttpRequest::Content(),
+                        bool withMD5 = false) const;
     void putAsync(const OnResponse & onResponse,
                   const std::string & bucket,
                   const std::string & resource,
@@ -272,7 +274,8 @@ struct S3Api : public AwsApi {
                   const RestParams & headers = RestParams(),
                   const RestParams & queryParams = RestParams(),
                   const HttpRequest::Content & content
-                  = HttpRequest::Content()) const;
+                  = HttpRequest::Content(),
+                  bool withMD5 = false) const;
     void putEscapedAsync(const OnResponse & onResponse,
                          const std::string & bucket,
                          const std::string & resource,
@@ -280,7 +283,8 @@ struct S3Api : public AwsApi {
                          const RestParams & headers = RestParams(),
                          const RestParams & queryParams = RestParams(),
                          const HttpRequest::Content & content
-                         = HttpRequest::Content()) const;
+                         = HttpRequest::Content(),
+                         bool withMD5 = false) const;
 
     /** Perform a DELETE request from end to end including data. */
     Response erase(const std::string & bucket,
