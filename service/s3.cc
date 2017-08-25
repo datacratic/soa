@@ -841,40 +841,6 @@ struct S3RequestState {
     {
     }
 
-    string makeResource()
-        const
-    {
-        if (rq.resource.find("//") != string::npos) {
-            throw ML::Exception("attempt to perform s3 request with double slash: "
-                                + rq.resource);
-        }
-        size_t spacePos = rq.resource.find(" ");
-        if (spacePos != string::npos) {
-            throw ML::Exception("url '" + rq.resource + "' contains an unescaped"
-                                " space at position " + to_string(spacePos));
-        }
-
-        string resource = rq.resource;
-        bool hasParams(false);
-        if (rq.subResource.size() > 0) {
-            hasParams = true;
-            resource += "?" + rq.subResource;
-        }
-        for (const auto & param: rq.queryParams) {
-            if (hasParams) {
-                resource += "&";
-            }
-            else {
-                resource += "?";
-                hasParams = true;
-            }
-            resource += (AwsApi::uriEncode(param.first)
-                         + "=" + AwsApi::uriEncode(param.second));
-        }
-
-        return resource;
-    }
-
     RestParams makeHeaders()
         const
     {
@@ -953,7 +919,7 @@ performStateRequest(const shared_ptr<S3RequestState> & state)
     const auto & client = getS3Globals().getClient(state->rq.bucket);
 
     const S3Api::Request & request = state->rq;
-    string resource = state->makeResource();
+    string resource = state->rq.makeUrl();
     auto callbacks = make_shared<S3RequestCallbacks>(state);
     RestParams headers = state->makeHeaders();
     int timeout = state->makeTimeout();
@@ -1059,10 +1025,9 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
 
         string message("S3 operation failed with " + errorCause);
 
-        const S3Api::Request & params = state_->rq;
         string diagnostic(message + "\n"
-                          + "operation: " + params.verb
-                          + " " + state_->rq.resource + "\n");
+                          + "operation: " + state_->rq.verb + " " + rq.url_
+                          + "\n");
         if (!errorDetails.empty()) {
             diagnostic += errorDetails + "\n";
         }
@@ -1286,6 +1251,41 @@ useRange()
     return (verb == "GET" && downloadRange != Range::Full);
 }
 
+string
+S3Api::Request::
+makeUrl()
+    const
+{
+    if (resource.find("//") != string::npos) {
+        throw ML::Exception("resource has double slash: " + resource);
+    }
+    size_t spacePos = resource.find(" ");
+    if (spacePos != string::npos) {
+        throw ML::Exception("resource '" + resource + "' contains an"
+                            " unescaped space at position "
+                            + to_string(spacePos));
+    }
+
+    string url = resource;
+    bool hasParams(false);
+    if (subResource.size() > 0) {
+        hasParams = true;
+        url += "?" + subResource;
+    }
+    for (const auto & param: queryParams) {
+        if (hasParams) {
+            url += "&";
+        }
+        else {
+            url += "?";
+            hasParams = true;
+        }
+        url += (AwsApi::uriEncode(param.first)
+                + "=" + AwsApi::uriEncode(param.second));
+    }
+
+    return url;
+}
 
 /****************************************************************************/
 /* S3 API :: RESPONSE                                                       */

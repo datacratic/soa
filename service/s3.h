@@ -119,6 +119,7 @@ struct S3Api : public AwsApi {
         Request();
 
         bool useRange() const;
+        std::string makeUrl() const;
 
         std::string verb;
         std::string bucket;
