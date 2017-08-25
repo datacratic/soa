@@ -259,6 +259,7 @@ struct S3Downloader {
         if (!info) {
             throw ML::Exception("missing object: " + resource);
         }
+        ExcAssert(!info.etag.empty());
 
         if (endOffset == -1 || endOffset > info.size) {
             endOffset = info.size;
@@ -518,9 +519,18 @@ private:
             string chunkEtag = response.getHeader("etag");
             if (chunkEtag != info.etag) {
                 etagChangedException = true;
-                throw ML::Exception("chunk etag '%s' differs from original"
-                                    " etag '%s' of file '%s'",
-                                    chunkEtag.c_str(), info.etag.c_str(),
+                throw ML::Exception("chunk etag '%s' (size: %lu, hex: '%s')"
+                                    " differs from original etag '%s' (size:"
+                                    " %lu, hex: '%s') of file '%s'",
+                                    chunkEtag.c_str(), chunkEtag.size(),
+                                    ML::hexify_string(chunkEtag).c_str(),
+                                    info.etag.c_str(), info.etag.size(),
+                                    ML::hexify_string(info.etag).c_str(),
+                                    resource.c_str());
+            }
+            if (response.body().size() != chunkSize) {
+                throw ML::Exception("chunk sizes differ (%lu, %lu) for '%s'",
+                                    response.body().size(), chunkSize,
                                     resource.c_str());
             }
             ExcAssertEqual(response.body().size(), chunkSize);
