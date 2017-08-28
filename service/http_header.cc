@@ -212,24 +212,28 @@ parse(const std::string & headerAndData, bool checkBodyLength)
             //cerr << "name = " << name << endl;
             context.expect_literal(':');
             context.match_whitespace();
+            string value;
             if (name == "content-length") {
                 parsed.contentLength = context.expect_long_long();
+                value = to_string(parsed.contentLength);
                 //cerr << "******* set cntentLength " << parsed.contentLength
                 //     << endl;
             }
-            else if (name == "content-type")
-                parsed.contentType = context.expect_text('\r');
+            else if (name == "content-type") {
+                value = context.expect_text('\r');
+                parsed.contentType = value;
+            }
             else if (name == "transfer-encoding") {
-                string transferEncoding = lowercase(context.expect_text('\r'));
-                
+                value = context.expect_text('\r');
+                string transferEncoding = lowercase(value);
                 if (transferEncoding != "chunked")
                     throw ML::Exception("unknown transfer-encoding");
                 parsed.isChunked = true;
             }
             else {
-                string value = context.expect_text('\r');
-                parsed.headers[name] = value;
+                value = context.expect_text('\r');
             }
+            parsed.headers[name] = value;
             context.expect_eol();
         }
 
