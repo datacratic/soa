@@ -879,9 +879,8 @@ struct S3RequestState {
     S3Api::Range range;
     S3Api::OnResponse onResponse;
 
-    string body;
-    string requestBody;
     int retries;
+    string s3ResponseBody;
 };
 
 
@@ -889,30 +888,32 @@ struct S3RequestState {
 /* S3 REQUEST CALLBACKS                                                     */
 /****************************************************************************/
 
-struct S3RequestCallbacks : public HttpClientCallbacks {
+struct S3RequestCallbacks : public HttpClientSimpleCallbacks {
     S3RequestCallbacks(const shared_ptr<S3RequestState> & state)
         : state_(state)
     {
     }
 
-    virtual void onResponseStart(const HttpRequest & rq,
-                                 const string & httpVersion,
-                                 int code);
-    virtual void onHeader(const HttpRequest & rq,
-                          const char * data, size_t size);
-    virtual void onData(const HttpRequest & rq,
-                        const char * data, size_t size);
-    virtual void onDone(const HttpRequest & rq,
-                        HttpClientError errorCode);
+private:
+    virtual void onResponse(const HttpRequest & rq,
+                            HttpClientError error,
+                            int status,
+                            std::string && headers,
+                            std::string && body);
 
-    pair<string, string> detectXMLError() const;
-    string httpErrorContext() const;
+    S3Api::Response makeResponse(int code, string && headers) const;
+    pair<string, string> detectXMLError(int code,
+                                        const string & headers,
+                                        const string & body) const;
+    string httpErrorContext(const string & headers,
+                            const string & body) const;
+    void dumpDiagnostic(const string & url,
+                        const string & errorCause,
+                        const string & errorDetails,
+                        bool recoverable) const;
     void scheduleRestart() const;
 
     shared_ptr<S3RequestState> state_;
-
-    S3Api::Response response_;
-    string header_;
 };
 
 void
@@ -940,29 +941,8 @@ performStateRequest(const shared_ptr<S3RequestState> & state)
 
 void
 S3RequestCallbacks::
-onResponseStart(const HttpRequest & rq, const string & httpVersion,
-                int code)
-{
-    response_.code_ = code;
-}
-
-void
-S3RequestCallbacks::
-onHeader(const HttpRequest & rq, const char * data, size_t size)
-{
-    header_.append(data, size);
-}
-
-void
-S3RequestCallbacks::
-onData(const HttpRequest & rq, const char * data, size_t size)
-{
-    state_->requestBody.append(data, size);
-}
-
-void
-S3RequestCallbacks::
-onDone(const HttpRequest & rq, HttpClientError errorCode)
+onResponse(const HttpRequest & rq, HttpClientError errorCode,
+           int code, string && headers, string && body)
 {
     bool errorCondition(false);
     bool recoverable(false);
@@ -970,12 +950,12 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
     string errorDetails;
 
     if (errorCode == HttpClientError::None) {
-        auto xmlError = detectXMLError();
+        auto xmlError = detectXMLError(code, headers, body);
         if (!xmlError.first.empty()) {
             errorCondition = true;
             errorCause = "REST error code \"" + xmlError.first + "\"";
             errorDetails = ("http status: "
-                            + to_string(response_.code_) + "\n"
+                            + to_string(code) + "\n"
                             + "message: " + xmlError.second);
 
             /* retry on temporary request errors */
@@ -985,13 +965,13 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
                 recoverable = true;
             }
         }
-        else if (response_.code_ >= 300 && response_.code_ != 404) {
+        else if (code >= 300 && code != 404) {
             errorCondition = true;
-            errorCause = "HTTP status code " + to_string(response_.code_);
-            errorDetails = httpErrorContext();
+            errorCause = "HTTP status code " + to_string(code);
+            errorDetails = httpErrorContext(headers, body);
 
             /* retry on 50X range errors */
-            if (response_.code_ >= 500 and response_.code_ < 505) {
+            if (code >= 500 and code < 505) {
                 recoverable = true;
             }
         }
@@ -1001,65 +981,75 @@ onDone(const HttpRequest & rq, HttpClientError errorCode)
         errorCause = "internal error \"" + errorMessage(errorCode) + "\"";
         recoverable = true;
         if (state_->rq.useRange()) {
-            state_->range.adjust(state_->requestBody.size());
-            state_->body.append(state_->requestBody);
-        }
-        else {
-            state_->body.clear();
+            state_->range.adjust(body.size());
+            state_->s3ResponseBody.append(body);
         }
     }
 
     if (errorCondition) {
-        string recoverability;
         if (recoverable) {
             if (state_->retries < getS3Globals().numRetries) {
-                recoverability = "The operation will be retried.";
                 state_->retries++;
             }
             else {
-                recoverability = "The operation was retried too many times.";
                 recoverable = false;
             }
         }
-        else {
-            recoverability = "The error is non recoverable.";
-        }
-
-        string message("S3 operation failed with " + errorCause);
-
-        string diagnostic(message + "\n"
-                          + "operation: " + state_->rq.verb + " " + rq.url_
-                          + "\n");
-        if (!errorDetails.empty()) {
-            diagnostic += errorDetails + "\n";
-        }
-        diagnostic += recoverability + "\n";
-
-        cerr << diagnostic;
-
-        header_.clear();
-        state_->requestBody.clear();
+        dumpDiagnostic(rq.url_, errorCause, errorDetails, recoverable);
         if (recoverable) {
             scheduleRestart();
         }
         else {
-            auto excPtr = make_exception_ptr(ML::Exception(message));
-            state_->onResponse(std::move(response_), excPtr);
+            auto excPtr
+                = make_exception_ptr(ML::Exception("s3 operation failure"));
+            state_->onResponse(makeResponse(code, std::move(headers)),
+                               excPtr);
         }
     }
     else {
-        response_.header_.parse(header_, false);
-        header_.clear();
-        state_->body.append(state_->requestBody);
-        state_->requestBody.clear();
-        response_.body_ = std::move(state_->body);
-        state_->onResponse(std::move(response_), nullptr);
+        state_->s3ResponseBody.append(body);
+        state_->onResponse(makeResponse(code, std::move(headers)), nullptr);
     }
+}
+
+void
+S3RequestCallbacks::
+dumpDiagnostic(const string & url,
+               const string & errorCause,
+               const string & errorDetails,
+               bool recoverable)
+    const
+{
+    string diagnostic("S3 operation failed with " + errorCause + "\n"
+                      + "operation: " + state_->rq.verb + " " + url
+                      + "\n");
+    if (!errorDetails.empty()) {
+        diagnostic += errorDetails + "\n";
+    }
+    diagnostic += (recoverable
+                   ? "The operation will be retried.\n"
+                   : "The error is non recoverable.\n");
+
+    cerr << diagnostic;
+}
+
+S3Api::Response
+S3RequestCallbacks::
+makeResponse(int code, string && headers)
+    const
+{
+    S3Api::Response response;
+
+    response.code_ = code;
+    response.headers_ = std::move(headers);
+    response.body_ = std::move(state_->s3ResponseBody);
+
+    return std::move(response);
 }
 
 pair<string, string>
 S3RequestCallbacks::
-detectXMLError()
+detectXMLError(int code, const string & headers, const string & body)
     const
 {
     /* Detect so-called "REST error"
@@ -1075,16 +1065,16 @@ detectXMLError()
     pair<string, string> xmlError; /* {code, message} */
 
     const S3Api::Request & request = state_->rq;
-    if (!(response_.code_ == 200
+    if (!(code == 200
           && (request.verb == "GET" || request.verb == "HEAD"))
         && ((headers.find("Content-Type: application/xml")
              != string::npos)
             || (headers.find("content-type: application/xml")
                 != string::npos))) {
-        if (!state_->requestBody.empty()) {
+        if (!body.empty()) {
             std::unique_ptr<tinyxml2::XMLDocument> localXml;
             localXml.reset(new tinyxml2::XMLDocument());
-            localXml->Parse(state_->requestBody.c_str());
+            localXml->Parse(body.c_str());
             auto element = tinyxml2::XMLHandle(*localXml)
                 .FirstChildElement("Error")
                 .ToElement();
@@ -1100,17 +1090,17 @@ detectXMLError()
 
 string
 S3RequestCallbacks::
-httpErrorContext()
+httpErrorContext(const string & headers, const string & body)
     const
 {
-    string context = "http status: " + to_string(response_.code_) + "\n";
-    if (header_.size() > 0) {
-        context += "response headers:\n" + header_;
+    string context;
+    if (headers.size() > 0) {
+        context += "response headers:\n" + headers;
     }
-    if (!state_->requestBody.empty()) {
+    if (!body.empty()) {
         context += (string("response body (")
-                    + to_string(state_->requestBody.size())
-                    + " bytes):\n" + state_->requestBody + "\n");
+                    + to_string(body.size())
+                    + " bytes):\n" + body + "\n");
     }
 
     return context;
@@ -1874,8 +1864,9 @@ obtainMultiPartUpload(const string & bucket,
     // Contains the resource without the leading slash
     string outputPrefix(resource, 1);
 
-    string uploadId;
-    vector<MultiPartUploadPart> parts;
+    MultiPartUpload result;
+    auto & uploadId = result.id;
+    auto & parts = result.parts;
 
     if (requirements != UR_FRESH) {
 
@@ -1953,7 +1944,7 @@ obtainMultiPartUpload(const string & bucket,
                 currentPart.startOffset = currentOffset;
                 currentOffset += currentPart.size;
                 biggestPartSize = std::max(biggestPartSize, currentPart.size);
-                parts.push_back(currentPart);
+                parts.push_back(std::move(currentPart));
             }
 
             // partSize = biggestPartSize;
@@ -1981,9 +1972,6 @@ obtainMultiPartUpload(const string & bucket,
     }
         //return;
 
-    MultiPartUpload result;
-    result.parts.swap(parts);
-    result.id = uploadId;
     return result;
 }
 
