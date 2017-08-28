@@ -516,7 +516,8 @@ private:
             /* It can sometimes happen that a file changes during download i.e
                it is being overwritten. Make sure we check for this condition
                and throw an appropriate exception. */
-            string chunkEtag = response.getHeader("etag");
+            auto headers = response.parsedHeaders();
+            const string & chunkEtag = headers.at("etag");
             if (chunkEtag != info.etag) {
                 etagChangedException = true;
                 throw ML::Exception("chunk etag '%s' (size: %lu, hex: '%s')"
@@ -752,7 +753,8 @@ struct S3Uploader {
                 throw ML::Exception("put didn't work: %d", (int)response.code_);
             }
 
-            string etag = response.getHeader("etag");
+            auto headers = response.parsedHeaders();
+            const string & etag = headers.at("etag");
             ExcAssert(etag.size() > 0);
             etags[rqNbr] = etag;
         }
@@ -1075,9 +1077,9 @@ detectXMLError()
     const S3Api::Request & request = state_->rq;
     if (!(response_.code_ == 200
           && (request.verb == "GET" || request.verb == "HEAD"))
-        && ((header_.find("Content-Type: application/xml")
+        && ((headers.find("Content-Type: application/xml")
              != string::npos)
-            || (header_.find("content-type: application/xml")
+            || (headers.find("content-type: application/xml")
                 != string::npos))) {
         if (!state_->requestBody.empty()) {
             std::unique_ptr<tinyxml2::XMLDocument> localXml;
@@ -1307,17 +1309,23 @@ body()
     return body_;
 }
 
-string
+const string &
 S3Api::Response::
-getHeader(const string & name)
+headers()
     const
 {
-    auto it = header_.headers.find(name);
-    if (it == header_.headers.end())
-        throw ML::Exception("required header " + name + " not found");
-    return it->second;
+    return headers_;
 }
 
+map<string, string>
+S3Api::Response::
+parsedHeaders()
+    const
+{
+    HttpHeader header;
+    header.parse(headers_, false);
+    return std::move(header.headers);
+}
 
 /****************************************************************************/
 /* S3 API :: OBJECT METADATA                                                */
@@ -1417,10 +1425,11 @@ S3Api::ObjectInfo::
 ObjectInfo(const S3Api::Response & response)
 {
     exists = true;
-    lastModified = Date::parse(response.getHeader("last-modified"),
-            "%a, %e %b %Y %H:%M:%S %Z");
-    size = response.header_.contentLength;
-    etag = response.getHeader("etag");
+    auto headers = response.parsedHeaders();
+    lastModified = Date::parse(headers.at("last-modified"),
+                               "%a, %e %b %Y %H:%M:%S %Z");
+    size = stoll(headers.at("content-length"));
+    etag = headers.at("etag");
     storageClass = ""; // Not available in headers
     ownerId = "";      // Not available in headers
     ownerName = "";    // Not available in headers

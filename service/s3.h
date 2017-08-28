@@ -9,6 +9,7 @@
 #pragma once
 
 #include <exception>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -140,11 +141,13 @@ struct S3Api : public AwsApi {
         Response();
 
         const std::string & body() const;
-        std::string getHeader(const std::string & name) const;
+        const std::string & headers() const;
+
+        std::map<std::string, std::string> parsedHeaders() const;
 
         long code_;
+        std::string headers_;
         std::string body_;
-        HttpHeader header_;
     };
 
     enum Redundancy {
