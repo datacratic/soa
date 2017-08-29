@@ -204,7 +204,7 @@ parse(const char * value, size_t len, Type type)
     }
 
     if ((type == UNKNOWN || type == GOOG128)
-        && len == 26 && value[0] == 'C' && value[1] == 'A'
+        && len >= 26 && value[0] == 'C' && value[1] == 'A'
         && value[2] == 'E' && value[3] == 'S' && value[4] == 'E') {
 
         // Google ID: --> CAESEAYra3NIxLT9C8twKrzqaA
@@ -226,8 +226,8 @@ parse(const char * value, size_t len, Type type)
                 else return -1;
             };
 
-        bool error = false;
-        for (unsigned i = 5;  i < 26 && !error;  ++i) {
+        auto error = false;
+        for (auto i = 5;  i < len && !error;  ++i) {
             int v = b64Decode(value[i]);
             if (v == -1) error = true;
             res = (res << 6) | v;
