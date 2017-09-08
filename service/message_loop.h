@@ -7,16 +7,19 @@
 
 #pragma once
 
-#include <thread>
 #include <functional>
+#include <memory>
+#include <thread>
+#include <vector>
 
 #include "jml/arch/wakeup_fd.h"
 #include "jml/arch/spinlock.h"
 
 #include "epoller.h"
 #include "async_event_source.h"
-#include "typed_message_channel.h"
 #include "logs.h"
+#include "timer_event_source.h"
+#include "typed_message_channel.h"
 
 namespace Datacratic {
 
@@ -32,9 +35,10 @@ struct MessageLoopLogs
     static Logging::Category trace;
 };
 
-/*****************************************************************************/
-/* MESSAGE LOOP                                                              */
-/*****************************************************************************/
+
+/****************************************************************************/
+/* MESSAGE LOOP                                                             */
+/****************************************************************************/
 
 struct MessageLoop : public Epoller {
     typedef std::function<void ()> OnStop;
@@ -90,7 +94,21 @@ struct MessageLoop : public Epoller {
                      double timePeriodSeconds,
                      std::function<void (uint64_t)> toRun,
                      int priority = 0);
-    
+
+    /* Add a timer. Returns an id that is guaranteed to be > 0, which enables
+     * "0" to be used as a test value. */
+    uint64_t addTimer(double delay, const TimerEventSource::OnTick & onTick)
+    {
+        return timerSource_->addTimer(delay, onTick);
+    }
+
+    /* Cancel a timer. Return "true" when the corresponding timer could be
+       found and deleted and "false" otherwise. */
+    bool cancelTimer(uint64_t timerId)
+    {
+        return timerSource_->cancelTimer(timerId);
+    }
+
     typedef std::function<void (volatile int & shutdown_,
                                 int64_t threadId)> SubordinateThreadFn;
 
@@ -214,6 +232,8 @@ private:
     void processAddSource(const SourceEntry & entry);
     void processRemoveSource(const SourceEntry & entry);
     void processRunAction(const SourceEntry & entry);
+
+    std::shared_ptr<TimerEventSource> timerSource_;
 };
 
 } // namespace Datacratic

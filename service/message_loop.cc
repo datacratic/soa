@@ -42,9 +42,11 @@ MessageLoop(int numThreads, double maxAddedLatency, int epollTimeout)
     : sourceActions_([&] () { handleSourceActions(); }),
       numThreadsCreated(0),
       shutdown_(true),
-      totalSleepTime_(0.0)
+      totalSleepTime_(0.0),
+      timerSource_(new TimerEventSource())
 {
     init(numThreads, maxAddedLatency, epollTimeout);
+    addSource("timer_", timerSource_);
 }
 
 MessageLoop::
