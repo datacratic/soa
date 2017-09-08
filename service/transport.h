@@ -56,6 +56,8 @@ struct TransportBase : public std::enable_shared_from_this<TransportBase> {
     virtual int handleAsync(const std::function<void ()> & callback,
                             const char * name, Date dateSet);
 
+    virtual double getEstimatedRTT() { return double(-1);}
+
     virtual ssize_t send(const char * buf, size_t len, int flags) = 0;
     virtual ssize_t recv(char * buf, size_t buf_size, int flags) = 0;
 
@@ -602,6 +604,7 @@ struct SocketTransport
     virtual ssize_t send(const char * buf, size_t len, int flags);
     virtual ssize_t recv(char * buf, size_t buf_size, int flags);
     virtual int closePeer();
+    virtual double getEstimatedRTT();
 
     ACE_SOCK_Stream & peer() { return peer_; }
     const ACE_SOCK_Stream & peer() const { return peer_; }

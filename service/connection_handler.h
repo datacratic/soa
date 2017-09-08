@@ -176,6 +176,9 @@ struct ConnectionHandler {
         return *transport_;
     }
 
+    virtual double getEstimatedRTT()
+    { return transport().getEstimatedRTT(); }
+
     const TransportBase & transport() const
     {
         if (!transport_)
