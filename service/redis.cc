@@ -487,10 +487,16 @@ struct AsyncConnection::EventLoop {
             //sleep(1);
             Date now = Date::now();
 
-            if (connection->earliestTimeout < now)
+            Date earliestTimeout;
+            {
+                std::lock_guard<Lock> guard(connection->lock);
+                earliestTimeout = connection->earliestTimeout;
+            }
+
+            if (earliestTimeout < now)
                 connection->expireTimeouts(now);
 
-            double timeLeft = now.secondsUntil(connection->earliestTimeout);
+            double timeLeft = now.secondsUntil(earliestTimeout);
 
             //cerr << "timeLeft = " << timeLeft << endl;
             //cerr << "fds[0].events = " << fds[0].events << endl;
@@ -499,7 +505,7 @@ struct AsyncConnection::EventLoop {
             int timeout = std::min(1000.0,
                                    std::max<double>(0, 1000 * timeLeft));
 
-            if (connection->earliestTimeout == Date::positiveInfinity())
+            if (earliestTimeout == Date::positiveInfinity())
                 timeout = 1000000;
 
             //cerr << "looping; fd0 = " << fds[1].fd << " timeout = "

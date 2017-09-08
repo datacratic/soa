@@ -320,23 +320,34 @@ BOOST_AUTO_TEST_CASE( test_redis_timeout )
         auto result = connection.exec(GET("Hello"), 2.0);
         BOOST_CHECK(result.timedOut());
 
+        bool gotResult = false;
+
+        Date before = Date::now();
+
         auto onResult = [&](const Redis::Result &result) {
             BOOST_CHECK(result.timedOut());
+            const auto timeElapsed = Date::now().secondsSince(before);
+            BOOST_CHECK(timeElapsed >= 2.0);
+            gotResult = true;
         };
 
         connection.queue(GET("Hello"), onResult, 2.0);
         ML::sleep(5.0);
+        BOOST_CHECK(gotResult);
     }
 
     std::cerr << "Resuming redis" << std::endl;
     redis.resume();
 
     {
+        bool gotResult = false;
+
         auto onResult = [&](const Redis::Result &result) {
             if (result) {
                 auto reply = result.reply();
                 BOOST_CHECK_EQUAL(reply.type(), Redis::STRING);
                 BOOST_CHECK_EQUAL(reply.asString(), "World");
+                gotResult = true;
             }
             else {
                 BOOST_CHECK(false);
@@ -345,6 +356,7 @@ BOOST_AUTO_TEST_CASE( test_redis_timeout )
 
         connection.queue(GET("Hello"), onResult);
         ML::sleep(2.0);
+        BOOST_CHECK(gotResult);
     }
 
     redis.shutdown();
