@@ -156,16 +156,7 @@ struct S3UrlFsHandler : public UrlFsHandler {
     {
         string bucket = url.host();
         auto api = getS3ApiForBucket(bucket);
-        auto bucketPath = S3Api::parseUri(url.original);
-        return api->getObjectInfo(bucket, bucketPath.second);
-    }
-
-    virtual FsObjectInfo tryGetInfo(const Url & url) const
-    {
-        string bucket = url.host();
-        auto api = getS3ApiForBucket(bucket);
-        auto bucketPath = S3Api::parseUri(url.original);
-        return api->tryGetObjectInfo(bucket, bucketPath.second);
+        return api->tryGetObjectInfo(bucket, url.path().substr(1));
     }
 
     virtual void makeDirectory(const Url & url) const

@@ -68,39 +68,29 @@ static FsObjectInfo extractInfo(const struct stat & stats)
 
 struct LocalUrlFsHandler : public UrlFsHandler {
 
-    virtual FsObjectInfo getInfo(const Url & url) const
+    virtual FsObjectInfo getInfo(const Url & url)
+        const
     {
+        FsObjectInfo info;
+
         struct stat stats;
         string path = url.path();
 
         // cerr << "fs info on path: " + path + "\n";
         int res = ::stat(path.c_str(), &stats);
-        if (res == -1) {
-            if (errno == ENOENT) {
-                return FsObjectInfo();
+        if (res == 0) {
+            info = extractInfo(stats);
+        }
+        else {
+            if (errno != ENOENT) {
+                throw ML::Exception(errno, "stat");
             }
-            throw ML::Exception(errno, "stat");
         }
 
         // TODO: owner ID (uid) and name (uname)
-
-        return extractInfo(stats);
+        return info;
     }
 
-    virtual FsObjectInfo tryGetInfo(const Url & url) const
-    {
-        struct stat stats;
-        string path = url.path();
-
-        // cerr << "fs info on path: " + path + "\n";
-        int res = ::stat(path.c_str(), &stats);
-        if (res == -1) {
-            return FsObjectInfo();
-        }
-
-        return extractInfo(stats);
-    }
-    
     virtual void makeDirectory(const Url & url) const
     {
         boost::system::error_code ec;
@@ -226,9 +216,10 @@ namespace Datacratic {
 
 /* URLFSHANDLER */
 
-size_t
+int64_t
 UrlFsHandler::
-getSize(const Url & url) const
+getSize(const Url & url)
+    const
 {
     return getInfo(url).size;
 }
@@ -259,20 +250,22 @@ void registerUrlFsHandler(const std::string & scheme,
 }
 
 FsObjectInfo
-tryGetUriObjectInfo(const std::string & url)
+getUriObjectInfo(const std::string & url)
 {
-    Url realUrl = makeUrl(url);
-    return findFsHandler(realUrl.scheme())->tryGetInfo(realUrl);
+    FsObjectInfo info = tryGetUriObjectInfo(url);
+    if (!info) {
+        throw ML::Exception("object does not exist at: " + url);
+    }
 }
 
 FsObjectInfo
-getUriObjectInfo(const std::string & url)
+tryGetUriObjectInfo(const std::string & url)
 {
     Url realUrl = makeUrl(url);
     return findFsHandler(realUrl.scheme())->getInfo(realUrl);
 }
- 
-size_t
+
+int64_t
 getUriSize(const std::string & url)
 {
     Url realUrl = makeUrl(url);
